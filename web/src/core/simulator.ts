@@ -329,7 +329,7 @@ export class SimulatedDevice implements Transport {
     this.emit({
       type: 'usb.attach',
       t: this.t,
-      speed: 'HIGH',
+      speed: 'FULL', // ESP32-S3 USB Serial/JTAG is a full-speed (12 Mbps) device
       vid: 0x303a,
       pid: 0x1001,
       cls: 'CDC',
