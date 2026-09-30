@@ -2,536 +2,338 @@
 
 ```text
 DOCUMENT      ENGINEERING PLAN
-COMPANION TO  DESIGN_SPEC.md (interface and industrial design)
-              VISION.md      (product vision)
+VERSION       0.2 / IMPLEMENTATION-ALIGNED
+STATUS        ACTIVE IMPLEMENTATION
+COMPANION TO  DESIGN_SPEC.md       interface and industrial design (locked)
+              BRAND.md             official mascot and assets (locked)
+              VISION.md            product vision
+              PROTOCOL.md          HDP v1, human-readable
+              DIAGNOSTICS.md       rules, confidence, fault scenarios
+              protocol/hdp_v1.json HDP v1, machine-readable contract
 ```
 
-I want to build Hardware Dog as a real open-source product, not a GitHub
-project that only exists to look good.
+Hardware Dog is a **source-available** hardware diagnostic platform.
 
-The central concept:
+The repository is public so that individuals can study it, modify it, build
+their own unit and use it for permitted non-commercial purposes. Commercial
+manufacturing, distribution, integration and commercial service use require
+a separate Hardware Dog commercial license (see [LICENSING](#licensing)).
 
-> **Hardware Dog — a pocket diagnostic companion for hardware, USB, serial
-> and network troubleshooting.**
->
-> You plug it in. It sniffs. It tells you what is really going on.
+The central engineering principle is:
 
-Above all: **local-first, no account, no SaaS, no mandatory cloud.** That
-fits my style much better and makes the project useful even without
-Internet.
+> **ONE EVENT MODEL.**
+> **ONE CLOCK.**
+> **ONE TIMELINE.**
+
+A real Hardware Dog device and the simulator must produce the same HDP
+event stream. The trace engine and the UI must not need to know which one
+produced it.
+
+```text
+LAW OF THE PROJECT
+
+The trace engine must not care whether reality or simulation
+produced the event.
+```
+
+This law is enforced, not just stated: `web/test/protocol-contract.test.ts`
+validates every simulator frame against `protocol/hdp_v1.json`, and the
+firmware will pass the same contract before it ships.
 
 ---
 
-## 1 — PRODUCT VISION
+## 1 — WHERE THE PROJECT IS
 
-Hardware Dog is a small portable box able to observe several layers of a
-system:
+The first version of this plan (0.1, in git history) described a first work
+session: create a skeleton and make a dashboard appear. That is done.
+
+```text
+[ OK ] repository skeleton
+[ OK ] HDP v1 wire protocol + JSON Schema contract
+[ OK ] transport abstraction
+[ OK ] Web Serial link (real device side, awaiting firmware)
+[ OK ] deterministic simulator
+[ OK ] trace engine, one timeline
+[ OK ] responsive diagnostic UI, desktop + mobile
+[ OK ] power telemetry simulation
+[ OK ] brand asset pipeline
+[ OK ] design system (tokens, instrument panels)
+[ OK ] automated tests + CI
+```
+
+### MILESTONE — SOFTWARE REFERENCE IMPLEMENTATION
+
+```text
+[ OK ]   HDP v1                             docs/PROTOCOL.md, protocol/hdp_v1.json
+[ OK ]   simulator transport                web/src/core/simulator.ts
+[ OK ]   Web Serial transport               web/src/core/webserial.ts
+[ OK ]   trace engine                       web/src/core/trace.ts
+[ OK ]   responsive UI                      web/src/ui
+[ OK ]   fault scenarios                    11 scenarios, HD-T000 to HD-T010
+[ OK ]   deterministic diagnostic rules     13 rules, reliability matrix
+[ OK ]   report generation                  TXT + JSON, diagnosis-driven
+[ NEXT ] session recording                  persistent sessions, replay
+[ NEXT ] dogd integration                   Rust daemon, third transport
+[ NEXT ] physical ESP32-S3 reference device firmware on a dev board
+```
+
+**Not the PCB yet.** The order is deliberate: first a system that can
+receive, record, correlate and explain the data perfectly; then the box
+that produces it. Hardware built before the contract is stable has nothing
+to be tested against.
+
+---
+
+## 2 — PRODUCT
+
+> **Hardware Dog — a pocket diagnostic companion for hardware, USB, serial
+> and network troubleshooting.**
+> You plug it in. It sniffs. It tells you what is really going on.
+
+Local-first. No account, no SaaS, no mandatory cloud. Useful without
+Internet.
+
+It observes several layers of a system:
 
 ```text
 PHYSICAL -> ELECTRICAL -> PROTOCOL -> NETWORK -> SOFTWARE
 ```
 
-The goal is not to replace an oscilloscope or a Fluke multimeter. The
-product answers a different question:
+It does not replace an oscilloscope or a Fluke multimeter. It answers:
 
 > **"Why doesn't this thing work?"**
 
-You plug Hardware Dog between your laptop and your device, or directly onto
-a network / serial port, and you get a unified view of what it sees.
+Diagnostics of hardware you control. No security exploitation, no bypass.
 
-Example diagnostics:
-
-- USB plugged in, but the device is not detected.
-- 5 V present, but abnormal current draw.
-- Serial port active, but wrong baud rate.
-- Ethernet device connected, but no DHCP.
-- DNS works, but HTTP does not.
-- Wi-Fi connected, but unstable latency.
-- Device that resets periodically.
-- I²C sensor present, but answering badly.
-- Device that disappears and comes back on USB.
-- Voltage drop when a peripheral starts up.
-
-No security exploitation, no bypass: diagnostics of hardware you control.
-
----
-
-## 2 — THE 4 MODES OF HARDWARE DOG
-
-Four functions, extremely clear.
-
-### SNIFF
-
-Passive observation. Hardware Dog watches, without modifying anything:
+### The four modes
 
 ```text
-USB connected
-voltage
-current
-UART
-I2C
-network
-Wi-Fi
-device state
-```
-
-### PROBE
-
-Simple, safe active tests:
-
-```text
-ping
-DNS lookup
-HTTP health check
-TCP port test
-local I2C scan
-serial test
-USB enumeration
-network test
-```
-
-### TRACE
-
-A timeline:
-
-```text
-14:03:21 USB connected
-14:03:21 5.08 V
-14:03:22 Device detected
-14:03:22 VID 0x303A
-14:03:24 Current spike 740 mA
-14:03:24 Voltage drop 4.63 V
-14:03:25 USB disconnect
-```
-
-This is where Hardware Dog becomes genuinely useful.
-
-### REPORT
-
-One click: **Export diagnostic**.
-
-```text
-Hardware Dog Report
-Session: HD-20260930-1421
-
-USB
-Connected: YES
-Voltage avg: 5.04 V
-Current avg: 310 mA
-Peak: 742 mA
-
-Network
-DHCP: OK
-Gateway: OK
-DNS: OK
-Internet: FAIL
-
-Serial
-115200 8N1
-Data detected: YES
-Framing errors: 14
-
-Possible issue:
-Voltage instability detected during startup.
-```
-
-TXT + JSON, and possibly HTML / PDF.
-
----
-
-## 3 — GENERAL ARCHITECTURE
-
-Three layers.
-
-```text
-┌─────────────────────────────┐
-│       HARDWARE DOG UI       │
-│ React / TypeScript / PWA    │
-└──────────────┬──────────────┘
-               │
-        WebSocket / HTTP
-               │
-┌──────────────▼──────────────┐
-│            DOGD             │
-│ Rust diagnostic daemon      │
-│ sessions / rules / storage  │
-└──────────────┬──────────────┘
-               │
-        USB / Serial / Wi-Fi
-               │
-┌──────────────▼──────────────┐
-│    HARDWARE DOG DEVICE      │
-│ ESP32-S3 firmware           │
-│ sensors / UART / I2C / USB  │
-└─────────────────────────────┘
-```
-
-This makes a project that crosses hardware -> embedded -> Rust -> API ->
-React -> UX.
-
----
-
-## 4 — HARDWARE, REV A
-
-### MCU
-
-**ESP32-S3.** Why:
-
-```text
-Wi-Fi
-Bluetooth
-USB OTG
-plenty of GPIO
-ADC
-I2C
-SPI
-UART
-huge ecosystem
-cheap
-easy to prototype
-```
-
-An STM32 / RP2040 version can always come later.
-
-### Display
-
-Small IPS display, about 2.4–2.8". No need for a full UI on it. It only
-shows:
-
-```text
-HARDWARE DOG
-USB    ●
-NET    ●
-UART   ○
-I2C    ●
-5.07V
-284mA
-SNIFFING...
-```
-
-The real interface stays on the phone / laptop.
-
-### Connectors
-
-```text
-USB-C HOST
-USB-C DEVICE
-USB-A
-RJ45
-UART header
-I2C header
-GPIO
-Power input USB-C
-```
-
-Rev A does not need everything to be bidirectional.
-
-### Electrical measurement
-
-An INA226-type circuit fits the spirit of the project perfectly, to measure:
-
-- voltage;
-- current;
-- power;
-- peaks.
-
-A low-voltage USB passthrough:
-
-```text
-USB IN
-  │
-current sense
-  │
-USB OUT
-```
-
-Hardware Dog observes the electrical behavior.
-
-### Ethernet
-
-At first: **W5500 SPI Ethernet.** Not sexy, but extremely well documented
-and stable. Rev B can have a real integrated Ethernet PHY.
-
-### UART
-
-Header:
-
-```text
-GND
-TX
-RX
-3V3
-```
-
-And above all, proper protection. The first version stays **3.3 V TTL
-only**. No RS-232 directly on the MCU.
-
----
-
-## 5 — PCB
-
-Even if the prototype starts on modules, I create this immediately:
-
-```text
-hardware/
-  rev-a/
-    schematic/
-    pcb/
-    gerbers/
-    bom/
-    assembly/
-```
-
-KiCad. And it goes public.
-
-Professionally, this is worth gold: someone opens the GitHub and actually
-finds the electronic schematic.
-
-### Conceptual layout
-
-```text
- ┌──────────────────────────┐
- │      HARDWARE DOG        │
- │                          │
- │      2.4" DISPLAY        │
- │                          │
- │   ● USB   ● NET          │
- │   ● UART  ● I2C          │
- │                          │
- │ [USB-C]         [RJ45]   │
- │                          │
- │ [UART] [I2C] [GPIO]      │
- └──────────────────────────┘
-```
-
-Diagnostic connectors on the bottom. Network / USB ports on the sides.
-
----
-
-## 6 — INDUSTRIAL DESIGN
-
-Definitely not an RGB gaming thing.
-
-I want an object somewhere between a **lab instrument + old industrial
-electronics + a modern cyberdeck**.
-
-Enclosure:
-
-```text
-ABS or 3D printed
-rounded corners
-4 visible screws
-light grille
-small rear kickstand
-optional magnets
-```
-
-Approximate dimensions: **120 × 75 × 25 mm**. Big enough to handle, small
-enough to fit in a bag.
-
----
-
-## 7 — BRANDING
-
-```text
-NAME        HARDWARE DOG
-SUBTITLE    Sniff the problem.
-```
-
-Logo: a minimalist dog profile whose snout turns into an electronic trace.
-Something like:
-
-```text
-    /‾\
- __/ o \
-/       >─────╱╲──╱╲────
-\__    /
-   \__/
-```
-
-Not literally that, but that principle.
-
-### Colors
-
-A slight departure from my StreetWizard palette.
-
-```text
-BACKGROUND   #101112
-SURFACE      #181A1B
-TEXT         #F2F0E9
-LIVE         turquoise #00E5FF
-WARNING      mustard / amber #E4B04A
-CRITICAL     red, only when there really is a critical condition
-```
-
-IBM Plex Mono / IBM Plex Sans Condensed fit this universe perfectly.
-
----
-
-## 8 — MAIN INTERFACE
-
-Desktop:
-
-```text
-┌─────────────────────────────────────────────┐
-│ HARDWARE DOG               DEVICE HD-001    │
-├────────────┬────────────────────────────────┤
-│            │                                │
-│ OVERVIEW   │        LIVE TRACE              │
-│ USB        │                                │
-│ NETWORK    │  USB CONNECTED                 │
-│ SERIAL     │  5.04 V       312 mA           │
-│ I2C        │                                │
-│ TRACE      │  ▂▂▃▃▄▅▇▅▃▃                    │
-│ REPORTS    │                                │
-│            │                                │
-└────────────┴────────────────────────────────┘
+SNIFF    passive observation: power, USB presence, UART, I2C, network, device state
+PROBE    simple, safe active tests, always announced before running
+TRACE    every event from every source on one clock
+REPORT   exportable diagnosis: TXT + JSON (HTML / PDF later)
 ```
 
 ---
 
-## 9 — OVERVIEW
-
-The dashboard must be understandable instantly.
+## 3 — ARCHITECTURE
 
 ```text
-DEVICE
-Hardware Dog Rev A
-Firmware 0.1.2
+                     ┌──────────────────┐
+                     │   REAL DEVICE    │
+                     │ ESP32-S3 / HDP   │
+                     └────────┬─────────┘
+                              │
+                              │ HDP EVENTS
+                              │
+                     ┌────────▼─────────┐
+                     │ TRANSPORT LAYER  │
+                     └────────┬─────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+     ┌────────▼────────┐             ┌────────▼────────┐
+     │ REAL TRANSPORT  │             │   SIMULATOR     │
+     │ Web Serial      │             │ deterministic   │
+     │ (dogd: planned) │             │ scenarios       │
+     └────────┬────────┘             └────────┬────────┘
+              └───────────────┬───────────────┘
+                              │
+                     ┌────────▼─────────┐
+                     │   TRACE ENGINE   │
+                     │ ONE TIMELINE     │
+                     └────────┬─────────┘
+                              │
+                ┌─────────────┴─────────────┐
+                │                           │
+       ┌────────▼────────┐         ┌────────▼────────┐
+       │ DIAGNOSTIC RULES│         │ SESSION STORE   │
+       └────────┬────────┘         └────────┬────────┘
+                │                           │
+                └─────────────┬─────────────┘
+                              │
+                       ┌──────▼───────┐
+                       │ UI / REPORTS │
+                       └──────────────┘
+```
 
-USB
-CONNECTED
-5.04 V
-312 mA
-480 Mbps
+```text
+LAYER              STATUS    WHERE
+transport          OK        web/src/core/transport.ts (Web Serial, simulator)
+HDP decoder        OK        web/src/core/protocol.ts
+trace engine       OK        web/src/core/trace.ts
+system state       OK        web/src/core/system.ts (single source of truth)
+diagnostic rules   OK        web/src/core/diagnostics.ts
+session store      PARTIAL   in-memory session facts + JSON export; persistence NEXT
+UI / reports       OK        web/src/ui, web/src/core/report.ts
+dogd               PLANNED   Rust daemon, section 10
+firmware           PLANNED   ESP32-S3, section 11
+```
 
-NETWORK
-LINK 1 Gbps
-DHCP OK
-192.168.1.84
+Invariants of the codebase (details in `ARCHITECTURE.md`):
 
-UART
-DATA DETECTED
-115200 baud
-
-I²C
-3 DEVICES
-0x3C
-0x40
-0x76
+```text
+ONE SOURCE OF TRUTH   GUI and command layer both call System; no copies of state
+FRAMES ONLY           device state changes only when a validated HDP frame arrives
+SAME PATH             simulator frames are serialized and go through the real decoder
+NO FAKE CERTAINTY     OBSERVED / CORRELATION / POSSIBLE CAUSE / NEXT CHECK kept apart
+LOCAL FIRST           no network requests, no CDN, no account
 ```
 
 ---
 
-## 10 — LIVE TRACE
-
-Probably the killer feature. Every event goes into one single timeline.
+## 4 — HDP, HARDWARE DOG PROTOCOL
 
 ```text
-12:31:08.012  USB     connected
-12:31:08.080  POWER   5.07 V / 112 mA
-12:31:08.322  USB     descriptor received
-12:31:08.380  USB     VID 303A PID 1001
-12:31:09.001  POWER   691 mA
-12:31:09.010  WARN    voltage drop detected
-12:31:09.023  POWER   4.61 V
-12:31:09.102  USB     disconnected
+VERSION     1
+FORMAT      NDJSON, UTF-8, one object per line
+CLOCK       "t" = device uptime in ms, anchored to host time by "hello"
+TRANSPORTS  USB CDC serial (now), WebSocket via dogd (planned), local TCP (planned)
+CONTRACT    protocol/hdp_v1.json, enforced by tests
+LATER       CBOR / protobuf only if bandwidth requires it; same event model
 ```
 
-With filters:
+Device frames: `hello`, `power`, `usb.attach`, `usb.detach`,
+`uart.config`, `uart.rx`, `uart.error`, `i2c.scan`, `net.status`,
+`probe.result`, `probe.done`, `log`. Host commands: `hello`,
+`usb.enumerate`, `uart.config`, `uart.tx`, `i2c.scan`, `net.refresh`,
+`probe`. Full reference: `PROTOCOL.md`.
+
+A breaking change means HDP v2, a new schema file, and a `proto` bump in
+`hello`. Decoders reject what they do not understand; they never guess.
+
+---
+
+## 5 — SIMULATOR
+
+The simulator is a fundamental component, not a demo feature. It is:
 
 ```text
-ALL  USB  POWER  NETWORK  UART  I2C  SYSTEM
+THE DEMO          anyone can run Hardware Dog without owning one (npm run demo)
+THE TEST RIG      every diagnostic rule is proven against it on each commit
+THE SPEC PARTNER  it defines, in code, what the firmware must emit
+```
+
+Design:
+
+```text
+DETERMINISTIC     seeded PRNG: same seed, same session, bit for bit
+MANUAL TIME       tests drive time with advance(ms); no timers, no flakiness
+PHYSICAL MODEL    supply voltage, cable resistance, load bursts, brownout,
+                  target boot log, UART baud, USB data link, network layers
+HDP ONLY          it serializes frames to text and feeds the real decoder;
+                  it never touches System state directly
+BLIND ENGINE      the diagnostic engine never sees the scenario
+```
+
+Fault scenarios (`web/src/core/scenarios.ts`, details in `DIAGNOSTICS.md`):
+
+```text
+HD-T000 HEALTHY BASELINE           HD-T006 TARGET RESET LOOP
+HD-T001 USB UNDERVOLTAGE           HD-T007 UNSTABLE NETWORK
+HD-T002 DHCP FAILURE               HD-T008 UPSTREAM DOWN
+HD-T003 DNS FAILURE                HD-T009 OVERCURRENT
+HD-T004 SERIAL FRAMING MISMATCH    HD-T010 USB NOT ENUMERATED
+HD-T005 INTERMITTENT USB DISCONNECT
+```
+
+Each scenario has an answer key. The reliability matrix requires the
+engine to produce exactly that key, with no false positive on HD-T000.
+
+Every new fault class starts here: scenario first, rule second, hardware
+last.
+
+---
+
+## 6 — TRACE ENGINE
+
+Probably the killer feature: **ONE TIMELINE.**
+
+Diagnosing today means juggling a multimeter, a serial terminal,
+Wireshark, system logs, ping, Device Manager and a browser console. Hardware
+Dog puts all of it on one clock:
+
+```text
+12:02:01.011  POWER  WARN  voltage drop           4.61 V < 4.75 V
+12:02:01.079  USB    WARN  device disconnected
+12:02:01.079  RULE   WARN  disconnect 68 ms after voltage drop
+12:02:02.310  UART   INFO  rst:0x1 (POWERON),boot:0x8
+```
+
+And suddenly: **cause -> consequence.**
+
+Recording never stops; pausing freezes the view only. Events stay sorted by
+device time even when frames arrive out of order. Capacity: 10 000 events
+in memory, full timeline in the JSON export.
+
+---
+
+## 7 — DIAGNOSTIC ENGINE
+
+Deterministic. **No mandatory AI.** 13 written rules, each with a
+confidence level that has a written definition, all documented in
+`DIAGNOSTICS.md` and proven by `web/test/scenarios.test.ts`:
+
+```text
+11 scenarios x 5 seeds      exact expected diagnoses, 0 false positive
+HD-T000                     silent for 10 minutes
+every fault                 HIGH confidence within 90 s, detected within 30 s
+```
+
+### Optional AI, later
+
+AI may only **explain** diagnoses already produced by the rules, in plain
+language. Detection never depends on it. This is essential for the product's
+credibility.
+
+---
+
+## 8 — SESSION STORE
+
+```text
+NOW    in-memory session facts (web/src/core/diagnostics.ts), trace ring
+       buffer, JSON export of report + full timeline
+NEXT   persistent sessions in the browser (IndexedDB): record, reopen,
+       replay a session through the same decoder
+LATER  SQLite in dogd, same data model
+```
+
+Data model (dogd / SQLite, mirrored in IndexedDB):
+
+```text
+devices    id, serial_number, hardware_revision, firmware_version, first_seen, last_seen
+sessions   id, device_id, source (DEVICE | SIMULATOR + scenario), started_at, ended_at, name, notes
+events     id, session_id, timestamp, category, type, severity, payload_json
+metrics    id, session_id, timestamp, metric, value, unit
+reports    id, session_id, created_at, summary, diagnosis_json
+```
+
+A recorded session stores raw HDP frames. Replaying it through the decoder
+must reproduce the same timeline and the same diagnoses: the recording
+becomes a regression test.
+
+---
+
+## 9 — REPORTS
+
+```text
+FORMAT     TXT (readable with no software) + JSON (report + full timeline)
+CONTENT    measurements per section, then one DIAGNOSIS block per finding:
+           CONFIDENCE + basis, OBSERVED, CORRELATION, POSSIBLE CAUSE, NEXT CHECK
+LABELING   simulated sessions say so in every export
+LATER      HTML / PDF
 ```
 
 ---
 
-## 11 — GRAPHS
+## 10 — DOGD, LOCAL DAEMON (PLANNED)
 
-Voltage:
-
-```text
-5.2 ────────────────────
-5.0 ───────╲────────────
-4.8        ╲
-4.6         ╲___
-```
-
-Also: current, latency, packet loss, UART activity, device reconnects.
-
-Everything real time over WebSocket.
-
----
-
-## 12 — FIRMWARE
-
-Structure:
+Rust, local only. It discovers Hardware Dog devices, keeps sessions, stores
+them in SQLite and serves the UI.
 
 ```text
-firmware/
-├── src/
-│   ├── main
-│   ├── usb
-│   ├── power
-│   ├── ethernet
-│   ├── wifi
-│   ├── uart
-│   ├── i2c
-│   ├── display
-│   ├── events
-│   └── protocol
+Rust, Tokio, Axum, Serde, SQLite
 ```
-
-Each subsystem emits events. Conceptual examples:
-
-```json
-{
-  "type": "power.sample",
-  "ts": 1780248212123,
-  "voltage": 5.04,
-  "current": 0.312
-}
-```
-
-UART:
-
-```json
-{
-  "type": "uart.activity",
-  "port": 1,
-  "baud": 115200,
-  "bytes": 128
-}
-```
-
-USB:
-
-```json
-{
-  "type": "usb.device.connected",
-  "vid": "303A",
-  "pid": "1001"
-}
-```
-
----
-
-## 13 — COMMUNICATION
-
-An official Hardware Dog protocol, defined from day one.
-
-```text
-NAME         HDP — Hardware Dog Protocol
-TRANSPORTS   USB serial, WebSocket, local TCP
-MVP FORMAT   JSON
-LATER        CBOR / protobuf if needed
-```
-
----
-
-## 14 — LOCAL BACKEND: DOGD
-
-This is where the Rust shows.
 
 ```text
 dogd/
@@ -546,514 +348,246 @@ dogd/
 │   └── rules/
 ```
 
-```text
-Rust
-Tokio
-Axum
-Serde
-SQLite
-```
-
-dogd discovers Hardware Dog and maintains a diagnostic session.
-
----
-
-## 15 — API
-
-A very clean API.
+API:
 
 ```text
 GET  /api/v1/device
 GET  /api/v1/status
-GET  /api/v1/usb
-GET  /api/v1/network
-GET  /api/v1/serial
-GET  /api/v1/i2c
 GET  /api/v1/sessions
 GET  /api/v1/sessions/:id
-POST /api/v1/probes/ping
-POST /api/v1/probes/dns
-POST /api/v1/probes/http
+POST /api/v1/probes/{ping,dns,http}
 POST /api/v1/reports
+WS   /api/v1/live            the HDP event stream, unchanged
 ```
 
-Real time:
-
-```text
-WS   /api/v1/live
-```
+Integration rule: dogd is **a third transport**. `WS /api/v1/live` carries
+HDP v1 frames exactly as the device emits them, so the UI plugs dogd in
+next to Web Serial and the simulator without changing the trace engine.
+The diagnostic rules move to Rust only with a shared test corpus: the same
+scenarios must produce the same diagnoses in both implementations.
 
 ---
 
-## 16 — DATA MODEL
+## 11 — FIRMWARE (PLANNED)
 
-SQLite.
+ESP32-S3. Each subsystem emits HDP v1 frames; nothing else leaves the
+device.
 
 ```text
-devices
-  id
-  serial_number
-  hardware_revision
-  firmware_version
-  first_seen
-  last_seen
-
-sessions
-  id
-  device_id
-  started_at
-  ended_at
-  name
-  notes
-
-events
-  id
-  session_id
-  timestamp
-  category
-  type
-  severity
-  payload_json
-
-metrics
-  id
-  session_id
-  timestamp
-  metric
-  value
-  unit
-
-reports
-  id
-  session_id
-  created_at
-  summary
-  diagnosis
+firmware/
+├── src/
+│   ├── main
+│   ├── power       INA226 sampling -> power
+│   ├── usb         host port enumeration -> usb.attach / usb.detach
+│   ├── uart        target UART -> uart.config / uart.rx / uart.error
+│   ├── i2c         bus scan + verified identities -> i2c.scan
+│   ├── net         Wi-Fi / Ethernet layer checks -> net.status, probes
+│   ├── display
+│   ├── events      clock, queue, back-pressure
+│   └── protocol    HDP v1 encoder + contract self-test
 ```
+
+Examples are the real frames (full list in `PROTOCOL.md`):
+
+```json
+{"type":"power","t":1200,"v":5.041,"i":0.312}
+{"type":"usb.attach","t":1214,"speed":"FULL","vid":12346,"pid":4097,"cls":"CDC","power":"BUS","manufacturer":"Espressif","product":"USB JTAG/Serial","serial":"48:27:E2:5C:1A:90"}
+{"type":"uart.rx","t":1320,"data":"bootloader 0.9"}
+```
+
+Acceptance: the firmware's output, captured on real hardware, validates
+against `protocol/hdp_v1.json` and runs through the same reliability tests
+as the simulator (physical scenarios HD-P0xx, section 14).
 
 ---
 
-## 17 — DIAGNOSTIC ENGINE
+## 12 — HARDWARE, REV A
 
-Very important: **no mandatory AI.** A deterministic engine first.
+### MCU
+
+**ESP32-S3**: Wi-Fi, Bluetooth, USB OTG, plenty of GPIO, ADC, I2C, SPI,
+UART, huge ecosystem, cheap, easy to prototype. An STM32 / RP2040 variant can
+come later.
+
+### USB: what Rev A does, precisely
 
 ```text
-IF    USB disconnect
-AND   voltage < 4.75
-      within 100 ms
-THEN  POWER_INSTABILITY
-      confidence HIGH
+[X] measures VBUS voltage and current on the passthrough (INA226)
+[X] detects attach / detach and correlates it with power on one clock
+[X] enumerates a device plugged into its own HOST port and reads
+    descriptors (VID, PID, class, strings)
+[X] reports the speed the device enumerated at on that port
+[ ] NOT a USB protocol analyzer: no packet capture, no traffic decoding
+[ ] NOT 480 Mbps: the ESP32-S3 USB OTG controller is full-speed (12 Mbps);
+    a high-speed device enumerates on the host port at full speed
+[ ] the passthrough does not touch D+ / D-; it observes power only
 ```
 
 ```text
-IF    network.link = true
-AND   dhcp = true
-AND   gateway = true
-AND   dns = false
-THEN  DNS_FAILURE
+USB IN ──── INA226 current sense on VBUS ──── USB OUT     (data lines pass through)
+
+USB HOST port (ESP32-S3 OTG, full speed): enumeration + descriptors
 ```
+
+### Display
+
+Small IPS display, 2.4–2.8". Field information only; the full interface
+stays on the phone / laptop. Layout rules: `DESIGN_SPEC.md` sections 26–27.
+
+### Connectors
 
 ```text
-IF    UART activity
-AND   framing_errors > threshold
-THEN  SERIAL_CONFIGURATION_MISMATCH
+USB-C HOST      enumeration port
+USB-C / USB-A   power passthrough (measured)
+USB-C           Hardware Dog power + link to the host computer
+RJ45            Ethernet (0.2)
+UART header     GND TX RX 3V3
+I2C header
+GPIO
 ```
 
-That builds something reliable.
+Rev A does not need everything to be bidirectional.
+
+### Ethernet
+
+**W5500 over SPI.** Not sexy, extremely well documented and stable. An
+integrated PHY can come with Rev B.
+
+### UART
+
+3.3 V TTL only, with proper protection (series resistors, clamping). No
+RS-232 on the MCU pins.
 
 ---
 
-## 18 — OPTIONAL AI, LATER
+## 13 — PCB (AFTER THE REFERENCE DEVICE)
 
-AI could only **explain** the data. Example:
+KiCad, public:
 
-> "The USB device appears to reboot after a voltage drop. Check the power
-> supply or the cable before looking for a software problem."
+```text
+hardware/
+  rev-a/
+    schematic/
+    pcb/
+    gerbers/
+    bom/
+    assembly/
+```
 
-But detection never depends on AI. Very important for the product's
-credibility.
+Silkscreen and color rules: `DESIGN_SPEC.md` sections 28–29.
 
 ---
 
-## 19 — PWA
+## 14 — TESTS
 
 ```text
-React
-TypeScript
-Vite
-WebSocket
-IndexedDB
+UNIT         protocol decoder, trace, rules, commands, report, chart layout
+CONTRACT     every simulator frame validates against protocol/hdp_v1.json
+SIMULATION   reliability matrix: HD-T000 .. HD-T010 (DIAGNOSTICS.md)
+PHYSICAL     HD-P001 real undervoltage (resistive cable, loaded target)
+  (planned)  HD-P002 real DHCP failure (isolated switch, no server)
+             HD-P003 real DNS failure (blackholed resolver)
+             HD-P004 real framing mismatch (target at 9600)
+             HD-P005 real intermittent USB (worn connector jig)
 ```
 
-Installable. Desktop. Mobile. No native app needed.
+A physical scenario passes when the same engine produces the same
+diagnosis as its simulated twin.
 
 ---
 
-## 20 — WORKING WITHOUT A HARDWARE DOG
-
-Very important for a public GitHub: a **DEMO MODE**.
-
-When someone clones the repo:
-
-```sh
-npm run demo
-```
-
-they get a fake device that simulates:
+## 15 — REPOSITORY
 
 ```text
-USB disconnect
-voltage drop
-network failure
-UART traffic
+NOW                                   PLANNED
+README.md                             CONTRIBUTING.md
+LICENSE, COMMERCIAL.md                SECURITY.md
+assets/brand/    brand pipeline       dogd/        Rust daemon
+docs/            specs and plans      firmware/    ESP32-S3
+protocol/        HDP v1 schema        hardware/    KiCad Rev A
+web/             UI, core, simulator  enclosure/   3D printable case
+.github/         CI                   examples/    recorded sessions
 ```
 
-So anyone can try the software without owning the hardware.
+The simulator lives in `web/src/core` today because the UI and the tests
+use it directly. It moves to a shared package only when dogd needs it.
 
 ---
 
-## 21 — REPOSITORY
-
-A monorepo.
+## 16 — CI
 
 ```text
-hardware-dog/
-│
-├── README.md
-├── LICENSE
-├── CONTRIBUTING.md
-├── SECURITY.md
-│
-├── firmware/
-├── hardware/
-├── enclosure/
-├── dogd/
-├── web/
-├── protocol/
-├── simulator/
-├── docs/
-├── examples/
-└── .github/
+NOW       typecheck, unit + contract + simulation tests, production build
+NEXT      lint + format check, Rust build + tests (dogd), firmware build,
+          contract test on captured firmware output, release artifacts
 ```
+
+Badges appear in the README only when the job exists and passes.
 
 ---
 
-## 22 — README
-
-The first thing visible:
+## 17 — ROADMAP
 
 ```text
-HARDWARE DOG
-Sniff the problem.
-Open-source hardware diagnostic companion.
-USB • Power • Serial • I²C • Network
+0.1  SOFTWARE REFERENCE IMPLEMENTATION     in progress (section 1)
+0.2  sessions + dogd                        IndexedDB sessions, replay, dogd with
+                                            WebSocket transport and SQLite
+0.3  physical reference device              ESP32-S3 dev board + INA226 + UART,
+                                            firmware passing the HDP contract,
+                                            physical scenarios HD-P001..005
+0.4  Ethernet + I2C scanner on hardware     W5500, verified I2C identities
+0.5  Rev A PCB + display + enclosure        KiCad, 3D printed case
+1.0  coherent product                       all of the above, documented
 ```
 
-Then a 10-second GIF. Then:
-
-> Hardware Dog observes hardware and network behaviour and turns it into
-> one diagnostic timeline.
-
-And a diagram:
+### Not now
 
 ```text
-DEVICE
-  │
-Hardware Dog
-  │
-dogd
-  │
-Browser
-```
-
----
-
-## 23 — OPEN SOURCE
-
-Actually public:
-
-```text
-firmware
-daemon
-frontend
-protocol
-PCB
-schematics
-3D enclosure
-docs
-```
-
-Something could stay private only if it turns out to be a real technology
-that is a major commercial advantage. But Rev A: open.
-
----
-
-## 24 — LICENSING
-
-> **Decision in effect:** the repository uses a dual license, PolyForm
-> Noncommercial 1.0.0 for personal use plus a paid commercial license
-> (see [`LICENSE`](../LICENSE) and [`COMMERCIAL.md`](../COMMERCIAL.md)).
-> The options below are the ones originally considered.
-
-Simple:
-
-```text
-SOFTWARE    Apache-2.0
-HARDWARE    CERN-OHL-P
-DOCS        CC BY 4.0
-```
-
-Or simplify: everything MIT except the PCB.
-
----
-
-## 25 — GITHUB ACTIONS
-
-From day one:
-
-```text
-firmware build
-Rust tests
-TypeScript build
-eslint
-format
-unit tests
-release artifacts
-```
-
-README badges:
-
-```text
-Firmware ✓
-Backend ✓
-Frontend ✓
-Open Hardware ✓
-```
-
-That way public activity is natural, not artificial.
-
----
-
-## 26 — TESTS
-
-Three levels.
-
-```text
-UNIT         protocol parser
-             diagnostic rules
-             API
-             frontend logic
-
-SIMULATION   fake USB
-             fake voltage
-             fake network
-             fake UART
-
-PHYSICAL     real ESP32
-             real USB device
-             real bad cable
-             real network cut
-```
-
-The scenarios can even be published:
-
-```text
-HD-T001  USB undervoltage
-HD-T002  DHCP failure
-HD-T003  DNS failure
-HD-T004  serial framing mismatch
-HD-T005  intermittent USB disconnect
-```
-
----
-
-## 27 — VERSION 0.1
-
-Do NOT build everything at once. The real v0.1:
-
-```text
-ESP32-S3
-+ INA226
-+ UART
-+ Wi-Fi
-+ dogd (Rust)
-+ React dashboard
-+ Live Trace
-```
-
-That is already a product.
-
-```text
-NOT IN 0.1    Ethernet
-              custom PCB
-              final enclosure
-              AI
-              BLE
-```
-
----
-
-## 28 — VERSION 0.2
-
-Adds:
-
-```text
-Ethernet
-I2C scanner
-session recording
-reports
-network diagnostics
-```
-
----
-
-## 29 — VERSION 0.3
-
-```text
-Hardware Dog Rev A PCB
-display
-3D printed enclosure
-USB passthrough
-```
-
----
-
-## 30 — VERSION 1.0
-
-A coherent product:
-
-```text
-USB diagnostics
-Power telemetry
-UART
-I2C
-Ethernet
-Wi-Fi
-Timeline
-Reports
-Device simulator
-PWA
-Rust backend
-Custom PCB
-3D enclosure
-Documentation
-```
-
----
-
-## 31 — WHAT I WOULD NOT ADD
-
-Not now:
-
-```text
-advanced Bluetooth diagnostics
-CAN bus
-JTAG
-SWD debugger
-full USB-PD analyzer
-oscilloscope
-16-channel logic analyzer
-advanced packet analyzer
-AI everywhere
+advanced Bluetooth diagnostics     CAN bus           JTAG / SWD debugger
+full USB-PD analyzer               oscilloscope      16-channel logic analyzer
+USB packet analyzer                advanced packet analyzer     AI everywhere
 ```
 
 Otherwise Hardware Dog becomes a Frankenstein before it has an identity.
 
 ---
 
-## 32 — KILLER FEATURE
+## 18 — DESIGN AND BRAND
 
-It is not the hardware. It is:
-
-> **ONE TIMELINE.**
-
-Today, diagnosing a problem means looking at:
+Not duplicated here. Both are locked in their own documents:
 
 ```text
-multimeter
-serial terminal
-Wireshark
-system logs
-ping
-Device Manager
-browser console
+DESIGN_SPEC.md   interface, screens, colors, typography, industrial design
+BRAND.md         official mascot, asset roles, favicon / icon / header rules
 ```
-
-Hardware Dog puts all of it into:
-
-```text
-12:02 voltage changed
-12:02 USB reset
-12:02 network lost
-12:02 firmware reboot
-```
-
-And suddenly: **cause -> consequence.**
-
-That is the product.
 
 ---
 
-## 33 — FIRST WORK SESSION
+## LICENSING
 
-Do not touch the PCB yet.
-
-Create:
+Hardware Dog uses a dual-license model.
 
 ```text
-hardware-dog/
-  README.md
-  web/
-  dogd/
-  firmware/
-  hardware/
-  protocol/
-  simulator/
-  docs/
+PERSONAL / NON-COMMERCIAL    PolyForm Noncommercial 1.0.0
+COMMERCIAL                   separate paid Hardware Dog commercial license
 ```
 
-First objective: make this appear in a browser.
+See [`LICENSE`](../LICENSE) and [`COMMERCIAL.md`](../COMMERCIAL.md).
+
+The repository is **source-available**. It is not open source in the OSI
+sense.
+
+The Hardware Dog name, logo and official mascot are separate brand assets
+and are not granted for unrestricted third-party branding or resale.
+
+---
+
+## CHANGELOG
 
 ```text
-HARDWARE DOG
-● DEVICE ONLINE
-
-USB
-5.04 V
-312 mA
-
-NETWORK
-ONLINE
-12 ms
-
-LIVE TRACE
-12:42:01 Device connected
-12:42:02 Power stable
-12:42:03 USB detected
+0.2   aligned with the implementation: source-available wording, single
+      licensing section, simulator as a core component, precise USB
+      capabilities, HDP schema contract, design and brand by reference,
+      new milestone and roadmap
+0.1   original plan (git history)
 ```
-
-The values come from a simulator. No hardware yet.
-
-Once the protocol, the dashboard and the timeline work with a fake Hardware
-Dog, each simulated value can be replaced by real hardware, one at a time.
-
-And above all: commit publicly from the very first skeleton.
-
-```text
-initial: hardware dog architecture
-```
-
-Then each real step:
-
-```text
-feat(protocol): define device event schema
-feat(simulator): add power telemetry
-feat(web): add live trace
-feat(dogd): websocket event stream
-```
-
-This way the repository shows how the project is thought through and
-built, not just the final result.
-
-Following this architecture, Hardware Dog covers electronics + embedded +
-Rust + networking + frontend + industrial design in a single project.
