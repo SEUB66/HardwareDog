@@ -37,7 +37,9 @@
 
   --gap: 12px;
   --nav-width: 168px;
-  --bar-height: 30px;
+  --head-height: 36px;
+  --foot-height: 28px;
+  --radius: 0;
 
   color-scheme: dark;
 }

@@ -67,7 +67,7 @@ select {
 
 .shell {
   display: grid;
-  grid-template-rows: var(--bar-height) 1fr var(--bar-height);
+  grid-template-rows: var(--head-height) 1fr var(--foot-height);
   grid-template-columns: var(--nav-width) 1fr;
   grid-template-areas:
     'head head'
@@ -81,7 +81,7 @@ select {
 .foot {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 20px;
   padding: 0 12px;
   background: var(--panel);
   font-size: var(--fs-meta);
@@ -96,13 +96,34 @@ select {
 }
 
 .head .brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-text);
   font-weight: 600;
+  letter-spacing: 0.06em;
   color: var(--text);
 }
 
 .head .brand b {
   color: var(--pink);
   font-weight: 600;
+  margin-left: -2px;
+}
+
+.head .mark {
+  display: block;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+}
+
+.head .ver {
+  margin-left: 4px;
+  font-size: var(--fs-meta);
+  font-weight: 400;
+  color: var(--text-dim);
 }
 
 .head .spacer,
@@ -111,12 +132,43 @@ select {
 }
 
 .head .field {
+  display: flex;
+  gap: 6px;
+}
+
+.head .field .k {
   color: var(--text-dim);
 }
 
-.head .field > span {
+.head .field .v {
   color: var(--text);
-  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tiny status light: the word next to it carries the meaning. */
+.head .state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.head .light {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  background: var(--text-dim);
+}
+
+.head .light.ONLINE {
+  background: var(--green);
+}
+
+.head .light.LOST {
+  background: var(--red);
+}
+
+.head .light.CONNECTING {
+  background: var(--amber);
 }
 
 .foot {
@@ -228,6 +280,10 @@ select {
   gap: var(--gap);
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   align-items: start;
+}
+
+.grid.even {
+  align-items: stretch;
 }
 
 .grid.wide {
@@ -534,11 +590,11 @@ select {
   color: var(--text-dim);
 }
 
-.trace tr.WARN td.msg {
-  color: var(--amber);
-}
-.trace tr.FAIL td.msg {
-  color: var(--red);
+/* Hardware values are live signal: cyan. The level word carries severity;
+   the row itself is never painted. */
+.trace .val {
+  margin-left: 2ch;
+  color: var(--cyan);
 }
 .trace tr.src-RULE td.src,
 .trace tr.src-USER td.src {
@@ -770,7 +826,7 @@ select {
 .overlay {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  background: none;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -882,6 +938,12 @@ select {
   transition: none !important;
 }
 
+@media (max-width: 1180px) {
+  .head .wide {
+    display: none;
+  }
+}
+
 /* ------------------------------------------------------------------ mobile */
 
 /*
@@ -891,12 +953,21 @@ select {
 @media (max-width: 760px) {
   .shell {
     grid-template-columns: 1fr;
-    grid-template-rows: var(--bar-height) 1fr auto;
+    grid-template-rows: calc(var(--head-height) + env(safe-area-inset-top)) 1fr auto;
     grid-template-areas:
       'head'
       'work'
       'nav';
     border: 0;
+  }
+
+  .head {
+    gap: 10px;
+    padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  }
+
+  .head .mark {
+    display: none;
   }
 
   .head .opt,
@@ -907,7 +978,7 @@ select {
   .nav {
     border-right: 0;
     border-top: 1px solid var(--border);
-    padding: 0;
+    padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   }
 
   .nav ul {
@@ -956,7 +1027,8 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .trace .col-sev {
-    display: none;
+  .trace th,
+  .trace td {
+    padding: 1px 4px;
   }
 }
