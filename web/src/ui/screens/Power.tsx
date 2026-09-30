@@ -11,12 +11,14 @@ export function Power({ system }: { system: System }) {
   const p = system.power;
   const s = system.settings;
   const end = p.samples.at(-1)?.t ?? Date.now();
-  const markers: ChartMarker[] = system.trace
-    .all()
-    .filter((e) => e.t >= end - WINDOW && e.source === 'USB' && e.message.startsWith('device '))
-    .map((e) =>
-      e.message === 'device disconnected' ? { t: e.t, label: 'USB LOST', short: 'LOST' } : { t: e.t, label: 'USB UP', short: 'UP' },
-    );
+  // Priority decides which labels survive when events crowd one spot.
+  const markers: ChartMarker[] = [];
+  for (const e of system.trace.all()) {
+    if (e.t < end - WINDOW) continue;
+    if (e.source === 'POWER' && e.message === 'voltage drop') markers.push({ t: e.t, label: 'POWER DROP', short: 'DROP', priority: 4 });
+    else if (e.source === 'USB' && e.message === 'device disconnected') markers.push({ t: e.t, label: 'USB LOST', short: 'LOST', priority: 3 });
+    else if (e.source === 'USB' && e.message === 'device connected') markers.push({ t: e.t, label: 'USB UP', short: 'UP', priority: 1 });
+  }
   const avgV = p.sampleCount ? p.voltageSum / p.sampleCount : null;
 
   const metric = (label: string, value: string, live = true) => (
