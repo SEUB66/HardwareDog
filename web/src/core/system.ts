@@ -19,6 +19,8 @@ import type {
 } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import { hex, i2cAddress, milliamps, ms, volts } from './format';
+import type { Confidence, Diagnosis, DiagnosisId, SessionFacts } from './diagnostics';
+import { FACT_LIMIT, NET_HISTORY, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
 
 /** Key/value persistence. Local only: nothing ever leaves the machine. */
 export interface SettingsStore {
@@ -166,6 +168,10 @@ export class System {
   storageOk: boolean;
   lastError: LinkError | null = null;
   frameErrors = 0;
+  /** Structured record the diagnostic engine reads. Survives trace clears. */
+  facts: SessionFacts = emptyFacts();
+  /** Current output of the diagnostic engine. */
+  diagnoses: Diagnosis[] = [];
 
   private transport: Transport | null = null;
   private listeners = new Set<Listener>();
@@ -181,6 +187,8 @@ export class System {
   private suppressedFrameErrors = 0;
   private probeCounter = 0;
   private seenFrames = new Set<DeviceFrame['type']>();
+  private lastDiagnosisAt = -Infinity;
+  private reported = new Map<DiagnosisId, Confidence>();
 
   constructor(
     private readonly store: SettingsStore = memoryStore(),
@@ -358,6 +366,12 @@ export class System {
         const s = this.serial;
         const changed = s.baud !== f.baud || s.port !== f.port || !s.active;
         Object.assign(s, { port: f.port, baud: f.baud, dataBits: f.bits, parity: f.parity, stopBits: f.stop, active: true });
+        if (this.facts.uart.baud !== f.baud) {
+          // Judge the new rate on its own evidence.
+          this.facts.uart.baud = f.baud;
+          this.facts.uart.rxAtBaud = 0;
+          this.facts.uart.framingAtBaud = [];
+        }
         if (changed) this.log(t, 'UART', 'INFO', `${f.port} configured`, `${f.baud} ${f.bits}${f.parity[0]}${f.stop}`);
         break;
       }
@@ -365,6 +379,15 @@ export class System {
         this.serial.rxBytes += utf8Length(f.data) + 1;
         this.pushSerial({ t, dir: 'RX', text: f.data });
         this.log(t, 'UART', 'INFO', f.data.length > 120 ? f.data.slice(0, 117) + '...' : f.data);
+        this.facts.uart.rxLines++;
+        this.facts.uart.rxAtBaud++;
+        {
+          const reset = parseResetLine(f.data, t);
+          if (reset) {
+            this.remember(this.facts.uart.resets, reset);
+            if (reset.code !== 0x1) this.log(t, 'UART', 'WARN', 'target reset', reset.reason);
+          }
+        }
         break;
       case 'uart.error':
         this.onUartError(t, f.kind);
@@ -404,7 +427,37 @@ export class System {
         this.log(t, 'SYS', f.level === 'error' ? 'FAIL' : f.level === 'warn' ? 'WARN' : 'INFO', f.message);
         break;
     }
+    if (t - this.lastDiagnosisAt >= 1000) this.evaluate(t);
     this.changed();
+  }
+
+  /**
+   * Run the diagnostic engine and put every change on the timeline:
+   * a new diagnosis, a confidence change, or a diagnosis that cleared.
+   */
+  evaluate(t = this.now()): Diagnosis[] {
+    this.lastDiagnosisAt = t;
+    this.diagnoses = diagnose(this.facts, this.settings, t);
+    const seen = new Set<DiagnosisId>();
+    for (const d of this.diagnoses) {
+      seen.add(d.id);
+      if (this.reported.get(d.id) !== d.confidence) {
+        this.reported.set(d.id, d.confidence);
+        this.log(t, 'RULE', 'WARN', `diagnosis: ${d.title}`, `confidence ${d.confidence} / ${d.basis}`);
+      }
+    }
+    for (const id of [...this.reported.keys()]) {
+      if (!seen.has(id)) {
+        this.reported.delete(id);
+        this.log(t, 'RULE', 'PASS', `cleared: ${id}`);
+      }
+    }
+    return this.diagnoses;
+  }
+
+  private remember<T>(list: T[], item: T, limit = FACT_LIMIT): void {
+    list.push(item);
+    if (list.length > limit) list.splice(0, list.length - limit);
   }
 
   private onPower(t: number, v: number, i: number): void {
@@ -432,27 +485,50 @@ export class System {
         p.lastDropAt = t;
         p.lastDropVoltage = v;
         p.dropCount++;
+        this.remember(this.facts.drops, { start: t, end: null, min: v });
         this.log(t, 'POWER', 'WARN', 'voltage drop', `${volts(v)} < ${volts(s.undervoltageThreshold)}`);
       } else if (v < this.dropMin) {
         this.dropMin = v;
         p.lastDropVoltage = v;
+        const open = this.facts.drops.at(-1);
+        if (open && open.end === null) open.min = v;
       }
     } else if (this.dropStartedAt !== null && v >= s.undervoltageThreshold + HYSTERESIS_V) {
       this.log(t, 'POWER', 'PASS', 'voltage recovered', `min ${volts(this.dropMin)} for ${ms(t - this.dropStartedAt)}`);
       this.dropStartedAt = null;
       this.dropMin = Infinity;
+      const open = this.facts.drops.at(-1);
+      if (open && open.end === null) open.end = t;
     }
 
     // Rule: overcurrent.
     if (i > s.overcurrentThreshold && !this.overcurrent) {
       this.overcurrent = true;
+      this.remember(this.facts.spikes, { start: t, end: null, peak: i });
       this.log(t, 'POWER', 'WARN', 'overcurrent', `${milliamps(i)} > ${milliamps(s.overcurrentThreshold)}`);
+    } else if (this.overcurrent && i > s.overcurrentThreshold * 0.95) {
+      const open = this.facts.spikes.at(-1);
+      if (open && open.end === null) open.peak = Math.max(open.peak, i);
     } else if (i <= s.overcurrentThreshold * 0.95 && this.overcurrent) {
       this.overcurrent = false;
+      const open = this.facts.spikes.at(-1);
+      if (open && open.end === null) open.end = t;
       this.log(t, 'POWER', 'PASS', 'current back in range', milliamps(i));
     }
 
     p.condition = this.dropStartedAt !== null ? 'UNDERVOLTAGE' : this.overcurrent ? 'OVERCURRENT' : 'STABLE';
+
+    // Facts: target running without USB, and whether it kept running after a disconnect.
+    const un = this.facts.unenumerated;
+    if (!this.usb.connected && i >= RUNNING_CURRENT) {
+      if (un.since === null) un.since = t;
+      if (un.firstAt === null) un.firstAt = t;
+      un.longestMs = Math.max(un.longestMs, t - un.since);
+    } else {
+      un.since = null;
+    }
+    const detach = this.facts.detaches.at(-1);
+    if (detach && detach.currentAfter === null && t - detach.t >= 100) detach.currentAfter = i;
 
     // Log meaningful movement, not every sample.
     const last = this.lastLoggedPower;
@@ -479,6 +555,8 @@ export class System {
     };
     if (!wasConnected) {
       u.connections++;
+      this.remember(this.facts.attaches, t);
+      this.facts.unenumerated.since = null;
       this.log(t, 'USB', 'INFO', 'device connected', `${f.speed} SPEED`);
     }
     this.log(t, 'USB', 'PASS', 'descriptor received', `VID ${hex(f.vid)} / PID ${hex(f.pid)} ${f.cls}`);
@@ -495,9 +573,16 @@ export class System {
 
     // Rule: USB / power correlation.
     const window = this.settings.correlationWindowMs;
-    if (this.lastBelowAt !== null && t - this.lastBelowAt <= window && t >= this.lastBelowAt) {
+    const correlated = this.lastBelowAt !== null && t - this.lastBelowAt <= window && t >= this.lastBelowAt;
+    this.remember(this.facts.detaches, {
+      t,
+      dropAt: correlated ? (this.power.lastDropAt ?? this.lastBelowAt) : null,
+      dropMin: correlated ? this.power.lastDropVoltage : null,
+      currentAfter: null,
+    });
+    if (correlated) {
       u.correlatedDisconnects++;
-      const dropAt = this.power.lastDropAt ?? this.lastBelowAt;
+      const dropAt = this.power.lastDropAt ?? this.lastBelowAt!;
       this.log(
         t,
         'RULE',
@@ -511,6 +596,7 @@ export class System {
   private onUartError(t: number, kind: string): void {
     this.serial.errors++;
     this.log(t, 'UART', 'WARN', `${kind} error`);
+    if (kind === 'framing') this.remember(this.facts.uart.framingAtBaud, t);
     // Rule: repeated framing errors -> baud mismatch is a hypothesis, not a fact.
     if (kind !== 'framing') return;
     this.framingErrorTimes = this.framingErrorTimes.filter((x) => t - x < 5000);
@@ -549,6 +635,20 @@ export class System {
       if (first || a !== b) this.log(t, 'NET', statusSeverity(b), `${name.toLowerCase()} ${b}`);
     }
     this.net = next;
+    this.remember(
+      this.facts.net,
+      {
+        t,
+        linkUp: f.link ? f.link.up : null,
+        dhcp: f.dhcp,
+        gateway: f.gateway.status,
+        dns: f.dns.status,
+        internet: f.internet,
+        latency: f.latency,
+        loss: f.loss,
+      },
+      NET_HISTORY,
+    );
   }
 
   private pushSerial(line: SerialState['lines'][number]): void {
