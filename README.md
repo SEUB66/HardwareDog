@@ -19,7 +19,7 @@
 hardware companion // SNIFF THE PROBLEM.
 ```
 
-Hardware Dog is my open-source hardware diagnostic companion.
+Hardware Dog is my source-available hardware diagnostic companion.
 
 I am building it to observe power, USB, serial, embedded buses and network
 behavior on one synchronized timeline.
@@ -95,7 +95,13 @@ device (Chromium-based browsers).
 F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
 ```
 
-Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+```text
+ENGINEERING PLAN   docs/ENGINEERING_PLAN.md
+ARCHITECTURE       docs/ARCHITECTURE.md
+PROTOCOL           docs/PROTOCOL.md, protocol/hdp_v1.json
+DIAGNOSTICS        docs/DIAGNOSTICS.md
+DESIGN / BRAND     docs/DESIGN_SPEC.md, docs/BRAND.md
+```
 
 ---
 
@@ -155,7 +161,9 @@ Everything is public: PCB, firmware, enclosure, frontend and documentation.
 
 ## LICENSE
 
-Hardware Dog is **source-available under a dual-license model**.
+Hardware Dog is **source-available under a dual-license model**. It is not
+open source in the OSI sense: the code is public, and personal /
+non-commercial use, study and modification are free.
 
 ```text
 PERSONAL / HOBBY / GARAGE HACKERS      FREE
@@ -171,7 +179,9 @@ COMPANIES / RESELLERS / SERVICES       COMMERCIAL LICENSE
 ```
 
 Copyright (c) 2026 Sebastien Germain (Seub G.). All rights not expressly
-granted by the license are reserved.
+granted by the license are reserved. The Hardware Dog name, logo and
+official mascot are brand assets: they are not licensed for third-party
+branding or resale.
 
 ---
 
