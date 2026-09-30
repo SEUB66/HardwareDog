@@ -4,6 +4,7 @@ import type { System } from '../../core/system';
 import { RULES } from '../../core/system';
 import type { Settings, TransportKind } from '../../core/types';
 import { webSerialSupported } from '../../core/webserial';
+import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from '../../core/scenarios';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
@@ -11,7 +12,9 @@ import { beep } from '../sound';
 
 interface SetupProps {
   system: System;
-  onSwitch: (kind: TransportKind) => void;
+  /** Active simulator scenario, or null on real hardware. */
+  scenario: ScenarioId | null;
+  onSwitch: (kind: TransportKind, scenario?: ScenarioId) => void;
 }
 
 function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
@@ -54,7 +57,7 @@ function NumberField(props: { id: string; label: string; unit: string; value: nu
   );
 }
 
-export function Setup({ system, onSwitch }: SetupProps) {
+export function Setup({ system, scenario, onSwitch }: SetupProps) {
   const s = system.settings;
   const set = (patch: Partial<Settings>) => system.updateSettings(patch);
   const serialOk = webSerialSupported();
@@ -85,6 +88,28 @@ export function Setup({ system, onSwitch }: SetupProps) {
           </div>
           {!serialOk && <p class="note warn">WEB SERIAL NOT AVAILABLE IN THIS BROWSER. Use a Chromium-based browser over https or localhost.</p>}
           <p class="note">Switching source starts a new session, so simulated and real measurements are never mixed in one report.</p>
+        </Panel>
+
+        <Panel title="SIMULATOR SCENARIO" aside={scenario ?? 'hardware'}>
+          <label class="sr-only" for="scenario">
+            Fault scenario
+          </label>
+          <select
+            id="scenario"
+            class="input"
+            value={scenario ?? ''}
+            onChange={(e) => onSwitch('SIMULATOR', (e.target as HTMLSelectElement).value as ScenarioId)}
+            style={{ width: '100%' }}
+          >
+            {scenario === null && <option value="">-- choose a scenario --</option>}
+            {SCENARIO_IDS.map((id) => (
+              <option key={id} value={id}>
+                {id} {SCENARIOS[id].title}
+              </option>
+            ))}
+          </select>
+          {scenario && <p class="note">{SCENARIOS[scenario].fault}</p>}
+          <p class="note">Each scenario is a physical fault turned into protocol frames. The diagnostic engine is not told which one is running.</p>
         </Panel>
 
         <Panel title="LOCAL">

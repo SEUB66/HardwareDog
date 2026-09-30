@@ -42,6 +42,8 @@ web/src/core/        no UI, no DOM rendering, fully unit tested
   simulator.ts       simulated device + simulated target, same protocol
   system.ts          single source of truth, diagnostic rules
   trace.ts           chronological timeline, pause without data loss
+  diagnostics.ts     deterministic diagnostic engine, session facts
+  scenarios.ts       physical fault scenarios for the simulator
   report.ts          observation / correlation / possible cause
   commands.ts        command layer, calls the same System methods as the GUI
   format.ts          units and timestamps
@@ -76,16 +78,6 @@ SMALL                 The build must fit on the device flash and be served
 
 ## DIAGNOSTIC RULES
 
-```text
-UNDERVOLTAGE      rail < threshold (4.75 V). One event per drop,
-                  50 mV hysteresis on recovery.
-OVERCURRENT       draw > threshold (0.9 A), clears at 95 %.
-USB/POWER CORR    a USB disconnect within 100 ms after a sample below
-                  the undervoltage threshold is counted as correlated.
-                  "POSSIBLE CAUSE: POWER INSTABILITY" only when most
-                  disconnects correlate.
-UART FRAMING      >= 3 framing errors within 5 s raises
-                  "possible cause: baud rate mismatch".
-```
-
-All thresholds are editable on the SETUP screen.
+The deterministic engine (`web/src/core/diagnostics.ts`), its 13 rules,
+confidence definitions, the 11 fault scenarios and the reliability matrix
+are documented in [`DIAGNOSTICS.md`](DIAGNOSTICS.md).

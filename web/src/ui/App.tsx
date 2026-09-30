@@ -4,6 +4,7 @@ import { SCREENS, type CommandContext, type Screen } from '../core/commands';
 import { duration, sessionId } from '../core/format';
 import { buildReport, reportToText } from '../core/report';
 import { SimulatedDevice } from '../core/simulator';
+import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
 import { System, browserStore } from '../core/system';
 import type { Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
@@ -38,6 +39,14 @@ const PRIMARY: readonly Screen[] = ['STATUS', 'TRACE', 'POWER', 'PROBE'];
 const DIGIT_SCREENS: readonly Screen[] = ['STATUS', 'TRACE', 'POWER', 'USB', 'SERIAL', 'BUS', 'NET'];
 
 let sessionCounter = 0;
+/** `?scenario=HD-T004` opens the simulator on a given fault scenario. */
+function initialScenario(): ScenarioId {
+  const q = new URLSearchParams(location.search).get('scenario')?.toUpperCase() ?? '';
+  return isScenarioId(q) ? q : DEFAULT_SCENARIO;
+}
+
+const simulator = (scenario: ScenarioId) => new SimulatedDevice({ seed: Date.now() & 0xffff, scenario });
+
 const newSession = (transport: Transport): Session => ({
   system: new System(browserStore()),
   transport,
@@ -59,7 +68,7 @@ const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
 export function App() {
-  const [session, setSession] = useState<Session>(() => newSession(new SimulatedDevice({ seed: Date.now() & 0xffff })));
+  const [session, setSession] = useState<Session>(() => newSession(simulator(initialScenario())));
   const [booting, setBooting] = useState(true);
   const [screen, setScreen] = useState<Screen>('STATUS');
   const [traceOnly, setTraceOnly] = useState<Source[] | null>(null);
@@ -67,8 +76,11 @@ export function App() {
   // The keyboard handler must see open/close immediately, not after the
   // next render, or fast keystrokes leak into global shortcuts.
   const paletteOpen = useRef(false);
+  /** Keys typed between CTRL+K and the palette input taking focus. */
+  const typeAhead = useRef('');
   const setPalette = (open: boolean) => {
     paletteOpen.current = open;
+    typeAhead.current = '';
     setPaletteState(open);
   };
   const [paletteLog, setPaletteLog] = useState<PaletteEntry[]>([]);
@@ -115,7 +127,7 @@ export function App() {
     download(`hwdog-usb-${d.vid.toString(16)}-${d.pid.toString(16)}.json`, 'application/json', JSON.stringify(d, null, 2));
   };
 
-  const switchTransport = async (kind: TransportKind) => {
+  const switchTransport = async (kind: TransportKind, scenario: ScenarioId = DEFAULT_SCENARIO) => {
     let transport: Transport;
     if (kind === 'WEB SERIAL') {
       try {
@@ -125,16 +137,22 @@ export function App() {
         return;
       }
     } else {
-      transport = new SimulatedDevice({ seed: Date.now() & 0xffff });
+      transport = simulator(scenario);
     }
     await system.disconnect();
+    setPalette(false);
     setSession(newSession(transport));
     setScreen('STATUS');
     setBooting(true);
   };
 
   const context: CommandContext = useMemo(
-    () => ({ system, navigate: (s) => navigate(s), exportReport }),
+    () => ({
+      system,
+      navigate: (s) => navigate(s),
+      exportReport,
+      simulate: (id) => void switchTransport('SIMULATOR', id),
+    }),
     // navigate reads the current screen through state setters only.
     [system, screen],
   );
@@ -149,7 +167,15 @@ export function App() {
         setPalette(!paletteOpen.current);
         return;
       }
-      if (paletteOpen.current) return;
+      if (paletteOpen.current) {
+        // The palette is opening but its input is not focused yet: keep the
+        // keystrokes instead of losing them (or firing global shortcuts).
+        if (!isTyping(e.target) && !ctrl && !e.altKey && (e.key.length === 1 || e.key === 'Enter')) {
+          e.preventDefault();
+          typeAhead.current += e.key === 'Enter' ? '\n' : e.key;
+        }
+        return;
+      }
       if (e.key === 'Escape') {
         if (isTyping(e.target)) (e.target as HTMLElement).blur();
         else back();
@@ -213,7 +239,13 @@ export function App() {
       case 'REPORT':
         return <Report system={system} onExport={exportReport} />;
       case 'SETUP':
-        return <Setup system={system} onSwitch={(k) => void switchTransport(k)} />;
+        return (
+          <Setup
+            system={system}
+            scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario.id : null}
+            onSwitch={(k, id) => void switchTransport(k, id)}
+          />
+        );
       case 'HELP':
         return <Help />;
     }
@@ -311,6 +343,7 @@ export function App() {
 
       {palette && (
         <CommandPalette
+          typeAhead={typeAhead}
           context={context}
           log={paletteLog}
           onLog={(entry) => setPaletteLog((l) => [...l.slice(-49), entry])}

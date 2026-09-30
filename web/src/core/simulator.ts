@@ -3,6 +3,8 @@ import type { Transport, TransportSink } from './transport';
 import { createLineDecoder } from './transport';
 import type { CheckStatus, ProbeTest } from './types';
 import { PROTOCOL_VERSION } from './protocol';
+import type { Range, Scenario, ScenarioId } from './scenarios';
+import { DEFAULT_SCENARIO, SCENARIOS } from './scenarios';
 
 /** Deterministic PRNG (mulberry32) so simulated sessions are reproducible. */
 export function prng(seed: number): () => number {
@@ -22,6 +24,8 @@ export interface SimulatorOptions {
   manual?: boolean;
   /** Power sample period in ms. */
   samplePeriod?: number;
+  /** Physical situation to simulate. Default: HD-T001 (marginal supply). */
+  scenario?: ScenarioId;
 }
 
 interface Scheduled {
@@ -29,13 +33,12 @@ interface Scheduled {
   run: () => void;
 }
 
-const TARGET_BAUD = 115200;
-const SUPPLY_VOLTS = 5.07;
-const CABLE_OHMS = 0.09;
+/** Hardware Dog's own UART starts here; a target may run at another rate. */
+const MONITOR_BAUD = 115200;
 
-const BOOT_LOG = [
+const bootLog = (rst: string) => [
   'ESP-ROM:esp32s3-20210327',
-  'rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)',
+  `${rst},boot:0x8 (SPI_FAST_FLASH_BOOT)`,
   'bootloader 0.9',
   'loading config',
   'sensor init',
@@ -45,14 +48,15 @@ const BOOT_LOG = [
 /**
  * A simulated Hardware Dog with a simulated target plugged into it.
  *
- * The target has a marginal supply: periodic load bursts sag the rail,
- * and deep sags make it drop off USB and reboot. This exercises every
- * path the real instrument cares about. The simulator speaks the real
- * protocol as text, so frames go through the same decoder as hardware.
+ * The scenario (core/scenarios.ts) sets the physics: supply resistance,
+ * load bursts, target firmware behavior, network layers. The simulator
+ * only ever speaks the real protocol, as text, through the same decoder
+ * as hardware; the diagnostic engine never sees the scenario itself.
  */
 export class SimulatedDevice implements Transport {
   readonly kind = 'SIMULATOR' as const;
-  readonly label = 'SIMULATED DEVICE / SIMULATED TARGET';
+  readonly label: string;
+  readonly scenario: Scenario;
 
   private readonly rand: () => number;
   private readonly manual: boolean;
@@ -65,23 +69,28 @@ export class SimulatedDevice implements Transport {
   private queue: Scheduled[] = [];
 
   // Target state.
+  private powered = false;
   private usbConnected = false;
-  private baud = TARGET_BAUD;
-  private nextBurstAt = 0;
+  private baud = MONITOR_BAUD;
+  private runCurrent = 0.112;
+  private nextBurstAt = Infinity;
   private burstUntil = 0;
-  private burstDepth = 0;
   private burstCurrent = 0;
-  private burstDetaches = false;
-  private detachScheduled = false;
-  private baseCurrent = 0.112;
+  private burstSag = 0;
+  private brownoutScheduled = false;
+  private spikeUntil = 0;
+  private spikeCurrent = 0;
   private nextSampleAt = 0;
   private nextNetAt = 0;
   private nextChatterAt = 0;
+  private resetting = false;
 
   constructor(options: SimulatorOptions = {}) {
     this.rand = prng(options.seed ?? 0x0d06);
     this.manual = options.manual ?? false;
     this.samplePeriod = options.samplePeriod ?? 20;
+    this.scenario = SCENARIOS[options.scenario ?? DEFAULT_SCENARIO];
+    this.label = `SIMULATED DEVICE / ${this.scenario.id} ${this.scenario.title}`;
   }
 
   async open(sink: TransportSink): Promise<void> {
@@ -92,9 +101,13 @@ export class SimulatedDevice implements Transport {
     this.emit({ type: 'uart.config', t: 0, port: 'UART0', baud: this.baud, bits: 8, parity: 'NONE', stop: 1 });
     this.emitNet();
     this.nextNetAt = 2000;
-    this.nextBurstAt = 6000 + this.rand() * 4000;
     this.nextChatterAt = 3000;
-    this.at(180, () => this.attach());
+    const { supply, target } = this.scenario;
+    if (supply.bursts) this.nextBurstAt = this.between(supply.bursts.every) - 2000;
+    if (target.usbDrops) this.at(this.between(target.usbDrops.every), () => this.usbDrop());
+    if (target.resetLoop) this.at(this.between(target.resetLoop.every), () => this.watchdogReset());
+    if (target.spikes) this.at(this.between(target.spikes.every), () => this.spike());
+    this.at(180, () => this.powerUp('rst:0x1 (POWERON)'));
     if (!this.manual) {
       this.startedAt = Date.now();
       this.timer = setInterval(() => this.advanceTo(Date.now() - this.startedAt), 10);
@@ -135,7 +148,7 @@ export class SimulatedDevice implements Transport {
         );
         break;
       case 'uart.tx':
-        this.at(this.t + 12, () => this.targetSays(this.usbConnected ? `? unknown command: ${cmd.data.trim()}` : ''));
+        this.at(this.t + 12, () => this.targetSays(this.powered ? `? unknown command: ${cmd.data.trim()}` : ''));
         break;
       case 'i2c.scan':
         this.at(this.t + 260, () =>
@@ -162,6 +175,10 @@ export class SimulatedDevice implements Transport {
   }
 
   // ---------------------------------------------------------------- internals
+
+  private between([min, max]: Range): number {
+    return min + this.rand() * (max - min);
+  }
 
   private emit(frame: DeviceFrame): void {
     // Serialize and decode like a real link would.
@@ -195,37 +212,39 @@ export class SimulatedDevice implements Transport {
 
   private sample(): void {
     const t = this.t;
+    const { supply } = this.scenario;
+    const bursts = supply.bursts;
 
-    if (t >= this.nextBurstAt && t >= this.burstUntil) {
+    if (bursts && this.powered && t >= this.nextBurstAt && t >= this.burstUntil) {
       // Radio / motor style load burst.
       this.burstUntil = t + 260 + this.rand() * 120;
-      this.burstCurrent = 0.62 + this.rand() * 0.14;
-      this.burstDepth = this.rand();
-      this.burstDetaches = this.usbConnected && this.burstDepth > 0.35;
-      this.detachScheduled = false;
-      this.nextBurstAt = t + 9000 + this.rand() * 7000;
+      this.burstCurrent = this.between(bursts.current);
+      this.burstSag = this.between(bursts.sag);
+      this.brownoutScheduled = false;
+      this.nextBurstAt = t + this.between(bursts.every);
     }
 
     const bursting = t < this.burstUntil;
-    const noise = (this.rand() - 0.5) * 0.012;
-    let current = this.usbConnected ? this.baseCurrent + (this.rand() - 0.5) * 0.01 : 0.004;
+    const spiking = t < this.spikeUntil;
+    let current = 0.004;
+    if (this.powered) current = this.resetting ? 0.045 : this.runCurrent + (this.rand() - 0.5) * 0.01;
     if (bursting) current = this.burstCurrent + (this.rand() - 0.5) * 0.02;
-    let voltage = SUPPLY_VOLTS - current * CABLE_OHMS + noise;
+    if (spiking) current = this.spikeCurrent + (this.rand() - 0.5) * 0.03;
+    let voltage = supply.volts - current * supply.ohms + (this.rand() - 0.5) * 0.012;
 
-    if (bursting) {
-      // Marginal supply: the rail collapses under load, deeper on bad bursts.
-      const sag = 0.18 + this.burstDepth * 0.32;
-      voltage -= sag;
-      if (this.burstDetaches && !this.detachScheduled && voltage < 4.72) {
-        this.detachScheduled = true;
+    if (bursting && bursts) {
+      // Marginal supply: the rail collapses under load.
+      voltage -= this.burstSag;
+      if (bursts.brownoutBelow !== null && !this.brownoutScheduled && voltage < bursts.brownoutBelow) {
+        this.brownoutScheduled = true;
         const delay = 55 + Math.round(this.rand() * 35);
-        this.at(t + delay, () => this.detach());
+        this.at(t + delay, () => this.brownout());
       }
     }
 
     this.emit({ type: 'power', t, v: round(voltage, 3), i: round(Math.max(0, current), 4) });
 
-    if (this.usbConnected && t >= this.nextChatterAt) {
+    if (this.powered && !this.resetting && t >= this.nextChatterAt) {
       this.nextChatterAt = t + 2500 + this.rand() * 2500;
       const temp = (23.5 + this.rand() * 1.5).toFixed(1);
       this.targetSays(`sensor: t=${temp}C rh=${Math.round(40 + this.rand() * 4)}%`);
@@ -237,15 +256,73 @@ export class SimulatedDevice implements Transport {
     }
   }
 
-  private attach(): void {
-    this.usbConnected = true;
-    this.baseCurrent = 0.1 + this.rand() * 0.03;
-    this.emitAttach();
-    BOOT_LOG.forEach((line, n) => this.at(this.t + 120 + n * 90, () => this.targetSays(line)));
+  /** Target gets power and boots. */
+  private powerUp(rst: string): void {
+    this.powered = true;
+    this.runCurrent = 0.1 + this.rand() * 0.03;
+    if (this.scenario.target.enumerates) {
+      this.usbConnected = true;
+      this.emitAttach();
+    }
+    this.boot(rst);
+  }
+
+  private boot(rst: string): void {
+    bootLog(rst).forEach((line, n) => this.at(this.t + 120 + n * 90, () => this.targetSays(line)));
     // Settle into normal operating current after boot.
     this.at(this.t + 700, () => {
-      this.baseCurrent = 0.29 + this.rand() * 0.04;
+      this.runCurrent = this.scenario.target.current + (this.rand() - 0.5) * 0.04;
     });
+  }
+
+  /** Supply collapse: the target loses power, drops off USB, then reboots. */
+  private brownout(): void {
+    if (!this.powered) return;
+    this.powered = false;
+    if (this.usbConnected) {
+      this.usbConnected = false;
+      this.emit({ type: 'usb.detach', t: this.t });
+    }
+    this.at(this.t + 1200 + Math.round(this.rand() * 600), () => this.powerUp('rst:0x1 (POWERON)'));
+  }
+
+  /** Data line glitch: USB drops, the target keeps running. */
+  private usbDrop(): void {
+    const drops = this.scenario.target.usbDrops!;
+    if (this.usbConnected) {
+      this.usbConnected = false;
+      this.emit({ type: 'usb.detach', t: this.t });
+      this.at(this.t + this.between(drops.outage), () => {
+        if (!this.powered) return;
+        this.usbConnected = true;
+        this.emitAttach();
+      });
+    }
+    this.at(this.t + this.between(drops.every), () => this.usbDrop());
+  }
+
+  /** Firmware hang: the watchdog reboots the target. USB-UART bridge stays up. */
+  private watchdogReset(): void {
+    const loop = this.scenario.target.resetLoop!;
+    if (this.powered && !this.resetting) {
+      this.targetSays('E (task_wdt): Task watchdog got triggered.');
+      this.resetting = true;
+      this.at(this.t + 60, () => {
+        this.resetting = false;
+        this.boot(`rst:0x${loop.code.toString(16)} (${loop.reason})`);
+      });
+    }
+    this.at(this.t + this.between(loop.every), () => this.watchdogReset());
+  }
+
+  /** Load spike on a stiff supply: current jumps, voltage holds. */
+  private spike(): void {
+    const s = this.scenario.target.spikes!;
+    if (this.powered) {
+      this.spikeCurrent = this.between(s.current);
+      this.spikeUntil = this.t + this.between(s.duration);
+    }
+    this.at(this.t + this.between(s.every), () => this.spike());
   }
 
   private emitAttach(): void {
@@ -263,17 +340,10 @@ export class SimulatedDevice implements Transport {
     });
   }
 
-  private detach(): void {
-    if (!this.usbConnected) return;
-    this.usbConnected = false;
-    this.emit({ type: 'usb.detach', t: this.t });
-    this.at(this.t + 1200 + Math.round(this.rand() * 600), () => this.attach());
-  }
-
   /** The target writes a line on its UART. Wrong baud rate means garbage. */
   private targetSays(line: string): void {
-    if (!this.usbConnected || line === '') return;
-    if (this.baud !== TARGET_BAUD) {
+    if (!this.powered || line === '') return;
+    if (this.baud !== this.scenario.target.baud) {
       const garbage = Array.from({ length: Math.max(4, Math.round(line.length / 3)) }, () =>
         String.fromCharCode(0x80 + Math.floor(this.rand() * 0x7f)),
       ).join('');
@@ -285,18 +355,20 @@ export class SimulatedDevice implements Transport {
   }
 
   private emitNet(): void {
-    const latency = 9 + Math.round(this.rand() * 7);
+    const n = this.scenario.net;
+    const up = n.link;
+    const has = (st: CheckStatus) => st === 'PASS' || st === 'WARN';
     this.emit({
       type: 'net.status',
       t: this.t,
-      link: { up: true, mbps: 1000, duplex: 'FULL' },
-      address: '192.168.1.84',
-      dhcp: 'PASS',
-      gateway: { address: '192.168.1.1', status: 'PASS' },
-      dns: { address: '1.1.1.1', status: 'PASS' },
-      internet: 'PASS',
-      latency,
-      loss: 0,
+      link: up ? { up: true, mbps: 1000, duplex: 'FULL' } : { up: false, mbps: null, duplex: null },
+      address: up && has(n.dhcp) ? '192.168.1.84' : null,
+      dhcp: up ? n.dhcp : 'UNKNOWN',
+      gateway: { address: up && has(n.dhcp) ? '192.168.1.1' : null, status: up ? n.gateway : 'UNKNOWN' },
+      dns: { address: up && has(n.dhcp) ? '1.1.1.1' : null, status: up ? n.dns : 'UNKNOWN' },
+      internet: up ? n.internet : 'UNKNOWN',
+      latency: up && has(n.gateway) ? Math.round(this.between(n.latency)) : null,
+      loss: up && has(n.gateway) ? round(this.between(n.loss), 1) : null,
     });
   }
 
