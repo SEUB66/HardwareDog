@@ -1,0 +1,60 @@
+/*
+ * HARDWARE DOG / DESIGN TOKENS
+ * Source of truth: docs/DESIGN_SPEC.md sections 06 and 07.
+ * Colors carry meaning. Do not add new ones for decoration.
+ */
+
+:root {
+  /* Base */
+  --bg: #0b0d0f;
+  --panel: #111417;
+  --panel-alt: #16191c;
+  --border: #34393d;
+  --text: #ece8de;
+  --text-dim: #8a9195;
+
+  /* Signals */
+  --cyan: #00e5ff; /* live data, links, active signals, selection, device comms */
+  --pink: #ff4fa3; /* brand, secondary signal, selected modules, dog identity */
+  --amber: #e4b04a; /* warning, degraded, attention required */
+  --green: #79d98a; /* ok, pass, stable, connected. Nothing else. */
+  --red: #ff5f56; /* actual failure only */
+
+  --grid: #1f2427;
+  --focus: var(--cyan);
+
+  /* Type */
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --cond: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
+
+  --fs-meta: 11px;
+  --fs-log: 12px;
+  --fs-text: 13px;
+  --fs-value: 14px;
+  --fs-title: 16px;
+  --fs-metric: 20px;
+  --fs-state: 28px;
+
+  --gap: 12px;
+  --nav-width: 168px;
+  --bar-height: 30px;
+
+  color-scheme: dark;
+}
+
+/* FIELD MODE: high-contrast light theme for direct sunlight (spec 34). */
+:root[data-field='on'] {
+  --bg: #f4f1e8;
+  --panel: #fbf9f3;
+  --panel-alt: #ebe7dc;
+  --border: #2a2e31;
+  --text: #0b0d0f;
+  --text-dim: #3c4347;
+  --cyan: #006e7f;
+  --pink: #b3005e;
+  --amber: #7a5200;
+  --green: #1d6b30;
+  --red: #b3261e;
+  --grid: #d6d1c4;
+  color-scheme: light;
+}
