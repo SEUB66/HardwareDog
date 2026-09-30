@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { COMMANDS, execute, type CommandContext } from '../core/commands';
 
 export interface PaletteEntry {
@@ -8,6 +8,8 @@ export interface PaletteEntry {
 }
 
 interface PaletteProps {
+  /** Keystrokes captured before the input could take focus. */
+  typeAhead?: { current: string };
   context: CommandContext;
   log: PaletteEntry[];
   onLog: (entry: PaletteEntry) => void;
@@ -15,13 +17,37 @@ interface PaletteProps {
 }
 
 /** The command layer (spec 22). Same System underneath as every button. */
-export function CommandPalette({ context, log, onLog, onClose }: PaletteProps) {
+export function CommandPalette({ context, log, onLog, onClose, typeAhead }: PaletteProps) {
   const [value, setValue] = useState('');
   const [recall, setRecall] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
   const out = useRef<HTMLPreElement>(null);
 
-  useEffect(() => input.current?.focus(), []);
+  const submit = (line: string) => {
+    if (line.trim()) onLog({ input: line, ...execute(line, context) });
+  };
+  const run = (line: string) => {
+    submit(line);
+    setValue('');
+    setRecall(-1);
+  };
+
+  // Runs in the same task as the first render: no keystroke can land
+  // between reading the type-ahead buffer and focusing the input.
+  useLayoutEffect(() => {
+    const el = input.current;
+    el?.focus();
+    const keys = typeAhead?.current ?? '';
+    if (typeAhead) typeAhead.current = '';
+    const lines = keys.split('\n');
+    const tail = lines.pop()!;
+    for (const line of lines) submit(line);
+    if (el && tail) {
+      // Write the DOM value now so the next keystroke appends to it.
+      el.value = tail;
+      setValue(tail);
+    }
+  }, []);
   useEffect(() => {
     if (out.current) out.current.scrollTop = out.current.scrollHeight;
   }, [log.length]);
@@ -36,11 +62,7 @@ export function CommandPalette({ context, log, onLog, onClose }: PaletteProps) {
       onClose();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (!value.trim()) return;
-      const result = execute(value, context);
-      onLog({ input: value, ...result });
-      setValue('');
-      setRecall(-1);
+      run(value);
     } else if (e.key === 'ArrowUp' && history.length) {
       e.preventDefault();
       const n = recall === -1 ? history.length - 1 : Math.max(0, recall - 1);
