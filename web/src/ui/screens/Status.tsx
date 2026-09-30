@@ -87,11 +87,32 @@ export function Status({ system }: { system: System }) {
               ['CLOUD', 'DISABLED'],
               ['DEVICE DATA', 'LOCAL ONLY'],
               ['SOURCE', system.transportKind === 'SIMULATOR' ? <Tag status="WARN" label="SIMULATOR" /> : (system.transportKind ?? 'NONE')],
+              ['ENDPOINT', system.transportLabel || '--'],
               ['I2C', bus.lastScanAt ? `${bus.devices.length} device(s)` : 'not scanned'],
             ]}
           />
         </Panel>
       </div>
+
+      <Panel title="DIAGNOSIS" aside={system.diagnoses.length ? `${system.diagnoses.length} active / F4 report` : 'deterministic rules'}>
+        {system.diagnoses.length === 0 ? (
+          <Empty title="NO FINDINGS" hint="No diagnostic rule matches the evidence so far." />
+        ) : (
+          <div class="diagnoses">
+            {system.diagnoses.map((d) => (
+              <div class="diagnosis" key={d.id}>
+                <div class="diagnosis-head">
+                  <Tag status="WARN" label={d.title} />
+                  <span class="dim">CONFIDENCE</span> <span>{d.confidence}</span>
+                  <span class="dim">{`  ${d.basis}`}</span>
+                </div>
+                <div>{d.cause}</div>
+                <div class="dim">NEXT CHECK: {d.next}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
 
       <Panel title="LATEST EVENTS" aside="F2 full trace">
         {recent.length === 0 ? (

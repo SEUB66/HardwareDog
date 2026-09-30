@@ -15,6 +15,18 @@ async function ctx() {
   };
 }
 
+describe('sim', () => {
+  it('lists scenarios and switches through the context', async () => {
+    const { sys } = await connectedSystem();
+    const switched: string[] = [];
+    const c = { system: sys, navigate: () => {}, exportReport: () => {}, simulate: (id: string) => switched.push(id) };
+    expect(execute('sim list', c).lines).toHaveLength(11);
+    expect(execute('sim hd-t004', c).ok).toBe(true);
+    expect(execute('sim HD-T999', c).ok).toBe(false);
+    expect(switched).toEqual(['HD-T004']);
+  });
+});
+
 describe('tokenize', () => {
   it('honors quotes', () => {
     expect(tokenize(`session mark "device reboot"`)).toEqual(['session', 'mark', 'device reboot']);
