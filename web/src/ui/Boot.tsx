@@ -90,7 +90,7 @@ export function Boot({ system, transport, onReady }: BootProps) {
           </Fragment>
         ))}
         {done &&
-          `\nDEVICE       ${system.device.id}\nMODE         LOCAL\nSOURCE       ${system.transportKind ?? 'NONE'}\nSESSION      READY\n`}
+          `\nSOURCE       ${system.transportKind ?? 'NONE'}\nDEVICE       ${system.device.id}\nMODE         LOCAL\nSESSION      READY\n`}
       </pre>
       {done && (
         <pre class="ready">
