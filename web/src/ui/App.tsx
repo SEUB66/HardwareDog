@@ -8,6 +8,9 @@ import { System, browserStore } from '../core/system';
 import type { Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
+import markSrc1x from '../../../assets/brand/web/hd-mark-1x.webp';
+import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
+import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
 import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Tag } from './components/Tag';
@@ -220,21 +223,37 @@ export function App() {
     <div class="shell">
       <header class="head">
         <span class="brand">
-          HW <b>DOG</b> {BUILD}
+          <img
+            class="mark"
+            src={markSrc1x}
+            srcset={`${markSrc1x} 1x, ${markSrc2x} 2x, ${markSrc3x} 3x`}
+            width={22}
+            height={22}
+            alt=""
+            decoding="sync"
+          />
+          HW <b>DOG</b>
+          <span class="ver">v{BUILD}</span>
         </span>
         <span class="field">
-          DEVICE<span>{system.device.id}</span>
+          <span class="k">DEVICE</span>
+          <span class="v">{system.device.id}</span>
         </span>
         <span class="field opt">
-          SESSION<span>{duration(now - system.startedAt)}</span>
+          <span class="k">SESSION</span>
+          <span class="v">{duration(now - system.startedAt)}</span>
         </span>
-        <span class="field opt">
-          ID<span>{sessionId(system.startedAt)}</span>
+        <span class="field opt wide">
+          <span class="k">SESSION ID</span>
+          <span class="v">{sessionId(system.startedAt)}</span>
         </span>
         <span class="spacer" />
-        {system.transportKind === 'SIMULATOR' && <Tag status="WARN" label="SIMULATOR" />}
         {system.trace.paused && <Tag status="WARN" label="TRACE PAUSED" />}
-        {linkTag}
+        {system.transportKind === 'SIMULATOR' && <Tag status="WARN" label="SIMULATOR" />}
+        <span class="state">
+          <span class={`light ${system.link}`} aria-hidden="true" />
+          {linkTag}
+        </span>
       </header>
 
       <nav class={`nav${moreOpen ? ' more-open' : ''}`} aria-label="Sections">

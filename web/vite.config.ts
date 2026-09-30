@@ -7,6 +7,8 @@ import preact from '@preact/preset-vite';
 export default defineConfig({
   base: './',
   plugins: [preact()],
+  // Brand derivatives live in ../assets/brand/web, next to their sources.
+  server: { fs: { allow: ['..'] } },
   build: {
     target: 'es2020',
     outDir: 'dist',
