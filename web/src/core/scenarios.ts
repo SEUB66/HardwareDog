@@ -1,0 +1,208 @@
+import type { CheckStatus } from './types';
+import type { DiagnosisId } from './diagnostics';
+
+/**
+ * Fault scenarios for the simulator (docs/DIAGNOSTICS.md).
+ *
+ * A scenario describes the PHYSICAL situation: supply, cable, target
+ * firmware, network. The simulator turns it into HDP frames only; the
+ * diagnostic engine never sees the scenario. `expect` is the answer key
+ * used by the reliability matrix in test/scenarios.test.ts.
+ */
+
+export type Range = readonly [min: number, max: number];
+
+export interface Scenario {
+  id: ScenarioId;
+  title: string;
+  /** What is physically wrong, in one line. */
+  fault: string;
+  /** Exactly the diagnoses the engine must produce. Empty = healthy. */
+  expect: readonly DiagnosisId[];
+  supply: {
+    volts: number;
+    /** Cable + connector resistance, ohms. */
+    ohms: number;
+    /** Periodic load bursts that sag the rail (radio, motor). */
+    bursts: null | {
+      every: Range;
+      current: Range;
+      /** Extra sag in volts on top of I*R. */
+      sag: Range;
+      /** Target browns out and drops off USB when the rail goes below this. */
+      brownoutBelow: number | null;
+    };
+  };
+  target: {
+    /** Idle and running current, amps. */
+    current: number;
+    /** The target enumerates on USB. */
+    enumerates: boolean;
+    /** Actual UART baud of the target. Hardware Dog starts at 115200. */
+    baud: number;
+    /** USB data link drops while the target keeps running (connector, cable). */
+    usbDrops: null | { every: Range; outage: Range };
+    /** Firmware reset loop: the target reboots on its own. */
+    resetLoop: null | { every: Range; reason: string; code: number };
+    /** Current spikes above the limit on a stiff supply. */
+    spikes: null | { every: Range; current: Range; duration: Range };
+  };
+  net: {
+    link: boolean;
+    dhcp: CheckStatus;
+    gateway: CheckStatus;
+    dns: CheckStatus;
+    internet: CheckStatus;
+    latency: Range;
+    /** Packet loss percent. */
+    loss: Range;
+  };
+}
+
+export const SCENARIO_IDS = [
+  'HD-T000',
+  'HD-T001',
+  'HD-T002',
+  'HD-T003',
+  'HD-T004',
+  'HD-T005',
+  'HD-T006',
+  'HD-T007',
+  'HD-T008',
+  'HD-T009',
+  'HD-T010',
+] as const;
+export type ScenarioId = (typeof SCENARIO_IDS)[number];
+
+const HEALTHY_NET: Scenario['net'] = {
+  link: true,
+  dhcp: 'PASS',
+  gateway: 'PASS',
+  dns: 'PASS',
+  internet: 'PASS',
+  latency: [9, 16],
+  loss: [0, 0],
+};
+
+const HEALTHY_TARGET: Scenario['target'] = {
+  current: 0.31,
+  enumerates: true,
+  baud: 115200,
+  usbDrops: null,
+  resetLoop: null,
+  spikes: null,
+};
+
+const STIFF_SUPPLY: Scenario['supply'] = { volts: 5.07, ohms: 0.05, bursts: null };
+
+export const SCENARIOS: Record<ScenarioId, Scenario> = {
+  'HD-T000': {
+    id: 'HD-T000',
+    title: 'HEALTHY BASELINE',
+    fault: 'Nothing is wrong. Any diagnosis here is a false positive.',
+    expect: [],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: HEALTHY_NET,
+  },
+  'HD-T001': {
+    id: 'HD-T001',
+    title: 'USB UNDERVOLTAGE',
+    fault: 'Thin cable on a weak port: load bursts sag the rail and the target browns out.',
+    expect: ['POWER_INSTABILITY'],
+    supply: {
+      volts: 5.07,
+      ohms: 0.09,
+      bursts: { every: [7000, 11000], current: [0.66, 0.76], sag: [0.3, 0.46], brownoutBelow: 4.7 },
+    },
+    target: HEALTHY_TARGET,
+    net: HEALTHY_NET,
+  },
+  'HD-T002': {
+    id: 'HD-T002',
+    title: 'DHCP FAILURE',
+    fault: 'Link is up but no DHCP server answers (wrong VLAN, server down).',
+    expect: ['DHCP_FAILURE'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: { link: true, dhcp: 'FAIL', gateway: 'UNKNOWN', dns: 'UNKNOWN', internet: 'UNKNOWN', latency: [0, 0], loss: [0, 0] },
+  },
+  'HD-T003': {
+    id: 'HD-T003',
+    title: 'DNS FAILURE',
+    fault: 'The configured DNS server does not answer; the Internet is reachable by IP.',
+    expect: ['DNS_FAILURE'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: { ...HEALTHY_NET, dns: 'FAIL', internet: 'PASS' },
+  },
+  'HD-T004': {
+    id: 'HD-T004',
+    title: 'SERIAL FRAMING MISMATCH',
+    fault: 'The target UART runs at 9600 baud; the monitor listens at 115200.',
+    expect: ['SERIAL_CONFIGURATION_MISMATCH'],
+    supply: STIFF_SUPPLY,
+    target: { ...HEALTHY_TARGET, baud: 9600 },
+    net: HEALTHY_NET,
+  },
+  'HD-T005': {
+    id: 'HD-T005',
+    title: 'INTERMITTENT USB DISCONNECT',
+    fault: 'Worn connector: USB data drops while the supply stays solid.',
+    expect: ['USB_INTERMITTENT'],
+    supply: STIFF_SUPPLY,
+    target: { ...HEALTHY_TARGET, usbDrops: { every: [5000, 9000], outage: [400, 900] } },
+    net: HEALTHY_NET,
+  },
+  'HD-T006': {
+    id: 'HD-T006',
+    title: 'TARGET RESET LOOP',
+    fault: 'Firmware hangs and the task watchdog reboots the target every few seconds.',
+    expect: ['TARGET_RESET_LOOP'],
+    supply: STIFF_SUPPLY,
+    target: { ...HEALTHY_TARGET, resetLoop: { every: [5500, 7500], reason: 'TG1WDT_SYS_RST', code: 0x8 } },
+    net: HEALTHY_NET,
+  },
+  'HD-T007': {
+    id: 'HD-T007',
+    title: 'UNSTABLE NETWORK',
+    fault: 'Weak Wi-Fi: every layer answers, but latency swings and packets drop.',
+    expect: ['NETWORK_UNSTABLE'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: { ...HEALTHY_NET, latency: [18, 420], loss: [2, 14] },
+  },
+  'HD-T008': {
+    id: 'HD-T008',
+    title: 'UPSTREAM DOWN',
+    fault: 'LAN and gateway are fine; the Internet connection beyond the gateway is down.',
+    expect: ['UPSTREAM_FAILURE'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: { ...HEALTHY_NET, dns: 'FAIL', internet: 'FAIL' },
+  },
+  'HD-T009': {
+    id: 'HD-T009',
+    title: 'OVERCURRENT',
+    fault: 'A motor stalls: the target pulls more than 1 A in spikes on a stiff supply.',
+    expect: ['OVERCURRENT'],
+    supply: { volts: 5.1, ohms: 0.03, bursts: null },
+    target: { ...HEALTHY_TARGET, spikes: { every: [4000, 7000], current: [1.05, 1.25], duration: [250, 500] } },
+    net: HEALTHY_NET,
+  },
+  'HD-T010': {
+    id: 'HD-T010',
+    title: 'USB NOT ENUMERATED',
+    fault: 'The target is powered but never enumerates (charge-only cable or broken USB firmware).',
+    expect: ['USB_NOT_ENUMERATED'],
+    supply: STIFF_SUPPLY,
+    target: { ...HEALTHY_TARGET, enumerates: false },
+    net: HEALTHY_NET,
+  },
+};
+
+export const DEFAULT_SCENARIO: ScenarioId = 'HD-T001';
+
+export function isScenarioId(v: string): v is ScenarioId {
+  return (SCENARIO_IDS as readonly string[]).includes(v);
+}

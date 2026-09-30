@@ -1,6 +1,8 @@
 import type { DeviceFrame, HostCommand } from '../src/core/protocol';
 import type { Transport, TransportSink } from '../src/core/transport';
 import { System, memoryStore } from '../src/core/system';
+import { SimulatedDevice } from '../src/core/simulator';
+import type { ScenarioId } from '../src/core/scenarios';
 
 /** A transport whose frames are pushed by the test. */
 export class FakeTransport implements Transport {
@@ -48,3 +50,16 @@ export const attach = (t: number): DeviceFrame => ({
   product: 'USB JTAG/Serial',
   serial: null,
 });
+
+/** Run a simulated session in manual time and return the final diagnosis. */
+export async function runScenario(scenario: ScenarioId, seed: number, sessionMs = 90_000) {
+  let now = 0;
+  const sys = new System(memoryStore(), () => now);
+  const sim = new SimulatedDevice({ seed, manual: true, scenario });
+  await sys.boot(sim, () => {}, 0);
+  for (let elapsed = 0; elapsed < sessionMs; elapsed += 100) {
+    sim.advance(100);
+    now = sim.uptime;
+  }
+  return { sys, sim, diagnoses: sys.evaluate(now) };
+}
