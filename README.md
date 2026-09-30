@@ -56,11 +56,39 @@ I want one instrument that can help answer a very simple question:
 ## STATUS
 
 ```text
-[ -- ] PROJECT STAGE     DESIGN SPECIFICATION / PUBLIC DRAFT
-[ -- ] HARDWARE          NOT STARTED
+[ OK ] DESIGN SPEC       docs/DESIGN_SPEC.md
+[ OK ] WEB INTERFACE     0.1.0, runs against the built-in simulator
+[ OK ] WIRE PROTOCOL     v1, docs/PROTOCOL.md
 [ -- ] FIRMWARE          NOT STARTED
-[ -- ] WEB INTERFACE     NOT STARTED
+[ -- ] HARDWARE          NOT STARTED
 ```
+
+---
+
+## RUN THE INTERFACE
+
+```text
+REQUIRES    Node.js 20+
+```
+
+```sh
+cd web
+npm ci
+npm run dev        # http://localhost:5173
+npm run check      # typecheck + tests + production build
+```
+
+With no hardware attached, Hardware Dog boots against a **simulated device**
+with a marginal power supply, so every screen has something real to show.
+The simulator is labeled as such everywhere, including exported reports.
+With firmware available, **SETUP → CONNECT WEB SERIAL** talks to the real
+device (Chromium-based browsers).
+
+```text
+F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
+```
+
+Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 ---
 
