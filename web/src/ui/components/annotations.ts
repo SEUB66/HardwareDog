@@ -65,8 +65,10 @@ interface Rect {
 export interface LayoutOptions {
   /** Advance width of one character at the label font size. */
   charWidth: number;
-  /** Height of one text line (cap height + descender). */
+  /** Rendered height of one label: ascent + descent of the label font. */
   lineHeight: number;
+  /** Space below the baseline taken by descenders. */
+  descent: number;
   /** Gap between a label and its line. */
   pad: number;
   /** Maximum stacked lanes for markers. */
@@ -80,8 +82,10 @@ export interface LayoutOptions {
 }
 
 export const DEFAULT_LAYOUT: LayoutOptions = {
+  // IBM Plex Mono at 10 px: 6.0 px advance, ~10.3 px ascent, ~2.7 px descent.
   charWidth: 6.1,
-  lineHeight: 11,
+  lineHeight: 14,
+  descent: 3,
   pad: 3,
   lanes: 3,
   compact: false,
@@ -110,7 +114,7 @@ export function layoutAnnotations(
     for (const text of texts) {
       const w = text.length * o.charWidth;
       for (const c of candidates(item, w, bounds, o)) {
-        const box = { x0: c.x0, y0: c.baseline - o.lineHeight + 2, x1: c.x0 + w, y1: c.baseline + 2 };
+        const box = { x0: c.x0, y0: c.baseline - o.lineHeight + o.descent, x1: c.x0 + w, y1: c.baseline + o.descent };
         if (!inside(box, bounds) || taken.some((t) => overlaps(t, box))) continue;
         if (item.kind === 'threshold' && lines.some((l) => overlaps(l, box))) continue;
         const label: PlacedLabel = { id: item.id, kind, text, x: c.anchor === 'start' ? box.x0 : box.x1, y: c.baseline, anchor: c.anchor, box };
@@ -178,8 +182,8 @@ interface Candidate {
 function* candidates(item: AnnotationInput, w: number, b: Bounds, o: LayoutOptions): Generator<Candidate> {
   if (item.kind === 'threshold') {
     // Attached to the line: above it, then below it; left end, then right end.
-    const above = item.y - o.pad;
-    const below = item.y + o.pad + o.lineHeight - 2;
+    const above = item.y - o.pad - o.descent;
+    const below = item.y + o.pad + o.lineHeight - o.descent;
     for (const baseline of [above, below]) {
       yield { x0: b.left + o.pad, baseline, anchor: 'start' };
       yield { x0: b.right - o.pad - w, baseline, anchor: 'end' };
@@ -188,7 +192,7 @@ function* candidates(item: AnnotationInput, w: number, b: Bounds, o: LayoutOptio
   }
   // Markers: lanes from the top of the plot, right of the line then left of it.
   for (let lane = 0; lane < o.lanes; lane++) {
-    const baseline = b.top + o.lineHeight - 2 + lane * (o.lineHeight + 1);
+    const baseline = b.top + o.lineHeight - o.descent + lane * (o.lineHeight + 1);
     yield { x0: item.x + o.pad, baseline, anchor: 'start' };
     yield { x0: item.x - o.pad - w, baseline, anchor: 'end' };
   }
