@@ -76,8 +76,11 @@ export function App() {
   // The keyboard handler must see open/close immediately, not after the
   // next render, or fast keystrokes leak into global shortcuts.
   const paletteOpen = useRef(false);
+  /** Keys typed between CTRL+K and the palette input taking focus. */
+  const typeAhead = useRef('');
   const setPalette = (open: boolean) => {
     paletteOpen.current = open;
+    typeAhead.current = '';
     setPaletteState(open);
   };
   const [paletteLog, setPaletteLog] = useState<PaletteEntry[]>([]);
@@ -164,7 +167,15 @@ export function App() {
         setPalette(!paletteOpen.current);
         return;
       }
-      if (paletteOpen.current) return;
+      if (paletteOpen.current) {
+        // The palette is opening but its input is not focused yet: keep the
+        // keystrokes instead of losing them (or firing global shortcuts).
+        if (!isTyping(e.target) && !ctrl && !e.altKey && (e.key.length === 1 || e.key === 'Enter')) {
+          e.preventDefault();
+          typeAhead.current += e.key === 'Enter' ? '\n' : e.key;
+        }
+        return;
+      }
       if (e.key === 'Escape') {
         if (isTyping(e.target)) (e.target as HTMLElement).blur();
         else back();
@@ -332,6 +343,7 @@ export function App() {
 
       {palette && (
         <CommandPalette
+          typeAhead={typeAhead}
           context={context}
           log={paletteLog}
           onLog={(entry) => setPaletteLog((l) => [...l.slice(-49), entry])}
