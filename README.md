@@ -76,7 +76,14 @@ cd web
 npm ci
 npm run dev        # http://localhost:5173
 npm run check      # typecheck + tests + production build
+npm run demo       # open the interface against the simulator
 ```
+
+The simulator runs 11 physical **fault scenarios** (undervoltage, DHCP,
+DNS, serial framing, intermittent USB, reset loop, unstable network,
+upstream outage, overcurrent, USB not enumerated, healthy baseline). A
+deterministic diagnostic engine must name each one exactly, with no false
+positive on the healthy baseline: see [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
 
 With no hardware attached, Hardware Dog boots against a **simulated device**
 with a marginal power supply, so every screen has something real to show.

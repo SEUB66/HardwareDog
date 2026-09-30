@@ -618,6 +618,25 @@ select {
   margin-left: auto;
 }
 
+/* ------------------------------------------------------------------ diagnosis */
+
+.diagnoses {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnosis {
+  padding-left: 10px;
+  border-left: 2px solid var(--amber);
+}
+
+.diagnosis-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  align-items: baseline;
+}
+
 /* ------------------------------------------------------------------ chart */
 
 .chart {

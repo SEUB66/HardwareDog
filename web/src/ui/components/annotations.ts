@@ -1,17 +1,19 @@
 /**
  * Chart annotation layout.
  *
- * Places text labels for event markers and threshold lines so that no two
- * labels overlap and every label stays inside the plot. Pure function:
- * geometry in, positions out, so it is unit tested and reused by every
- * chart as more event types appear.
+ * Contract: NO UNCONTROLLED OVERLAP. With live data, enough events can
+ * always land on the same pixel to make "label everything" impossible,
+ * so the layout degrades in a fixed order instead of overlapping:
  *
- * Strategy, in order, for each label:
- *   1. preferred position
- *   2. other side of its anchor (markers flip left / right)
- *   3. next lane (markers stack downward from the top)
- *   4. the short text, through the same positions
- *   5. hidden: the line stays, the text is dropped. Never an overlap.
+ *   1. priority    important events are placed first
+ *   2. stagger     other side of the line, then lower lanes
+ *   3. clamp       every label stays inside the plot
+ *   4. abbreviate  the short text, through the same positions
+ *   5. collapse    a cluster keeps its top labels and becomes "+N EVENTS"
+ *
+ * Only if even "+N" has no free position is a cluster left unlabeled, and
+ * that is reported through `hidden`. Pure function: geometry in,
+ * positions out, unit tested.
  */
 
 export interface Bounds {
@@ -31,11 +33,13 @@ export interface AnnotationInput {
   text: string;
   /** Shorter form used when the full text does not fit. */
   short?: string;
+  /** Higher is more important. Default 0. */
+  priority?: number;
 }
 
 export interface PlacedLabel {
   id: string;
-  kind: AnnotationInput['kind'];
+  kind: AnnotationInput['kind'] | 'overflow';
   text: string;
   /** Text baseline origin. */
   x: number;
@@ -43,6 +47,12 @@ export interface PlacedLabel {
   anchor: 'start' | 'end';
   /** Occupied rectangle, for tests and debugging. */
   box: Rect;
+}
+
+export interface LayoutResult {
+  labels: PlacedLabel[];
+  /** Markers whose text could not be shown at all, not even as "+N". */
+  hidden: number;
 }
 
 interface Rect {
@@ -55,17 +65,33 @@ interface Rect {
 export interface LayoutOptions {
   /** Advance width of one character at the label font size. */
   charWidth: number;
-  /** Height of one text line (cap height + descender). */
+  /** Rendered height of one label: ascent + descent of the label font. */
   lineHeight: number;
+  /** Space below the baseline taken by descenders. */
+  descent: number;
   /** Gap between a label and its line. */
   pad: number;
   /** Maximum stacked lanes for markers. */
   lanes: number;
   /** Prefer the short text from the start (narrow charts). */
   compact: boolean;
+  /** Markers closer than this (px) form one cluster. */
+  clusterGap: number;
+  /** Individual labels kept per cluster before collapsing into "+N". */
+  perCluster: number;
 }
 
-export const DEFAULT_LAYOUT: LayoutOptions = { charWidth: 6.1, lineHeight: 11, pad: 3, lanes: 3, compact: false };
+export const DEFAULT_LAYOUT: LayoutOptions = {
+  // IBM Plex Mono at 10 px: 6.0 px advance, ~10.3 px ascent, ~2.7 px descent.
+  charWidth: 6.1,
+  lineHeight: 14,
+  descent: 3,
+  pad: 3,
+  lanes: 3,
+  compact: false,
+  clusterGap: 8,
+  perCluster: 2,
+};
 
 const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 const inside = (r: Rect, b: Bounds) => r.x0 >= b.left && r.x1 <= b.right && r.y0 >= b.top && r.y1 <= b.bottom;
@@ -74,49 +100,77 @@ export function layoutAnnotations(
   items: AnnotationInput[],
   bounds: Bounds,
   options: Partial<LayoutOptions> = {},
-): PlacedLabel[] {
+): LayoutResult {
   const o = { ...DEFAULT_LAYOUT, ...options };
-  const placed: PlacedLabel[] = [];
+  const labels: PlacedLabel[] = [];
   const taken: Rect[] = [];
+  let hidden = 0;
+  const markers = items.filter((i) => i.kind === 'marker').sort((a, b) => a.x - b.x);
   // Threshold labels also keep clear of marker lines, so a value like
   // "4.75 V" is never struck through by an event line.
-  const lines: Rect[] = items
-    .filter((i) => i.kind === 'marker')
-    .map((i) => ({ x0: i.x - 1, y0: bounds.top, x1: i.x + 1, y1: bounds.bottom }));
+  const lines: Rect[] = markers.map((i) => ({ x0: i.x - 1, y0: bounds.top, x1: i.x + 1, y1: bounds.bottom }));
 
-  // Thresholds first: they belong to fixed lines and have fewer options.
-  const ordered = [...items.filter((i) => i.kind === 'threshold'), ...items.filter((i) => i.kind === 'marker').sort((a, b) => a.x - b.x)];
-
-  for (const item of ordered) {
-    const texts = o.compact && item.short ? [item.short] : item.short ? [item.text, item.short] : [item.text];
-    let done: PlacedLabel | null = null;
-
+  const place = (item: AnnotationInput, texts: string[], kind: PlacedLabel['kind']): PlacedLabel | null => {
     for (const text of texts) {
       const w = text.length * o.charWidth;
       for (const c of candidates(item, w, bounds, o)) {
-        const box = { x0: c.x0, y0: c.baseline - o.lineHeight + 2, x1: c.x0 + w, y1: c.baseline + 2 };
+        const box = { x0: c.x0, y0: c.baseline - o.lineHeight + o.descent, x1: c.x0 + w, y1: c.baseline + o.descent };
         if (!inside(box, bounds) || taken.some((t) => overlaps(t, box))) continue;
         if (item.kind === 'threshold' && lines.some((l) => overlaps(l, box))) continue;
-        done = {
-          id: item.id,
-          kind: item.kind,
-          text,
-          x: c.anchor === 'start' ? box.x0 : box.x1,
-          y: c.baseline,
-          anchor: c.anchor,
-          box,
-        };
+        const label: PlacedLabel = { id: item.id, kind, text, x: c.anchor === 'start' ? box.x0 : box.x1, y: c.baseline, anchor: c.anchor, box };
+        labels.push(label);
+        taken.push(box);
+        return label;
+      }
+    }
+    return null;
+  };
+  const textsOf = (item: AnnotationInput) =>
+    o.compact && item.short ? [item.short] : item.short ? [item.text, item.short] : [item.text];
+  const unplace = (label: PlacedLabel) => {
+    labels.splice(labels.indexOf(label), 1);
+    taken.splice(taken.indexOf(label.box), 1);
+  };
+
+  // Thresholds first: they belong to fixed lines and have fewer options.
+  for (const t of items.filter((i) => i.kind === 'threshold')) place(t, textsOf(t), 'threshold');
+
+  // Markers, cluster by cluster, left to right.
+  const clusters: AnnotationInput[][] = [];
+  for (const m of markers) {
+    const last = clusters.at(-1);
+    if (last && m.x - last.at(-1)!.x < o.clusterGap) last.push(m);
+    else clusters.push([m]);
+  }
+
+  for (const cluster of clusters) {
+    const ranked = [...cluster].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.x - b.x);
+    const shown: PlacedLabel[] = [];
+    for (const m of ranked) {
+      if (shown.length >= o.perCluster) break;
+      const l = place(m, textsOf(m), 'marker');
+      if (l) shown.push(l);
+    }
+    let rest = cluster.length - shown.length;
+    // Collapse: "+N EVENTS" for the rest; free a slot if it does not fit.
+    while (rest > 0) {
+      const anchor = cluster.reduce((a, b) => (b.x > a.x ? b : a));
+      const overflow = place(
+        { id: `+${anchor.id}`, kind: 'marker', x: anchor.x, y: 0, text: `+${rest} EVENTS` },
+        o.compact ? [`+${rest}`] : [`+${rest} EVENTS`, `+${rest}`],
+        'overflow',
+      );
+      if (overflow) break;
+      const drop = shown.pop();
+      if (!drop) {
+        hidden += rest;
         break;
       }
-      if (done) break;
-    }
-
-    if (done) {
-      placed.push(done);
-      taken.push(done.box);
+      unplace(drop);
+      rest++;
     }
   }
-  return placed;
+  return { labels, hidden };
 }
 
 interface Candidate {
@@ -128,8 +182,8 @@ interface Candidate {
 function* candidates(item: AnnotationInput, w: number, b: Bounds, o: LayoutOptions): Generator<Candidate> {
   if (item.kind === 'threshold') {
     // Attached to the line: above it, then below it; left end, then right end.
-    const above = item.y - o.pad;
-    const below = item.y + o.pad + o.lineHeight - 2;
+    const above = item.y - o.pad - o.descent;
+    const below = item.y + o.pad + o.lineHeight - o.descent;
     for (const baseline of [above, below]) {
       yield { x0: b.left + o.pad, baseline, anchor: 'start' };
       yield { x0: b.right - o.pad - w, baseline, anchor: 'end' };
@@ -138,7 +192,7 @@ function* candidates(item: AnnotationInput, w: number, b: Bounds, o: LayoutOptio
   }
   // Markers: lanes from the top of the plot, right of the line then left of it.
   for (let lane = 0; lane < o.lanes; lane++) {
-    const baseline = b.top + o.lineHeight - 2 + lane * (o.lineHeight + 1);
+    const baseline = b.top + o.lineHeight - o.descent + lane * (o.lineHeight + 1);
     yield { x0: item.x + o.pad, baseline, anchor: 'start' };
     yield { x0: item.x - o.pad - w, baseline, anchor: 'end' };
   }

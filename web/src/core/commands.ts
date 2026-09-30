@@ -1,4 +1,5 @@
 import type { System } from './system';
+import { SCENARIOS, SCENARIO_IDS, isScenarioId, type ScenarioId } from './scenarios';
 import type { ProbeTest } from './types';
 import { PROBE_TESTS } from './types';
 
@@ -9,6 +10,8 @@ export interface CommandContext {
   system: System;
   navigate(screen: Screen): void;
   exportReport(format: 'txt' | 'json'): void;
+  /** Restart the simulator on a fault scenario (new session). */
+  simulate?(scenario: ScenarioId): void;
 }
 
 export interface CommandOutput {
@@ -37,6 +40,8 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'sound <on|off>', summary: 'startup beep' },
   { usage: 'field <on|off>', summary: 'high-contrast field mode' },
   { usage: 'go <screen>', summary: 'open a screen by name' },
+  { usage: 'sim list', summary: 'list simulator fault scenarios' },
+  { usage: 'sim <HD-T000..HD-T010>', summary: 'restart the simulator on a scenario (new session)' },
 ];
 
 /** Split on whitespace, honoring "double" and 'single' quotes. */
@@ -175,6 +180,15 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
       if (!text) return fail('usage: session mark "<text>"');
       sys.mark(text);
       return ok(`marked: ${text}`);
+    }
+
+    case 'sim': {
+      if (!a0 || a0 === 'list') return ok(...SCENARIO_IDS.map((id) => `${id}  ${SCENARIOS[id].title.padEnd(30)}${SCENARIOS[id].fault}`));
+      const id = a0.toUpperCase();
+      if (!isScenarioId(id)) return fail(`unknown scenario: ${args[0]}`, 'type sim list');
+      if (!ctx.simulate) return fail('scenario switching is not available here');
+      ctx.simulate(id);
+      return ok(`simulator -> ${id} ${SCENARIOS[id].title}, new session`);
     }
 
     case 'sound':
