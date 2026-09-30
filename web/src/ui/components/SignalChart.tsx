@@ -8,6 +8,8 @@ export interface ChartMarker {
   label: string;
   /** Used when the full label does not fit. */
   short?: string;
+  /** Higher labels win when events crowd the same spot. */
+  priority?: number;
 }
 
 interface SignalChartProps {
@@ -106,6 +108,7 @@ export function SignalChart(props: SignalChartProps) {
     y: 0,
     text: m.label,
     ...(m.short ? { short: m.short } : {}),
+    ...(m.priority !== undefined ? { priority: m.priority } : {}),
   }));
   const thresholdVisible = !!threshold && threshold.value >= lo && threshold.value <= hi;
   if (threshold && thresholdVisible) {
@@ -118,7 +121,7 @@ export function SignalChart(props: SignalChartProps) {
       ...(threshold.short ? { short: threshold.short } : {}),
     });
   }
-  const labels = layoutAnnotations(annotationInputs, bounds, { compact: plotW < 420 });
+  const { labels, hidden } = layoutAnnotations(annotationInputs, bounds, { compact: plotW < 420 });
 
   const last = visible.at(-1);
   const min = values.length ? Math.min(...values) : null;
@@ -147,6 +150,7 @@ export function SignalChart(props: SignalChartProps) {
         <span>
           MIN {min === null ? '--' : props.format(min)} / MAX {max === null ? '--' : props.format(max)}
         </span>
+        {hidden > 0 && <span>{hidden} EVENTS UNLABELED</span>}
         <span class="cursor" aria-live="off">
           {cursor ? `${clock(cursor.t)}  ${props.format(pick(cursor))}` : ''}
         </span>
