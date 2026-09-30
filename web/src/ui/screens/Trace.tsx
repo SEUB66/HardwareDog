@@ -76,9 +76,8 @@ export function Trace({ system, only }: { system: System; only?: Source[] | null
               <tr>
                 <th scope="col">TIME</th>
                 <th scope="col">SOURCE</th>
-                <th scope="col" class="col-sev">SEV</th>
+                <th scope="col" class="col-sev">LEVEL</th>
                 <th scope="col">MESSAGE</th>
-                <th scope="col">VALUE</th>
               </tr>
             </thead>
             <tbody>
@@ -89,8 +88,10 @@ export function Trace({ system, only }: { system: System; only?: Source[] | null
                   <td class="col-sev">
                     <Tag status={e.severity} />
                   </td>
-                  <td class="msg">{e.message}</td>
-                  <td class="dim">{e.value ?? ''}</td>
+                  <td class="msg">
+                    {e.message}
+                    {e.value ? <span class="val">{e.value}</span> : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

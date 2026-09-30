@@ -282,6 +282,10 @@ select {
   align-items: start;
 }
 
+.grid.even {
+  align-items: stretch;
+}
+
 .grid.wide {
   grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
 }
@@ -586,11 +590,11 @@ select {
   color: var(--text-dim);
 }
 
-.trace tr.WARN td.msg {
-  color: var(--amber);
-}
-.trace tr.FAIL td.msg {
-  color: var(--red);
+/* Hardware values are live signal: cyan. The level word carries severity;
+   the row itself is never painted. */
+.trace .val {
+  margin-left: 2ch;
+  color: var(--cyan);
 }
 .trace tr.src-RULE td.src,
 .trace tr.src-USER td.src {
@@ -822,7 +826,7 @@ select {
 .overlay {
   position: fixed;
   inset: 0;
-  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  background: none;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -1023,7 +1027,8 @@ select {
     grid-template-columns: 1fr;
   }
 
-  .trace .col-sev {
-    display: none;
+  .trace th,
+  .trace td {
+    padding: 1px 4px;
   }
 }

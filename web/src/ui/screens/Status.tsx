@@ -21,7 +21,7 @@ export function Status({ system }: { system: System }) {
         STATUS <span class="sub">what is happening right now</span>
       </h1>
       {system.lastError && system.link !== 'ONLINE' && <ErrorBlock error={system.lastError} />}
-      <div class="grid">
+      <div class="grid even">
         <Panel title="DEVICE">
           <KV
             rows={[
@@ -109,7 +109,7 @@ export function Status({ system }: { system: System }) {
                     </td>
                     <td class="msg">
                       {e.message}
-                      {e.value ? <span class="dim">{`  ${e.value}`}</span> : null}
+                      {e.value ? <span class="val">{e.value}</span> : null}
                     </td>
                   </tr>
                 ))}
