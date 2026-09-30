@@ -59,14 +59,16 @@ describe('USB / power correlation rule', () => {
     }
     clock.set(1_010_000);
     const report = buildReport(sys, clock.get());
-    expect(report.findings.map((f) => f.kind)).toEqual(['OBSERVED', 'OBSERVED', 'CORRELATION', 'POSSIBLE CAUSE']);
+    expect(report.diagnoses.map((d) => `${d.id}:${d.confidence}`)).toEqual(['POWER_INSTABILITY:HIGH']);
+    expect(report.findings.map((f) => f.kind)).toEqual(['OBSERVED', 'OBSERVED', 'CORRELATION', 'POSSIBLE CAUSE', 'NEXT CHECK']);
     const text = reportToText(report);
-    expect(text).toContain('3 / 3 disconnects occurred within 100 ms of a voltage drop below 4.75 V.');
+    expect(text).toContain('3 / 3 disconnects occurred within 100 ms of a voltage drop below 4.75 V');
     expect(text).toContain('POWER INSTABILITY');
+    expect(text).toContain('CONFIDENCE HIGH');
     expect(text).toContain('!! SIMULATED DATA');
   });
 
-  it('does not claim a cause when only a minority of disconnects line up', async () => {
+  it('ranks power LOW and flags the USB link when only a minority of disconnects line up', async () => {
     const { sys, transport } = await connectedSystem();
     transport.push(attach(0));
     transport.push({ type: 'power', t: 1000, v: 4.6, i: 0.7 });
@@ -76,9 +78,8 @@ describe('USB / power correlation rule', () => {
       transport.push(attach(t - 500));
       transport.push({ type: 'usb.detach', t });
     }
-    const kinds = buildReport(sys).findings.map((f) => f.kind);
-    expect(kinds).toContain('CORRELATION');
-    expect(kinds).not.toContain('POSSIBLE CAUSE');
+    const report = buildReport(sys, 1_010_000);
+    expect(report.diagnoses.map((d) => `${d.id}:${d.confidence}`)).toEqual(['POWER_INSTABILITY:LOW', 'USB_INTERMITTENT:MEDIUM']);
   });
 });
 
