@@ -5,7 +5,7 @@ STATUS
 ------
 
 [ OK ] web interface          web/
-[ OK ] wire protocol v1       docs/PROTOCOL.md
+[ OK ] wire protocol v1       docs/PROTOCOL.md, protocol/hdp_v1.json (contract)
 [ OK ] device simulator       web/src/core/simulator.ts
 [ -- ] firmware               not started
 [ -- ] hardware / PCB         not started

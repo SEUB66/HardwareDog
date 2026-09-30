@@ -28,6 +28,12 @@ Any company or individual who wants to:
 
 These uses are covered for free by the PolyForm Noncommercial License 1.0.0.
 
+## BRAND
+
+The Hardware Dog name, logo and official mascot are not covered by either
+license for third-party use. A commercial license states which brand
+assets, if any, may be used and how.
+
 ## CONTACT
 
 Open a GitHub issue titled `COMMERCIAL LICENSE REQUEST` on this repository,

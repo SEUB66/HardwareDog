@@ -985,7 +985,7 @@ hardware companion
 
 Then:
 
-> Hardware Dog is my open-source hardware diagnostic companion.
+> Hardware Dog is my source-available hardware diagnostic companion.
 > I am building it to observe power, USB, serial, embedded buses and network
 > behavior on one synchronized timeline.
 > I want one instrument that can help answer a very simple question:
