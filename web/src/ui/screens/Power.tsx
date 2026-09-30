@@ -14,7 +14,9 @@ export function Power({ system }: { system: System }) {
   const markers: ChartMarker[] = system.trace
     .all()
     .filter((e) => e.t >= end - WINDOW && e.source === 'USB' && e.message.startsWith('device '))
-    .map((e) => ({ t: e.t, label: e.message === 'device disconnected' ? 'USB LOST' : 'USB UP' }));
+    .map((e) =>
+      e.message === 'device disconnected' ? { t: e.t, label: 'USB LOST', short: 'LOST' } : { t: e.t, label: 'USB UP', short: 'UP' },
+    );
   const avgV = p.sampleCount ? p.voltageSum / p.sampleCount : null;
 
   const metric = (label: string, value: string, live = true) => (
@@ -64,7 +66,11 @@ export function Power({ system }: { system: System }) {
             domain={[4.5, 5.2]}
             step={0.1}
             tickLabel={(v) => v.toFixed(2)}
-            threshold={{ value: s.undervoltageThreshold, label: `UNDERVOLTAGE ${s.undervoltageThreshold.toFixed(2)} V` }}
+            threshold={{
+              value: s.undervoltageThreshold,
+              label: `UNDERVOLTAGE ${s.undervoltageThreshold.toFixed(2)} V`,
+              short: `${s.undervoltageThreshold.toFixed(2)} V`,
+            }}
             markers={markers}
             end={end}
             windowMs={WINDOW}
@@ -78,7 +84,11 @@ export function Power({ system }: { system: System }) {
             domain={[0, 1]}
             step={0.2}
             tickLabel={(v) => String(Math.round(v * 1000))}
-            threshold={{ value: s.overcurrentThreshold, label: `LIMIT ${Math.round(s.overcurrentThreshold * 1000)} mA` }}
+            threshold={{
+              value: s.overcurrentThreshold,
+              label: `LIMIT ${Math.round(s.overcurrentThreshold * 1000)} mA`,
+              short: `${Math.round(s.overcurrentThreshold * 1000)} mA`,
+            }}
             markers={markers}
             end={end}
             windowMs={WINDOW}

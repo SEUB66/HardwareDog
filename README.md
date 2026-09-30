@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hardware-dog-logo.png" alt="Hardware Dog — hardware companion" width="420">
+  <img src="assets/brand/web/hd-official-full-art-840.webp" alt="Hardware Dog — hardware companion" width="420" height="420">
 </p>
 
 ```text
