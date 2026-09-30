@@ -1,18 +1,23 @@
 import { BANNER, DESCRIPTOR, TAGLINE } from './ascii';
 import type { System } from './system';
-import { clock, duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
+import type { Diagnosis } from './diagnostics';
+import { diagnose } from './diagnostics';
+import { duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
 
 /**
  * Diagnostic report generation.
  *
- * Findings are typed so the report can never blur the line between what
- * was measured, what lines up in time, and what might explain it.
+ * Findings come from the diagnostic engine only (core/diagnostics.ts).
+ * They are typed so the report can never blur the line between what was
+ * measured, what lines up in time, what might explain it, and what to
+ * check next.
  */
-export type FindingKind = 'OBSERVED' | 'CORRELATION' | 'POSSIBLE CAUSE';
+export type FindingKind = 'OBSERVED' | 'CORRELATION' | 'POSSIBLE CAUSE' | 'NEXT CHECK';
 
 export interface Finding {
   kind: FindingKind;
   text: string;
+  diagnosis: Diagnosis['id'];
 }
 
 export type SectionResult = 'PASS' | 'WARNING' | 'FAIL' | 'NO DATA';
@@ -34,6 +39,7 @@ export interface Report {
   generatedAt: number;
   duration: string;
   sections: ReportSection[];
+  diagnoses: Diagnosis[];
   findings: Finding[];
 }
 
@@ -43,22 +49,21 @@ export function buildReport(sys: System, now = Date.now()): Report {
   const s = sys.serial;
   const n = sys.net;
   const cfg = sys.settings;
-  const findings: Finding[] = [];
   const sections: ReportSection[] = [];
+  const diagnoses = diagnose(sys.facts, cfg, now);
+  const findings: Finding[] = diagnoses.flatMap((d): Finding[] => [
+    ...d.observed.map((text) => ({ kind: 'OBSERVED' as const, text, diagnosis: d.id })),
+    ...(d.correlation ? [{ kind: 'CORRELATION' as const, text: d.correlation, diagnosis: d.id }] : []),
+    { kind: 'POSSIBLE CAUSE', text: d.cause, diagnosis: d.id },
+    { kind: 'NEXT CHECK', text: d.next, diagnosis: d.id },
+  ]);
 
   // POWER
   const avgV = p.sampleCount ? p.voltageSum / p.sampleCount : null;
   const avgI = p.sampleCount ? p.currentSum / p.sampleCount : null;
   const powerResult: SectionResult = p.sampleCount === 0 ? 'NO DATA' : p.dropCount > 0 ? 'WARNING' : 'PASS';
   const powerNotes: string[] = [];
-  if (p.dropCount > 0) {
-    powerNotes.push('Voltage instability detected.');
-    findings.push({
-      kind: 'OBSERVED',
-      text: `${p.dropCount} undervoltage event(s) below ${volts(cfg.undervoltageThreshold)}, minimum ${volts(p.minVoltage)}` +
-        (p.lastDropAt ? `, last at ${clock(p.lastDropAt)}` : '') + '.',
-    });
-  }
+  if (p.dropCount > 0) powerNotes.push('Voltage instability detected.');
   sections.push({
     title: 'POWER',
     result: powerResult,
@@ -76,21 +81,8 @@ export function buildReport(sys: System, now = Date.now()): Report {
   // USB
   const usbResult: SectionResult = u.connections === 0 ? 'NO DATA' : u.disconnects > 0 ? 'WARNING' : 'PASS';
   const usbNotes: string[] = [];
-  if (u.disconnects > 0) {
-    findings.push({
-      kind: 'OBSERVED',
-      text: `USB device disconnected ${u.disconnects} time(s)` + (u.lastDetachAt ? `, last at ${clock(u.lastDetachAt)}` : '') + '.',
-    });
-  }
   if (u.correlatedDisconnects > 0) {
-    const line = `${u.correlatedDisconnects} / ${u.disconnects} disconnects occurred within ${cfg.correlationWindowMs} ms of a voltage drop below ${volts(cfg.undervoltageThreshold)}.`;
-    usbNotes.push('CORRELATION', line);
-    findings.push({ kind: 'CORRELATION', text: line });
-    // Only call it a possible cause when most disconnects line up.
-    if (u.correlatedDisconnects * 2 > u.disconnects) {
-      usbNotes.push('POSSIBLE CAUSE', 'POWER INSTABILITY');
-      findings.push({ kind: 'POSSIBLE CAUSE', text: 'Power instability on the target supply rail.' });
-    }
+    usbNotes.push(`${u.correlatedDisconnects} / ${u.disconnects} disconnects within ${cfg.correlationWindowMs} ms of a voltage drop.`);
   }
   const d = u.descriptor;
   sections.push({
@@ -108,9 +100,6 @@ export function buildReport(sys: System, now = Date.now()): Report {
 
   // SERIAL
   const serialResult: SectionResult = !s.active ? 'NO DATA' : s.errors > 0 ? 'WARNING' : 'PASS';
-  if (s.errors > 0) {
-    findings.push({ kind: 'OBSERVED', text: `${s.errors} UART error(s) at ${s.baud} baud.` });
-  }
   sections.push({
     title: 'SERIAL',
     result: serialResult,
@@ -176,6 +165,7 @@ export function buildReport(sys: System, now = Date.now()): Report {
     generatedAt: now,
     duration: duration(now - sys.startedAt),
     sections,
+    diagnoses,
     findings,
   };
 }
@@ -203,9 +193,16 @@ export function reportToText(r: Report, options: { banner?: boolean } = {}): str
     if (s.notes.length) out.push('', ...s.notes);
   }
 
-  out.push('', RULE, '', 'FINDINGS', '');
-  if (r.findings.length === 0) out.push('NO FINDINGS', 'Nothing abnormal was observed in this session.');
-  for (const f of r.findings) out.push(f.kind, f.text, '');
+  out.push('', RULE, '', 'DIAGNOSIS', '');
+  if (r.diagnoses.length === 0) out.push('NO FINDINGS', 'No diagnostic rule matched this session.', '');
+  r.diagnoses.forEach((d, n) => {
+    out.push(`[${n + 1}] ${d.title.padEnd(34)}CONFIDENCE ${d.confidence}`, `    basis: ${d.basis}`, '');
+    for (const f of r.findings.filter((x) => x.diagnosis === d.id)) kv(f.kind, f.text);
+    out.push('');
+  });
+  if (r.diagnoses.length > 0) {
+    out.push('POSSIBLE CAUSE is a hypothesis ranked by the evidence above.', 'Confidence rules: docs/DIAGNOSTICS.md', '');
+  }
 
   out.push(RULE, '', 'MODE          LOCAL', 'DEVICE DATA   LOCAL ONLY', '', `${DESCRIPTOR} // ${TAGLINE}`, '');
   return out.join('\n');
