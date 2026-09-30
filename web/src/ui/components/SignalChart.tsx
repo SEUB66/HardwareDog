@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { clock, clockShort } from '../../core/format';
 import type { PowerSample } from '../../core/types';
+import { layoutAnnotations, timeTicks, type AnnotationInput } from './annotations';
 
 export interface ChartMarker {
   t: number;
   label: string;
+  /** Used when the full label does not fit. */
+  short?: string;
 }
 
 interface SignalChartProps {
@@ -17,7 +20,7 @@ interface SignalChartProps {
   domain: [number, number];
   step: number;
   tickLabel: (value: number) => string;
-  threshold?: { value: number; label: string };
+  threshold?: { value: number; label: string; short?: string };
   markers?: ChartMarker[];
   /** Right edge of the time axis (host ms). */
   end: number;
@@ -91,9 +94,31 @@ export function SignalChart(props: SignalChartProps) {
 
   const yTicks: number[] = [];
   for (let v = lo; v <= hi + step / 2; v += step) yTicks.push(Math.round(v / step) * step);
-  const xStep = windowMs <= 20_000 ? 3000 : 10_000;
-  const xTicks: number[] = [];
-  for (let t = Math.ceil(start / xStep) * xStep; t <= end; t += xStep) xTicks.push(t);
+  // Time labels are ~50 px wide: keep them spaced, and inside the svg.
+  const xTicks = timeTicks(start, end, plotW, 78).filter((t) => x(t) - 26 >= 0 && x(t) + 26 <= width);
+
+  const visibleMarkers = markers.filter((m) => m.t >= start && m.t <= end);
+  const bounds = { left: M.left, right: width - M.right, top: M.top, bottom: M.top + plotH };
+  const annotationInputs: AnnotationInput[] = visibleMarkers.map((m) => ({
+    id: `m${m.t}`,
+    kind: 'marker',
+    x: x(m.t),
+    y: 0,
+    text: m.label,
+    ...(m.short ? { short: m.short } : {}),
+  }));
+  const thresholdVisible = !!threshold && threshold.value >= lo && threshold.value <= hi;
+  if (threshold && thresholdVisible) {
+    annotationInputs.push({
+      id: 'threshold',
+      kind: 'threshold',
+      x: 0,
+      y: y(threshold.value),
+      text: threshold.label,
+      ...(threshold.short ? { short: threshold.short } : {}),
+    });
+  }
+  const labels = layoutAnnotations(annotationInputs, bounds, { compact: plotW < 420 });
 
   const last = visible.at(-1);
   const min = values.length ? Math.min(...values) : null;
@@ -155,25 +180,25 @@ export function SignalChart(props: SignalChartProps) {
           <line class="axis" x1={M.left} x2={M.left} y1={M.top} y2={M.top + plotH} />
           <line class="axis" x1={M.left} x2={width - M.right} y1={M.top + plotH} y2={M.top + plotH} />
 
-          {threshold && threshold.value >= lo && threshold.value <= hi && (
-            <g>
-              <line class="threshold" x1={M.left} x2={width - M.right} y1={y(threshold.value)} y2={y(threshold.value)} />
-              <text class="threshold-label" x={M.left + 4} y={y(threshold.value) + 12}>
-                {threshold.label}
-              </text>
-            </g>
+          {threshold && thresholdVisible && (
+            <line class="threshold" x1={M.left} x2={width - M.right} y1={y(threshold.value)} y2={y(threshold.value)} />
           )}
 
-          {markers
-            .filter((m) => m.t >= start && m.t <= end)
-            .map((m) => (
-              <g key={`m${m.t}`}>
-                <line class="marker" x1={x(m.t)} x2={x(m.t)} y1={M.top} y2={M.top + plotH} />
-                <text class="marker-label" x={x(m.t) + 3} y={M.top + 9}>
-                  {m.label}
-                </text>
-              </g>
-            ))}
+          {visibleMarkers.map((m) => (
+            <line key={`m${m.t}`} class="marker" x1={x(m.t)} x2={x(m.t)} y1={M.top} y2={M.top + plotH} />
+          ))}
+
+          {labels.map((l) => (
+            <text
+              key={l.id}
+              class={l.kind === 'threshold' ? 'threshold-label' : 'marker-label'}
+              x={l.x}
+              y={l.y}
+              text-anchor={l.anchor}
+            >
+              {l.text}
+            </text>
+          ))}
 
           {points.length > 1 && <polyline class="signal" points={points.join(' ')} />}
 
