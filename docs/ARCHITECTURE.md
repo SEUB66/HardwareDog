@@ -92,9 +92,10 @@ EVIDENCE              header is frozen when recording starts; origin is
                       never rewritten. A modified file is still shown, and
                       labeled MODIFIED with line numbers.
 
-LOCAL FIRST           No network requests, no CDN, no account. Fonts are
-                      bundled. Settings and recorded sessions stay in the
-                      browser.
+LOCAL FIRST           No network requests, no CDN, no account, no
+                      telemetry. Fonts are bundled. Settings and recorded
+                      sessions stay in the browser. Enforced by
+                      web/test/laws.test.ts. Laws: LAWS.md.
 
 SMALL                 The build must fit on the device flash and be served
                       by the firmware. Check the gzip size on every change.
