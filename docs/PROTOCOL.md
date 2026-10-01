@@ -143,12 +143,14 @@ the interface always states what they will do before sending them.
 ## SESSION FILES (.hdlog)
 
 ```text
-FORMAT         newline-delimited JSON, UTF-8
-LINE 1         header
-LINES 2..N     one entry per event, in arrival order
+VERSION        2 (v1 files are still read, marked UNVERIFIED)
+FORMAT         newline-delimited JSON, UTF-8, LF line endings
+LINE 1         header: provenance, never rewritten
+THEN           entries in arrival order, sealed in blocks by seal lines
+LAST           footer: counts + SHA-256 of everything before it
 CLOCK          "at" = host wall-clock time in ms, never goes backwards
-REFERENCE      web/src/core/session.ts (recorder, parser, replay) + tests
-EXAMPLES       examples/sessions/*.hdlog
+REFERENCE      web/src/core/session.ts (writer, reader, verifier, replay)
+CASES          cases/*.hdlog + cases/*.case.json
 ```
 
 A session file is what Hardware Dog received, kept as received. Frames are
@@ -156,24 +158,44 @@ stored as decoded HDP objects; a replay re-serializes them and feeds them
 through the **same line decoder** as a live device. A recording is reality,
 played again: the trace engine cannot tell the difference.
 
+> **DON'T SEND A SCREENSHOT. SEND THE .HDLOG.**
+> Same frames, same rejects, same thresholds, same trace, same facts, same
+> diagnosis, on any machine, without the device.
+
 ### header
 
 ```json
-{"hdlog":1,"proto":1,"id":"HD-20260930-1421","startedAt":1790778060000,
+{"hdlog":2,"proto":1,"recording":"f5db768b4dfb92c6a433abbdb061a370",
+ "id":"HD-20260930-1421","startedAt":1790778060000,"origin":"SIMULATED",
  "source":"SIMULATOR","endpoint":"SIMULATED DEVICE / HD-T001 USB UNDERVOLTAGE",
- "scenario":"HD-T001","app":"0.1.0",
+ "scenario":"HD-T001","app":"0.1.0","ruleset":1,
  "thresholds":{"undervoltageThreshold":4.75,"overcurrentThreshold":0.9,"correlationWindowMs":100}}
 ```
 
 (one line in the file)
 
 ```text
-hdlog        file format version (1)
+hdlog        file format version (2)
 proto        HDP version of the frames
-source       SIMULATOR | WEB SERIAL     where the events came from
+recording    unique id of this recording, 128 random bits, hex
+id           human session id, HD-YYYYMMDD-HHMM
+origin       PHYSICAL | SIMULATED          where the evidence comes from
+source       WEB SERIAL | SIMULATOR        the transport it came through
 scenario     simulator fault scenario, or null
+app          interface build that recorded it
+ruleset      diagnostic ruleset version in force while recording
 thresholds   diagnostic thresholds in force when recording started
 ```
+
+`origin` must agree with `source` (a reader refuses a file where it does
+not) and is never rewritten. **A replay is not an origin**: it is what the
+operator is looking at. Exporting a replay gives back the same file, byte
+for byte, so a file never becomes "a replay of a replay"; the interface
+and the report say `REPLAY OF PHYSICAL` or `REPLAY OF SIMULATED`.
+
+The device identity (id, hardware revision, firmware) is known only when
+the device says hello: it is in the `hello` frame and repeated in the
+footer.
 
 ### entries
 
@@ -191,8 +213,8 @@ frame        an HDP device frame, as received
 reject       a line the decoder refused, with its raw bytes when known;
              a replay gives the decoder the same bytes, and it must
              refuse them again
-cmd          a command the interface sent (documentation: a recording
-             cannot be re-driven)
+cmd          a command the interface sent. Documentation only: a replay
+             never executes or answers a command
 mark         an operator note on the timeline
 thresholds   the operator changed a threshold at this moment
 lost         the link went away
@@ -200,17 +222,115 @@ lost         the link went away
 
 Each entry has `at` and exactly one of these keys.
 
+### seals
+
+```json
+{"seal":{"n":1,"lines":98,"sha256":"ec0e57ea..."}}
+```
+
+The recorder writes a seal every time it stores a block (every 2 s while
+recording). Seals form a hash chain:
+
+```text
+chain(0)  = sha256(header line + LF)
+chain(n)  = sha256(hex(chain(n-1)) + the block's lines, each + LF)
+```
+
+A seal covers every byte since the previous seal (or the header) and,
+through the chain, everything before. A file whose recording never
+finished still proves that every sealed line is intact.
+
+### footer
+
+```json
+{"end":{"closed":"NORMAL","startedAt":1790778060000,"endedAt":1790778089900,
+ "entries":1557,"frames":1557,"rejects":0,"commands":0,"marks":0,
+ "thresholds":0,"lost":0,"seals":1,
+ "device":{"id":"HD-001","rev":"A","fw":"0.1.0"},"sha256":"0d2e8483..."}}
+```
+
+```text
+closed       NORMAL     closed by the recorder at the end of the session
+             RECOVERED  closed later, after an unclean stop (tab closed,
+                        crash): only sealed lines are kept
+             SNAPSHOT   exported while the session was still recording
+sha256       sha256 of every byte of the file before the footer line
+```
+
+### integrity
+
+A reader checks every seal, the footer hash and every count, and gives the
+file one status. Problems do not hide the data: a modified file is still
+shown, with the warning and the line numbers.
+
+```text
+VERIFIED     finalized, every hash and count matches
+RECOVERED    finalized after an unclean stop, every hash matches
+INCOMPLETE   never finalized; every sealed line is intact
+MODIFIED     bytes changed after they were sealed: NOT EVIDENCE
+UNVERIFIED   hdlog v1, no integrity data
+```
+
+The report names the recording, its origin, its integrity, the ruleset and
+the SHA-256 of the whole file (what `sha256sum` prints).
+
+**Integrity, not DRM, not a signature.** A hash proves that the bytes did
+not change since they were sealed. It does not prove who wrote them: anyone
+can write a new file and hash it. Signing recordings with a key held by the
+device is planned with the firmware.
+
 ### replay rules
 
 ```text
-[ 1 ] A replay is read-only. Active commands answer
-      "recorded session, read-only".
+[ 1 ] A replay is read-only. Recorded commands are never executed;
+      active commands answer "recorded session, read-only".
 [ 2 ] A replay runs on the thresholds it was recorded with, including
       changes made during the session. The operator's own settings are
       not overwritten.
-[ 3 ] A replayed simulator session stays labeled SIMULATED, in the
+[ 3 ] A replayed SIMULATED recording stays labeled SIMULATED, in the
       interface and in every exported report.
 [ 4 ] Replaying a recording must reproduce the same timeline, the same
-      measurements and the same diagnoses (web/test/session.test.ts).
+      measurements, the same facts and the same diagnoses
+      (web/test/session.test.ts).
+[ 5 ] A replay on a different ruleset says so: "recorded v1, diagnosed v2".
 ```
 
+---
+
+## CASES
+
+A case is a recorded incident turned into a regression test:
+
+```text
+cases/HD-C002.hdlog        the recording, untouched
+cases/HD-C002.case.json    what replaying it must produce
+```
+
+```json
+{
+  "case": 1,
+  "id": "HD-C002",
+  "title": "USB UNDERVOLTAGE (simulator HD-T001)",
+  "recording": {"file": "HD-C002.hdlog", "sha256": "0925e861...",
+                "recording": "f5db768b...", "origin": "SIMULATED"},
+  "ruleset": 1,
+  "expect": {
+    "facts": {"undervoltage": 3, "overcurrent": 0, "usbAttaches": 4,
+              "usbDisconnects": 3, "disconnectsAfterDrop": 3,
+              "targetResets": 4, "framingErrors": 0, "rejectedLines": 0},
+    "diagnoses": [{"id": "POWER_INSTABILITY", "confidence": "HIGH"}]
+  }
+}
+```
+
+The case names its recording by SHA-256. A case passes when the file is that
+exact file, intact (VERIFIED or RECOVERED), and replays to the stated facts
+and diagnosis (`web/test/cases.test.ts`).
+
+In the interface: replay a recording, then **REPORT → SAVE AS CASE**. It
+saves `HD-C-xxxxxxxx.case.json` and the untouched `.hdlog`. Rename both to
+the next `HD-C` number when adding them to `cases/`.
+
+Every interesting real fault can become a case without one line of special
+code: the engine either still explains it the same way, or the test says
+exactly what changed.
