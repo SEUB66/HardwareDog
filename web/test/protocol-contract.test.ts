@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest';
+import Ajv from 'ajv';
+import schema from '../../protocol/hdp_v1.json';
+import { decodeFrame, encodeCommand, type DeviceFrame, type HostCommand } from '../src/core/protocol';
+import { SCENARIO_IDS } from '../src/core/scenarios';
+import { SimulatedDevice } from '../src/core/simulator';
+import type { TransportSink } from '../src/core/transport';
+
+/**
+ * CONTRACT: ONE EVENT MODEL.
+ *
+ * protocol/hdp_v1.json is what every HDP producer must emit: the firmware
+ * and the simulator alike. The trace engine must never be able to tell
+ * which one produced a frame.
+ */
+
+const ajv = new Ajv({ allErrors: true, strict: false });
+ajv.addSchema(schema);
+const validateFrame = ajv.getSchema(`${schema.$id}#/definitions/deviceFrame`)! as (data: unknown) => boolean;
+const validateCommand = ajv.getSchema(`${schema.$id}#/definitions/hostCommand`)! as (data: unknown) => boolean;
+const lastErrors = (v: unknown) => ajv.errorsText((v as { errors?: Parameters<typeof ajv.errorsText>[0] }).errors);
+
+/** Capture the raw frames a simulator session emits, in every scenario. */
+async function capture(scenario: (typeof SCENARIO_IDS)[number], seconds: number) {
+  const frames: DeviceFrame[] = [];
+  const errors: string[] = [];
+  const sink: TransportSink = { frame: (f) => frames.push(f), error: (m) => errors.push(m), lost: () => {} };
+  const sim = new SimulatedDevice({ seed: 5, manual: true, scenario });
+  await sim.open(sink);
+  // Exercise every command path too.
+  sim.send({ cmd: 'i2c.scan' });
+  sim.send({ cmd: 'usb.enumerate' });
+  sim.send({ cmd: 'net.refresh' });
+  sim.send({ cmd: 'probe', id: 'p1', target: '192.168.1.1', tests: ['PING', 'DNS', 'TCP', 'HTTP'] });
+  sim.send({ cmd: 'probe', id: 'p2', target: 'example.invalid', tests: ['DNS', 'HTTP'] });
+  sim.send({ cmd: 'uart.tx', data: 'status' });
+  for (let k = 0; k < seconds * 10; k++) sim.advance(100);
+  await sim.close();
+  return { frames, errors };
+}
+
+describe('HDP v1 contract', () => {
+  it('every simulator frame, in every scenario, validates against protocol/hdp_v1.json', async () => {
+    const types = new Set<string>();
+    for (const id of SCENARIO_IDS) {
+      const { frames, errors } = await capture(id, 40);
+      expect(errors, id).toEqual([]);
+      for (const f of frames) {
+        types.add(f.type);
+        if (!validateFrame(f)) throw new Error(`${id} ${f.type}: ${lastErrors(validateFrame)}\n${JSON.stringify(f)}`);
+      }
+    }
+    // The simulator exercises the whole device vocabulary.
+    expect([...types].sort()).toEqual(
+      ['hello', 'i2c.scan', 'log', 'net.status', 'power', 'probe.done', 'probe.result', 'uart.config', 'uart.error', 'uart.rx', 'usb.attach', 'usb.detach'],
+    );
+  });
+
+  it('every host command the interface can send validates', () => {
+    const commands: HostCommand[] = [
+      { cmd: 'hello', proto: 1 },
+      { cmd: 'usb.enumerate' },
+      { cmd: 'uart.config', baud: 115200 },
+      { cmd: 'uart.tx', data: 'AT+RST' },
+      { cmd: 'i2c.scan' },
+      { cmd: 'net.refresh' },
+      { cmd: 'probe', id: 'p1', target: '192.168.1.1', tests: ['PING', 'DNS', 'TCP'] },
+    ];
+    for (const c of commands) {
+      expect(validateCommand(JSON.parse(encodeCommand(c))), `${c.cmd}: ${lastErrors(validateCommand)}`).toBe(true);
+    }
+  });
+
+  it('the decoder and the schema agree on invalid frames', () => {
+    const bad = [
+      '{"type":"power","t":-1,"v":5,"i":0}',
+      '{"type":"power","t":1,"v":"5","i":0}',
+      '{"type":"i2c.scan","t":1,"speed":400000,"devices":[{"addr":200}]}',
+      '{"type":"warp","t":1}',
+    ];
+    for (const raw of bad) {
+      expect(decodeFrame(raw).ok, raw).toBe(false);
+      expect(validateFrame(JSON.parse(raw)), raw).toBe(false);
+    }
+  });
+});
