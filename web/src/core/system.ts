@@ -22,7 +22,7 @@ import { DEFAULT_SETTINGS, THRESHOLD_KEYS, thresholdsOf } from './types';
 import { hex, i2cAddress, milliamps, ms, volts } from './format';
 import type { Confidence, Diagnosis, DiagnosisId, SessionFacts } from './diagnostics';
 import type { HostCommand } from './protocol';
-import type { SessionHeader, SessionRecorder } from './session';
+import type { Integrity, SessionHeader, SessionRecorder } from './session';
 import { ReplayTransport } from './session';
 import { FACT_LIMIT, NET_HISTORY, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
 
@@ -183,6 +183,8 @@ export class System {
   recorder: SessionRecorder | null = null;
   /** Header of the recording being replayed, if this session is a replay. */
   replayOf: SessionHeader | null = null;
+  /** Integrity of the file being replayed: VERIFIED, MODIFIED... */
+  replayIntegrity: Integrity | null = null;
   /** Why recording stopped (storage refused a write), if it did. */
   recordingError: string | null = null;
 
@@ -295,6 +297,7 @@ export class System {
     this.transportLabel = transport.label;
     this.link = 'CONNECTING';
     this.replayOf = transport instanceof ReplayTransport ? transport.recording.header : null;
+    this.replayIntegrity = transport instanceof ReplayTransport ? (transport.recording.integrity ?? null) : null;
     // Same thresholds as when it was recorded, or the diagnosis could differ.
     if (this.replayOf?.thresholds) this.settings = { ...this.settings, ...this.replayOf.thresholds };
     this.changed();
@@ -319,7 +322,6 @@ export class System {
       // A replay may already have ended; a live link may already have dropped.
       if (this.link !== 'CONNECTING') return this.replayOf !== null;
       this.transportLabel = transport.label;
-      if (this.recorder) this.recorder.header.endpoint = transport.label;
       this.link = 'ONLINE';
       this.log(this.now(), 'SYS', 'PASS', `link up: ${transport.kind}`, transport.label);
       this.changed();

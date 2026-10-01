@@ -1,0 +1,30 @@
+{
+  "case": 1,
+  "id": "HD-C002",
+  "title": "USB UNDERVOLTAGE (simulator HD-T001)",
+  "recording": {
+    "file": "HD-C002.hdlog",
+    "sha256": "0925e8618624e147c2c59876bdb237e0ffd46b0bd224d31050843c4786484b4c",
+    "recording": "f5db768b4dfb92c6a433abbdb061a370",
+    "origin": "SIMULATED"
+  },
+  "ruleset": 1,
+  "expect": {
+    "facts": {
+      "undervoltage": 3,
+      "overcurrent": 0,
+      "usbAttaches": 4,
+      "usbDisconnects": 3,
+      "disconnectsAfterDrop": 3,
+      "targetResets": 4,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "POWER_INSTABILITY",
+        "confidence": "HIGH"
+      }
+    ]
+  }
+}

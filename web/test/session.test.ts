@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildReport } from '../src/core/report';
+import { buildReport, reportToText } from '../src/core/report';
 import { SCENARIO_IDS, type ScenarioId } from '../src/core/scenarios';
-import { HdlogError, ReplayTransport, newHeader, parseHdlog, toHdlog } from '../src/core/session';
+import { RULESET_VERSION } from '../src/core/diagnostics';
+import { HdlogError, ReplayTransport, newHeader, parseHdlog, recoverHdlog, toHdlog } from '../src/core/session';
+import { sha256 } from '../src/core/sha256';
 import { System, memoryStore } from '../src/core/system';
 import { diagnosisKeys, recordSession } from './helpers';
 
@@ -134,5 +136,122 @@ describe('parseHdlog', () => {
     expect(() => parseHdlog(`${header}\n{"at":5,"mark":"a"}\n{"at":4,"mark":"b"}`)).toThrow('line 3: time goes backwards');
     expect(() => parseHdlog(`${header}\n{"at":5,"mark":"a","lost":"b"}`)).toThrow(/exactly one/);
     expect(() => parseHdlog(`${header}\nnot json`)).toThrow('line 2: not JSON');
+  });
+});
+
+describe('.hdlog v2 integrity and provenance', () => {
+  const file = async () => toHdlog((await recordSession('HD-T001', 12)).recording);
+  const lines = (t: string) => t.split('\n').slice(0, -1);
+  const join = (l: string[]) => l.join('\n') + '\n';
+
+  it('is VERIFIED as written, with counts and the device in the footer', async () => {
+    const text = await file();
+    const r = parseHdlog(text);
+    expect(r.integrity!.status).toBe('VERIFIED');
+    expect(r.integrity!.fileSha256).toBe(sha256(text));
+    const f = r.integrity!.footer!;
+    expect(f.closed).toBe('NORMAL');
+    expect(f.entries).toBe(r.entries.length);
+    expect(f.frames).toBe(r.entries.filter((e) => 'frame' in e).length);
+    expect(f.device).toEqual({ id: 'HD-001', rev: 'A', fw: '0.1.0' });
+    expect(r.header.origin).toBe('SIMULATED');
+    expect(r.header.ruleset).toBe(RULESET_VERSION);
+    expect(r.header.recording).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('detects one changed byte, and says where', async () => {
+    const l = lines(await file());
+    const n = l.findIndex((x) => x.includes('"type":"power"'));
+    l[n] = l[n]!.replace(/"v":(\d)/, (_, d) => `"v":${(Number(d) + 1) % 10}`);
+    const r = parseHdlog(join(l));
+    expect(r.integrity!.status).toBe('MODIFIED');
+    expect(r.integrity!.problems.join(' ')).toMatch(/seal 1 does not match/);
+    // Still readable: the operator sees the data AND the warning.
+    expect(r.entries.length).toBeGreaterThan(0);
+  });
+
+  it('detects a deleted line, a changed footer, data after the footer and CRLF', async () => {
+    const text = await file();
+    const l = lines(text);
+    expect(parseHdlog(join([l[0]!, ...l.slice(2)])).integrity!.status).toBe('MODIFIED');
+    const footer = l.at(-1)!.replace(/"marks":0/, '"marks":3');
+    expect(parseHdlog(join([...l.slice(0, -1), footer])).integrity!.problems.join(' ')).toMatch(/marks/);
+    expect(parseHdlog(join([...l, '{"at":1,"mark":"late"}'])).integrity!.problems.join(' ')).toMatch(/after the footer/);
+    expect(parseHdlog(text.replace(/\n/g, '\r\n')).integrity!.status).toBe('MODIFIED');
+  });
+
+  it('cannot be relabeled: origin must match the source', async () => {
+    const l = lines(await file());
+    l[0] = l[0]!.replace('"origin":"SIMULATED"', '"origin":"PHYSICAL"');
+    expect(() => parseHdlog(join(l))).toThrow(/contradicts source/);
+  });
+
+  it('a recording that never finished is INCOMPLETE, replayable, and recoverable', async () => {
+    const l = lines(await file());
+    const lastSeal = l.map((x, n) => (x.startsWith('{"seal"') ? n : -1)).filter((n) => n > 0).at(-1)!;
+    const cut = join([...l.slice(0, lastSeal + 1), ...l.slice(1, 4)].map((x, n) => (n > lastSeal ? x.replace(/"at":\d+/, `"at":9${'9'.repeat(12)}`) : x)));
+    const r = parseHdlog(cut);
+    expect(r.integrity!.status).toBe('INCOMPLETE');
+    expect(r.integrity!.unsealed).toBe(3);
+    const recovered = recoverHdlog(cut)!;
+    const rr = parseHdlog(recovered);
+    expect(rr.integrity!.status).toBe('RECOVERED');
+    expect(rr.entries).toHaveLength(r.entries.length - 3);
+    expect(recovered.startsWith(join(l.slice(0, lastSeal + 1)))).toBe(true);
+    expect(recoverHdlog(recovered)).toBeNull();
+  });
+
+  it('reads v1 files as UNVERIFIED, origin derived from the source', () => {
+    const v1 = [
+      '{"hdlog":1,"proto":1,"id":"HD-X","startedAt":1,"source":"WEB SERIAL","endpoint":"x","scenario":null,"app":"0.1.0"}',
+      '{"at":2,"mark":"a"}',
+      '',
+    ].join('\n');
+    const r = parseHdlog(v1);
+    expect(r.integrity!.status).toBe('UNVERIFIED');
+    expect(r.header.origin).toBe('PHYSICAL');
+    expect(toHdlog(r)).toBe(v1); // exported again unchanged
+  });
+
+  it('freezes the header: provenance cannot be rewritten while recording', async () => {
+    const live = await recordSession('HD-T000', 1);
+    expect(Object.isFrozen(live.recorder.header)).toBe(true);
+  });
+
+  it('the report names the recording, its integrity and its hash', async () => {
+    const live = await recordSession('HD-T001', 6);
+    const liveText = reportToText(buildReport(live.sys));
+    expect(liveText).toContain(`RECORDING             ${live.recorder.header.recording}`);
+    expect(liveText).toContain('NOT FINALIZED');
+
+    const text = toHdlog(live.recording);
+    const ok = await replay(text);
+    const okText = reportToText(buildReport(ok.sys));
+    expect(okText).toMatch(/INTEGRITY\s+VERIFIED/);
+    expect(okText).toContain(sha256(text));
+    expect(okText).toContain('REPLAY OF SIMULATED');
+
+    const tampered = text.replace(/"v":5\.0/, '"v":5.1');
+    expect(tampered).not.toBe(text);
+    const bad = await replay(tampered);
+    const badText = reportToText(buildReport(bad.sys));
+    expect(badText).toMatch(/INTEGRITY\s+MODIFIED/);
+    expect(badText).toContain('!! MODIFIED RECORDING');
+  });
+
+  it('never executes recorded commands', async () => {
+    const live = await recordSession('HD-T000', 3);
+    live.sys.scanI2c();
+    live.sys.probe('192.168.1.1', ['PING']);
+    live.sys.sendSerial('AT+RST');
+    const recorded = live.recording.entries.filter((e) => 'cmd' in e);
+    expect(recorded.length).toBeGreaterThanOrEqual(3);
+    const r = new ReplayTransport(parseHdlog(toHdlog(live.recording)));
+    const sent: unknown[] = [];
+    r.send = (cmd) => void sent.push(cmd);
+    const sys = new System(memoryStore(), () => r.clock);
+    await sys.boot(r, () => {}, 0);
+    expect(sent).toEqual([]);
+    expect(sys.trace.all().some((e) => e.source === 'USER' && /requested|probe|tx/.test(e.message))).toBe(false);
   });
 });

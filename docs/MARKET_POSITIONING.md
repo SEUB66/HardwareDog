@@ -209,6 +209,30 @@ The position is:
 
 ---
 
+## SEND ME THE INCIDENT
+
+A specialized instrument produces a measurement. Hardware Dog produces an
+incident that travels:
+
+```text
+TECHNICIAN A                         TECHNICIAN B
+captures a weird failure    ──>      opens fault-0147.hdlog
+                                     same frames, same rejects,
+                                     same thresholds, same trace,
+                                     same facts, same diagnosis
+```
+
+No hardware to ship. No screen recording. No "it was doing it earlier".
+The file says where it comes from (real hardware or simulator) and whether
+a single byte changed since it was recorded.
+
+```text
+DON'T SEND ME A SCREENSHOT.
+SEND ME THE .HDLOG.
+```
+
+---
+
 ## WHEN TO USE HARDWARE DOG
 
 Use Hardware Dog early in troubleshooting.

@@ -59,7 +59,8 @@ I want one instrument that can help answer a very simple question:
 [ OK ] DESIGN SPEC       docs/DESIGN_SPEC.md
 [ OK ] WEB INTERFACE     0.1.0, runs against the built-in simulator
 [ OK ] WIRE PROTOCOL     v1, docs/PROTOCOL.md
-[ OK ] SESSIONS          recorded locally, saved as .hdlog, replayed exactly
+[ OK ] SESSIONS          recorded locally, sealed (SHA-256), replayed exactly
+[ OK ] CASES             recorded incidents as regression tests, cases/
 [ -- ] FIRMWARE          NOT STARTED
 [ -- ] HARDWARE          NOT STARTED
 ```
@@ -92,11 +93,19 @@ The simulator is labeled as such everywhere, including exported reports.
 With firmware available, **SETUP → CONNECT WEB SERIAL** talks to the real
 device (Chromium-based browsers).
 
+```text
+DON'T SEND A SCREENSHOT. SEND THE .HDLOG.
+```
+
 Every session is **recorded in your browser** as it happens, and can be
 saved as an `.hdlog` file. Anyone can open that file in **SETUP → SESSIONS**
 and replay the fault exactly, through the same decoder and rules, without
 the device: a repair shop can send a customer's failure to someone who
-knows the board. Example recordings: [`examples/sessions/`](examples/sessions).
+knows the board. Every file is sealed with SHA-256 hashes: Hardware Dog
+says whether it is the session as recorded (`VERIFIED`) or whether bytes
+changed since (`MODIFIED`), and whether it comes from real hardware or the
+simulator. An interesting fault becomes a **case**, a regression test the
+engine must keep explaining: [`cases/`](cases).
 
 ```text
 F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND

@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT      ENGINEERING PLAN
-VERSION       0.3 / IMPLEMENTATION-ALIGNED
+VERSION       0.4 / IMPLEMENTATION-ALIGNED
 STATUS        ACTIVE IMPLEMENTATION
 COMPANION TO  DESIGN_SPEC.md       interface and industrial design (locked)
               BRAND.md             official mascot and assets (locked)
@@ -73,9 +73,34 @@ session: create a skeleton and make a dashboard appear. That is done.
 [ OK ]   deterministic diagnostic rules     13 rules, reliability matrix
 [ OK ]   report generation                  TXT + JSON, diagnosis-driven
 [ OK ]   session recording                  .hdlog, browser archive, exact replay
-[ NEXT ] dogd integration                   Rust daemon, third transport
+[ NEXT ] dogd integration                   Rust daemon, fourth transport
 [ NEXT ] physical ESP32-S3 reference device firmware on a dev board
 ```
+
+### MILESTONE — EVIDENCE INTEGRITY + CASES
+
+A recorded fault must travel from one workshop to another and stay what
+it was. Hardware Dog no longer only captures and diagnoses:
+
+```text
+CAPTURE -> PRESERVE -> SHARE -> REPLAY -> VERIFY -> LEARN
+```
+
+```text
+[ OK ]   stable .hdlog header (v2)          recording id, origin, ruleset, app
+[ OK ]   format / protocol / ruleset versions in every file
+[ OK ]   sealed blocks + finalized hash     SHA-256 chain, footer with counts
+[ OK ]   provenance preserved forever       PHYSICAL | SIMULATED, never rewritten
+[ OK ]   replay cannot execute commands     recorded commands are documentation
+[ OK ]   unclean stops recovered            closed: RECOVERED, sealed lines only
+[ OK ]   live export is verifiable          closed: SNAPSHOT
+[ OK ]   recording -> regression case       REPORT -> SAVE AS CASE, cases/
+[ OK ]   cases run in the test suite        web/test/cases.test.ts
+[ OK ]   report references the recording    id, origin, integrity, file SHA-256
+[ LATER ] recordings signed by the device   key in the firmware
+```
+
+> **DON'T SEND A SCREENSHOT. SEND THE .HDLOG.**
 
 **Not the PCB yet.** The order is deliberate: first a system that can
 receive, record, correlate and explain the data perfectly; then the box
@@ -302,7 +327,11 @@ DONE   replay through the same decoder: same timeline, same facts, same
        simulator session stays labeled SIMULATED
 DONE   save / open .hdlog files: a fault recorded by one person can be
        replayed by anyone, without the device
+DONE   evidence integrity (.hdlog v2): sealed SHA-256 chain, footer,
+       provenance, VERIFIED / RECOVERED / INCOMPLETE / MODIFIED
+DONE   cases: a recording + the facts and diagnosis it must replay to
 LATER  SQLite in dogd, same data model
+LATER  recordings signed with a key held by the device
 ```
 
 Everything is local. A session file leaves the machine only when the
@@ -320,9 +349,9 @@ reports    id, session_id, created_at, summary, diagnosis_json
 
 A recorded session stores raw HDP frames. Replaying it through the decoder
 must reproduce the same timeline and the same diagnoses: the recording
-becomes a regression test. `examples/sessions/*.hdlog` are such tests: each
-must replay to the diagnosis its fault scenario expects
-(`web/test/examples.test.ts`).
+becomes a regression test. `cases/` holds such tests: each recording is
+named by its SHA-256 and must replay to the facts and diagnosis its case
+states (`web/test/cases.test.ts`, format in PROTOCOL.md).
 
 ---
 
@@ -496,7 +525,9 @@ Silkscreen and color rules: `DESIGN_SPEC.md` sections 28–29.
 UNIT         protocol decoder, trace, rules, commands, report, chart layout
 CONTRACT     every simulator frame validates against protocol/hdp_v1.json
 REPLAY       recording then replaying any scenario gives the same timeline,
-             facts and diagnoses; examples/sessions replay to their answer key
+             facts and diagnoses; tampered files are reported MODIFIED
+CASES        every cases/*.hdlog is the file its case names and replays to
+             the facts and diagnosis the case states
 SIMULATION   reliability matrix: HD-T000 .. HD-T010 (DIAGNOSTICS.md)
 PHYSICAL     HD-P001 real undervoltage (resistive cable, loaded target)
   (planned)  HD-P002 real DHCP failure (isolated switch, no server)
@@ -520,7 +551,7 @@ assets/brand/    brand pipeline       dogd/        Rust daemon
 docs/            specs and plans      firmware/    ESP32-S3
 protocol/        HDP v1 schema        hardware/    KiCad Rev A
 web/             UI, core, simulator  enclosure/   3D printable case
-examples/        recorded sessions
+cases/           recorded incidents
 .github/         CI
 ```
 
@@ -545,9 +576,9 @@ Badges appear in the README only when the job exists and passes.
 
 ```text
 0.1  SOFTWARE REFERENCE IMPLEMENTATION     in progress (section 1)
-0.2  sessions + dogd                        IndexedDB sessions + replay: done;
-                                            dogd with WebSocket transport and
-                                            SQLite: next
+0.2  sessions + dogd                        IndexedDB sessions, replay, evidence
+                                            integrity, cases: done; dogd with
+                                            WebSocket transport and SQLite: next
 0.3  physical reference device              ESP32-S3 dev board + INA226 + UART,
                                             firmware passing the HDP contract,
                                             physical scenarios HD-P001..005
@@ -601,6 +632,9 @@ and are not granted for unrestricted third-party branding or resale.
 ## CHANGELOG
 
 ```text
+0.4   milestone EVIDENCE INTEGRITY + CASES (section 1): .hdlog v2 with
+      provenance, sealed hash chain and footer; recovery and snapshots;
+      cases as regression tests
 0.3   session recording implemented (section 8): .hdlog format, browser
       archive, replay, example sessions as regression tests
 0.2   aligned with the implementation: source-available wording, single

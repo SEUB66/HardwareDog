@@ -1,4 +1,4 @@
-{"hdlog":1,"proto":1,"id":"HD-20260930-1421","startedAt":1790778060000,"source":"SIMULATOR","endpoint":"SIMULATED DEVICE / HD-T000 HEALTHY BASELINE","scenario":"HD-T000","app":"0.1.0","thresholds":{"undervoltageThreshold":4.75,"overcurrentThreshold":0.9,"correlationWindowMs":100}}
+{"hdlog":2,"proto":1,"recording":"3845fe34f25fa4a6ead8a9658d9fa04b","id":"HD-20260930-1421","startedAt":1790778060000,"origin":"SIMULATED","source":"SIMULATOR","endpoint":"SIMULATED DEVICE / HD-T000 HEALTHY BASELINE","scenario":"HD-T000","app":"0.1.0","ruleset":1,"thresholds":{"undervoltageThreshold":4.75,"overcurrentThreshold":0.9,"correlationWindowMs":100}}
 {"at":1790778060000,"frame":{"type":"hello","t":0,"proto":1,"device":"HD-001","rev":"A","fw":"0.1.0"}}
 {"at":1790778060000,"frame":{"type":"uart.config","t":0,"port":"UART0","baud":115200,"bits":8,"parity":"NONE","stop":1}}
 {"at":1790778060000,"frame":{"type":"net.status","t":0,"link":{"up":true,"mbps":1000,"duplex":"FULL"},"address":"192.168.1.84","dhcp":"PASS","gateway":{"address":"192.168.1.1","status":"PASS"},"dns":{"address":"1.1.1.1","status":"PASS"},"internet":"PASS","latency":13,"loss":0}}
@@ -1532,3 +1532,5 @@
 {"at":1790778089900,"frame":{"type":"power","t":29980,"v":5.049,"i":0.315}}
 {"at":1790778089900,"frame":{"type":"power","t":30000,"v":5.053,"i":0.3116}}
 {"at":1790778089900,"frame":{"type":"net.status","t":30000,"link":{"up":true,"mbps":1000,"duplex":"FULL"},"address":"192.168.1.84","dhcp":"PASS","gateway":{"address":"192.168.1.1","status":"PASS"},"dns":{"address":"1.1.1.1","status":"PASS"},"internet":"PASS","latency":10,"loss":0}}
+{"seal":{"n":1,"lines":1533,"sha256":"c781ea02db1c78d1875f90b34c1c78c541e18efdeb193cd79b4d70a8eb286658"}}
+{"end":{"closed":"NORMAL","startedAt":1790778060000,"endedAt":1790778089900,"entries":1533,"frames":1533,"rejects":0,"commands":0,"marks":0,"thresholds":0,"lost":0,"seals":1,"device":{"id":"HD-001","rev":"A","fw":"0.1.0"},"sha256":"600b9d247ab1ba192585a8d0c784d3b09b73ff81c459211dffda715b6ff3ea2e"}}

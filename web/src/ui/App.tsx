@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ArchiveWriter, SessionArchive, SessionMeta } from '../core/archive';
 import { BUILD } from '../core/ascii';
+import { caseFrom } from '../core/cases';
 import { SCREENS, type CommandContext, type Screen } from '../core/commands';
 import { duration, sessionId } from '../core/format';
 import { buildReport, reportToText } from '../core/report';
@@ -17,6 +18,7 @@ import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
 import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
 import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
+import { IntegrityTag } from './components/IntegrityTag';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
 import { Bus } from './screens/Bus';
@@ -123,7 +125,11 @@ export function App({ archive }: { archive: SessionArchive }) {
   // The list shows the live session growing; metas are small.
   useEffect(() => {
     const first = session.writer ? [session.writer.meta.key] : [];
-    void archive.prune(first).then(refreshSessions, refreshSessions);
+    // Close what the last visit left open (tab closed, crash), then prune.
+    void archive
+      .recover(first)
+      .then(() => archive.prune(first))
+      .then(refreshSessions, refreshSessions);
     const id = setInterval(refreshSessions, 3000);
     return () => clearInterval(id);
   }, [archive]);
@@ -227,8 +233,8 @@ export function App({ archive }: { archive: SessionArchive }) {
 
   const saveArchived = async (key: string) => {
     try {
-      if (key === session.writer?.meta.key) await session.writer.flush();
-      const text = await archive.text(key);
+      // The live session is saved as a SNAPSHOT: finalized, verifiable, still recording.
+      const text = key === session.writer?.meta.key ? await archive.snapshotText(session.writer) : await archive.text(key);
       const meta = archived.find((m) => m.key === key);
       download(meta ? hdlogName(meta.header) : `hwdog-${key}.hdlog`, 'application/x-ndjson', text);
     } catch (e) {
@@ -249,6 +255,28 @@ export function App({ archive }: { archive: SessionArchive }) {
       return;
     }
     if (session.writer) void saveArchived(session.writer.meta.key);
+  };
+
+  /** Why this session cannot become a case, or null when it can. */
+  const caseBlocker = (() => {
+    const t = session.transport;
+    if (!(t instanceof ReplayTransport)) return 'A case is made from a replayed recording: save this session, then replay it.';
+    const status = t.recording.integrity?.status;
+    if (status !== 'VERIFIED' && status !== 'RECOVERED') return `This recording is ${status ?? 'not from a file'}: a case needs an intact, finalized file.`;
+    return null;
+  })();
+
+  /** The replayed incident as a regression case: case.json + the untouched .hdlog. */
+  const saveCase = () => {
+    const t = session.transport;
+    if (!(t instanceof ReplayTransport) || caseBlocker) return;
+    const h = t.recording.header;
+    const id = `HD-C-${h.recording.slice(0, 8)}`;
+    const title = `${system.diagnoses[0]?.title ?? 'No finding'} (${h.origin.toLowerCase()})`;
+    const c = caseFrom(system, t.recording, { id, title, file: `${id}.hdlog` });
+    download(`${id}.case.json`, 'application/json', JSON.stringify(c, null, 2) + '\n');
+    download(`${id}.hdlog`, 'application/x-ndjson', toHdlog(t.recording));
+    system.mark(`case saved: ${id}`);
   };
 
   const context: CommandContext = useMemo(
@@ -352,7 +380,7 @@ export function App({ archive }: { archive: SessionArchive }) {
       case 'PROBE':
         return <Probe system={system} />;
       case 'REPORT':
-        return <Report system={system} onExport={exportReport} onExportSession={exportSession} />;
+        return <Report system={system} onExport={exportReport} onExportSession={exportSession} onSaveCase={saveCase} caseBlocker={caseBlocker} />;
       case 'SETUP':
         return (
           <Setup
@@ -408,7 +436,8 @@ export function App({ archive }: { archive: SessionArchive }) {
         <span class="spacer" />
         {system.trace.paused && <Tag status="WARN" label="TRACE PAUSED" />}
         {system.replayOf && <Tag status="INFO" label="REPLAY" />}
-        {(system.transportKind === 'SIMULATOR' || system.replayOf?.source === 'SIMULATOR') && <Tag status="WARN" label="SIMULATOR" />}
+        {system.replayIntegrity && <IntegrityTag status={system.replayIntegrity.status} />}
+        {(system.transportKind === 'SIMULATOR' || system.replayOf?.origin === 'SIMULATED') && <Tag status="WARN" label="SIMULATOR" />}
         <span class="state">
           <span class={`light ${system.link}`} aria-hidden="true" />
           {linkTag}
