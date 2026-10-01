@@ -6,6 +6,9 @@ import '@fontsource/ibm-plex-mono/latin-600.css';
 import '@fontsource/ibm-plex-sans-condensed/latin-600.css';
 import './styles/tokens.css';
 import './styles/app.css';
+import { SessionArchive } from './core/archive';
 import { App } from './ui/App';
 
-render(<App />, document.getElementById('app')!);
+// Sessions are recorded in this browser (IndexedDB), or in memory when the
+// browser refuses storage. Opening the archive takes a few milliseconds.
+void SessionArchive.open().then((archive) => render(<App archive={archive} />, document.getElementById('app')!));

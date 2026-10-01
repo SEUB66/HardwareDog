@@ -426,6 +426,41 @@ select {
   color: var(--cyan);
 }
 
+/* ------------------------------------------------------------------ sessions */
+
+.sessions {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.session {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.session-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.session-head .id {
+  font-size: var(--fs-value);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-findings {
+  overflow-wrap: anywhere;
+}
+
+.session .actions {
+  margin-top: 6px;
+}
+
 /* ------------------------------------------------------------------ controls */
 
 .btn {
