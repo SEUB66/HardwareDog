@@ -1,4 +1,6 @@
+import type { SessionMeta } from './archive';
 import type { System } from './system';
+import { bytes, clockShort, duration } from './format';
 import { SCENARIOS, SCENARIO_IDS, isScenarioId, type ScenarioId } from './scenarios';
 import type { ProbeTest } from './types';
 import { PROBE_TESTS } from './types';
@@ -12,6 +14,12 @@ export interface CommandContext {
   exportReport(format: 'txt' | 'json'): void;
   /** Restart the simulator on a fault scenario (new session). */
   simulate?(scenario: ScenarioId): void;
+  /** Archived sessions, newest first. */
+  sessions?(): readonly SessionMeta[];
+  /** Save the current session as an .hdlog file. */
+  exportSession?(): void;
+  /** Replay an archived session (new, read-only session). */
+  replaySession?(key: string): void;
 }
 
 export interface CommandOutput {
@@ -37,6 +45,9 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'trace <pause|resume|clear>', summary: 'control the trace view' },
   { usage: 'report export [txt|json]', summary: 'save the diagnostic report locally' },
   { usage: 'session mark "<text>"', summary: 'add a marker to the timeline' },
+  { usage: 'session export', summary: 'save this session as .hdlog, replayable anywhere' },
+  { usage: 'session list', summary: 'sessions recorded in this browser' },
+  { usage: 'session replay <n>', summary: 'replay a recorded session (read-only, new session)' },
   { usage: 'sound <on|off>', summary: 'startup beep' },
   { usage: 'field <on|off>', summary: 'high-contrast field mode' },
   { usage: 'go <screen>', summary: 'open a screen by name' },
@@ -79,6 +90,14 @@ function onOff(arg: string | undefined): boolean | null {
   if (arg === 'on') return true;
   if (arg === 'off') return false;
   return null;
+}
+
+/** One line per archived session: id, source, length, size, findings. */
+export function describeSession(m: SessionMeta): string {
+  const h = m.header;
+  const source = `${h.source}${h.scenario ? ` ${h.scenario}` : ''}`;
+  const found = m.diagnoses.length ? m.diagnoses.join(' ') : 'no findings';
+  return `${h.id}  ${clockShort(h.startedAt)}  ${source.padEnd(18)}${duration(m.lastAt - h.startedAt).padStart(8)}  ${bytes(m.bytes).padStart(8)}  ${found}`;
 }
 
 /**
@@ -175,11 +194,32 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
     }
 
     case 'session': {
-      if (a0 !== 'mark') return fail('usage: session mark "<text>"');
-      const text = args.slice(1).join(' ');
-      if (!text) return fail('usage: session mark "<text>"');
-      sys.mark(text);
-      return ok(`marked: ${text}`);
+      const usage = 'usage: session mark "<text>" | session export | session list | session replay <n>';
+      if (a0 === 'mark') {
+        const text = args.slice(1).join(' ');
+        if (!text) return fail('usage: session mark "<text>"');
+        sys.mark(text);
+        return ok(`marked: ${text}`);
+      }
+      if (a0 === 'export') {
+        if (!ctx.exportSession) return fail('session export is not available here');
+        ctx.exportSession();
+        return ok('session saved as .hdlog, locally');
+      }
+      const list = ctx.sessions?.() ?? [];
+      if (a0 === 'list') {
+        if (list.length === 0) return ok('no recorded session in this browser');
+        return ok(...list.map((m, n) => `${String(n + 1).padStart(2)}  ${describeSession(m)}`));
+      }
+      if (a0 === 'replay') {
+        const n = Number(args[1]);
+        const m = Number.isInteger(n) ? list[n - 1] : undefined;
+        if (!m) return fail('usage: session replay <n>', 'type session list');
+        if (!ctx.replaySession) return fail('replay is not available here');
+        ctx.replaySession(m.key);
+        return ok(`replaying ${m.header.id}, read-only, new session`);
+      }
+      return fail(usage);
     }
 
     case 'sim': {

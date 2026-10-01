@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import type { ArchiveWriter, SessionArchive, SessionMeta } from '../core/archive';
 import { BUILD } from '../core/ascii';
 import { SCREENS, type CommandContext, type Screen } from '../core/commands';
 import { duration, sessionId } from '../core/format';
 import { buildReport, reportToText } from '../core/report';
 import { SimulatedDevice } from '../core/simulator';
 import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
+import { ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
 import { System, browserStore } from '../core/system';
 import type { Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
+import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
 import markSrc1x from '../../../assets/brand/web/hd-mark-1x.webp';
 import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
@@ -15,7 +18,7 @@ import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
 import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Tag } from './components/Tag';
-import { useNow, useSystem } from './hooks';
+import { useClock, useSystem } from './hooks';
 import { Bus } from './screens/Bus';
 import { Help } from './screens/Help';
 import { Net } from './screens/Net';
@@ -32,6 +35,8 @@ interface Session {
   system: System;
   transport: Transport;
   key: number;
+  /** Streams a live session to the archive. Null for a replay. */
+  writer: ArchiveWriter | null;
 }
 
 /** Shown on phones; everything else sits behind MORE (spec 32). */
@@ -47,11 +52,30 @@ function initialScenario(): ScenarioId {
 
 const simulator = (scenario: ScenarioId) => new SimulatedDevice({ seed: Date.now() & 0xffff, scenario });
 
-const newSession = (transport: Transport): Session => ({
-  system: new System(browserStore()),
-  transport,
-  key: ++sessionCounter,
-});
+/** A replay runs on the recording's clock; a live session is recorded. */
+function newSession(transport: Transport, archive: SessionArchive): Session {
+  if (transport instanceof ReplayTransport) {
+    return { system: new System(browserStore(), () => transport.clock), transport, key: ++sessionCounter, writer: null };
+  }
+  const system = new System(browserStore());
+  const recorder = new SessionRecorder(
+    newHeader({
+      id: sessionId(system.startedAt),
+      startedAt: system.startedAt,
+      source: transport.kind as SessionHeader['source'],
+      endpoint: transport.label,
+      scenario: transport instanceof SimulatedDevice ? transport.scenario.id : null,
+      app: BUILD,
+      thresholds: thresholdsOf(system.settings),
+    }),
+    { keep: false }, // the archive holds it; memory stays flat on long sessions
+  );
+  system.recorder = recorder;
+  const writer = archive.record(recorder, () => system.diagnoses.map((d) => `${d.id}:${d.confidence}`), {
+    onError: (reason) => system.recordingStopped(reason),
+  });
+  return { system, transport, key: ++sessionCounter, writer };
+}
 
 function download(name: string, type: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -67,8 +91,13 @@ function download(name: string, type: string, content: string) {
 const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 
-export function App() {
-  const [session, setSession] = useState<Session>(() => newSession(simulator(initialScenario())));
+/** hwdog-HD-20261001-011817.hdlog: the session id, down to the second. */
+const hdlogName = (h: SessionHeader) => `hwdog-${h.id}${String(new Date(h.startedAt).getSeconds()).padStart(2, '0')}.hdlog`;
+
+export function App({ archive }: { archive: SessionArchive }) {
+  const [session, setSession] = useState<Session>(() => newSession(simulator(initialScenario()), archive));
+  const [archived, setArchived] = useState<SessionMeta[]>([]);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   const [booting, setBooting] = useState(true);
   const [screen, setScreen] = useState<Screen>('STATUS');
   const [traceOnly, setTraceOnly] = useState<Source[] | null>(null);
@@ -88,7 +117,27 @@ export function App() {
   const previous = useRef<Screen[]>([]);
   const { system } = session;
   useSystem(system);
-  const now = useNow();
+  const now = useClock(system);
+
+  const refreshSessions = () => void archive.list().then(setArchived, () => {});
+  // The list shows the live session growing; metas are small.
+  useEffect(() => {
+    const first = session.writer ? [session.writer.meta.key] : [];
+    void archive.prune(first).then(refreshSessions, refreshSessions);
+    const id = setInterval(refreshSessions, 3000);
+    return () => clearInterval(id);
+  }, [archive]);
+
+  // Write what is pending when the page goes away or into the background.
+  useEffect(() => {
+    const flush = () => void session.writer?.flush();
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', flush);
+    };
+  }, [session]);
 
   // Theme and motion are system settings, applied to the document root.
   useEffect(() => {
@@ -127,7 +176,20 @@ export function App() {
     download(`hwdog-usb-${d.vid.toString(16)}-${d.pid.toString(16)}.json`, 'application/json', JSON.stringify(d, null, 2));
   };
 
-  const switchTransport = async (kind: TransportKind, scenario: ScenarioId = DEFAULT_SCENARIO) => {
+  /** Every source change is a new session: data never mixes. */
+  const start = async (transport: Transport) => {
+    await system.disconnect();
+    await session.writer?.stop();
+    setPalette(false);
+    const next = newSession(transport, archive);
+    setSession(next);
+    setScreen(transport instanceof ReplayTransport ? 'TRACE' : 'STATUS');
+    setTraceOnly(null);
+    setBooting(true);
+    void archive.prune(next.writer ? [next.writer.meta.key] : []).then(refreshSessions, () => {});
+  };
+
+  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY'>, scenario: ScenarioId = DEFAULT_SCENARIO) => {
     let transport: Transport;
     if (kind === 'WEB SERIAL') {
       try {
@@ -139,11 +201,54 @@ export function App() {
     } else {
       transport = simulator(scenario);
     }
-    await system.disconnect();
-    setPalette(false);
-    setSession(newSession(transport));
-    setScreen('STATUS');
-    setBooting(true);
+    await start(transport);
+  };
+
+  const replay = (recording: Recording) => {
+    setSessionMessage(null);
+    void start(new ReplayTransport(recording));
+  };
+
+  const replayArchived = async (key: string) => {
+    try {
+      replay(await archive.load(key));
+    } catch (e) {
+      setSessionMessage(`replay: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const openFile = async (file: File) => {
+    try {
+      replay(parseHdlog(await file.text()));
+    } catch (e) {
+      setSessionMessage(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const saveArchived = async (key: string) => {
+    try {
+      if (key === session.writer?.meta.key) await session.writer.flush();
+      const text = await archive.text(key);
+      const meta = archived.find((m) => m.key === key);
+      download(meta ? hdlogName(meta.header) : `hwdog-${key}.hdlog`, 'application/x-ndjson', text);
+    } catch (e) {
+      setSessionMessage(`save: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const removeArchived = async (key: string) => {
+    await archive.remove(key).catch(() => {});
+    refreshSessions();
+  };
+
+  /** This session as .hdlog: the archive copy, or the recording being replayed. */
+  const exportSession = () => {
+    const t = session.transport;
+    if (t instanceof ReplayTransport) {
+      download(hdlogName(t.recording.header), 'application/x-ndjson', toHdlog(t.recording));
+      return;
+    }
+    if (session.writer) void saveArchived(session.writer.meta.key);
   };
 
   const context: CommandContext = useMemo(
@@ -152,9 +257,12 @@ export function App() {
       navigate: (s) => navigate(s),
       exportReport,
       simulate: (id) => void switchTransport('SIMULATOR', id),
+      sessions: () => archived,
+      exportSession,
+      replaySession: (key) => void replayArchived(key),
     }),
     // navigate reads the current screen through state setters only.
-    [system, screen],
+    [system, screen, archived],
   );
 
   useEffect(() => {
@@ -215,8 +323,15 @@ export function App() {
     return <Boot key={session.key} system={system} transport={session.transport} onReady={() => setBooting(false)} />;
   }
 
-  const linkTag =
-    system.link === 'ONLINE' ? <Tag status="PASS" label="ONLINE" /> : system.link === 'LOST' ? <Tag status="FAIL" label="LINK LOST" /> : <Tag status="UNKNOWN" label={system.link} />;
+  const linkTag = system.replayOf ? (
+    <Tag status="UNKNOWN" label={system.link === 'CONNECTING' ? 'PLAYING' : 'RECORDED'} />
+  ) : system.link === 'ONLINE' ? (
+    <Tag status="PASS" label="ONLINE" />
+  ) : system.link === 'LOST' ? (
+    <Tag status="FAIL" label="LINK LOST" />
+  ) : (
+    <Tag status="UNKNOWN" label={system.link} />
+  );
 
   const body = (() => {
     switch (screen) {
@@ -237,13 +352,24 @@ export function App() {
       case 'PROBE':
         return <Probe system={system} />;
       case 'REPORT':
-        return <Report system={system} onExport={exportReport} />;
+        return <Report system={system} onExport={exportReport} onExportSession={exportSession} />;
       case 'SETUP':
         return (
           <Setup
             system={system}
             scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario.id : null}
             onSwitch={(k, id) => void switchTransport(k, id)}
+            recording={session.writer ? { entries: session.writer.meta.entries, bytes: session.writer.meta.bytes } : null}
+            sessions={{
+              list: archived,
+              activeKey: session.writer?.error ? null : (session.writer?.meta.key ?? null),
+              persistent: archive.persistent,
+              message: sessionMessage,
+              onReplay: (key) => void replayArchived(key),
+              onSave: (key) => void saveArchived(key),
+              onRemove: (key) => void removeArchived(key),
+              onOpen: (file) => void openFile(file),
+            }}
           />
         );
       case 'HELP':
@@ -277,11 +403,12 @@ export function App() {
         </span>
         <span class="field opt wide">
           <span class="k">SESSION ID</span>
-          <span class="v">{sessionId(system.startedAt)}</span>
+          <span class="v">{system.replayOf?.id ?? sessionId(system.startedAt)}</span>
         </span>
         <span class="spacer" />
         {system.trace.paused && <Tag status="WARN" label="TRACE PAUSED" />}
-        {system.transportKind === 'SIMULATOR' && <Tag status="WARN" label="SIMULATOR" />}
+        {system.replayOf && <Tag status="INFO" label="REPLAY" />}
+        {(system.transportKind === 'SIMULATOR' || system.replayOf?.source === 'SIMULATOR') && <Tag status="WARN" label="SIMULATOR" />}
         <span class="state">
           <span class={`light ${system.link}`} aria-hidden="true" />
           {linkTag}

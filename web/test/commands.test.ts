@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { SessionMeta } from '../src/core/archive';
 import { execute, tokenize, type Screen } from '../src/core/commands';
-import { connectedSystem } from './helpers';
+import { newHeader } from '../src/core/session';
+import { T0, connectedSystem } from './helpers';
 
 async function ctx() {
   const { sys, transport } = await connectedSystem();
@@ -24,6 +26,52 @@ describe('sim', () => {
     expect(execute('sim hd-t004', c).ok).toBe(true);
     expect(execute('sim HD-T999', c).ok).toBe(false);
     expect(switched).toEqual(['HD-T004']);
+  });
+});
+
+describe('session', () => {
+  const meta = (key: string, scenario: string | null, diagnoses: string[]): SessionMeta => ({
+    key,
+    header: newHeader({ id: `HD-${key}`, startedAt: T0, source: scenario ? 'SIMULATOR' : 'WEB SERIAL', endpoint: 'x', scenario, app: 'x' }),
+    entries: 1200,
+    bytes: 90_000,
+    lastAt: T0 + 42_000,
+    diagnoses,
+  });
+
+  it('lists, replays and exports recorded sessions through the context', async () => {
+    const { sys } = await connectedSystem();
+    const replayed: string[] = [];
+    let exported = 0;
+    const c = {
+      system: sys,
+      navigate: () => {},
+      exportReport: () => {},
+      sessions: () => [meta('a', 'HD-T001', ['POWER_INSTABILITY:HIGH']), meta('b', null, [])],
+      replaySession: (key: string) => replayed.push(key),
+      exportSession: () => exported++,
+    };
+    const list = execute('session list', c);
+    expect(list.lines).toHaveLength(2);
+    expect(list.lines[0]).toContain('HD-a');
+    expect(list.lines[0]).toContain('SIMULATOR HD-T001');
+    expect(list.lines[0]).toContain('00:00:42');
+    expect(list.lines[0]).toContain('POWER_INSTABILITY:HIGH');
+    expect(list.lines[1]).toContain('no findings');
+    expect(execute('session replay 2', c).ok).toBe(true);
+    expect(execute('session replay 3', c).ok).toBe(false);
+    expect(execute('session replay x', c).ok).toBe(false);
+    expect(replayed).toEqual(['b']);
+    expect(execute('session export', c).ok).toBe(true);
+    expect(exported).toBe(1);
+    expect(execute('session', c).ok).toBe(false);
+  });
+
+  it('says so when nothing is recorded', async () => {
+    const { sys } = await connectedSystem();
+    const c = { system: sys, navigate: () => {}, exportReport: () => {} };
+    expect(execute('session list', c).lines).toEqual(['no recorded session in this browser']);
+    expect(execute('session export', c).ok).toBe(false);
   });
 });
 
