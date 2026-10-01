@@ -198,7 +198,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
     device: sys.device.id,
     firmware: sys.device.firmware,
     source: reportSource(sys),
-    simulated: sys.transportKind === 'SIMULATOR' || sys.replayOf?.origin === 'SIMULATED',
+    simulated: sys.origin === 'SIMULATED',
     recording: recordingRef(sys),
     startedAt: sys.startedAt,
     generatedAt: now,

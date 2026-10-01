@@ -13,6 +13,7 @@ import type { Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
+import { DogdTransport, dogdStore } from '../core/dogd';
 import markSrc1x from '../../../assets/brand/web/hd-mark-1x.webp';
 import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
 import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
@@ -65,6 +66,7 @@ function newSession(transport: Transport, archive: SessionArchive): Session {
       id: sessionId(system.startedAt),
       startedAt: system.startedAt,
       source: transport.kind as SessionHeader['source'],
+      origin: transport.origin,
       endpoint: transport.label,
       scenario: transport instanceof SimulatedDevice ? transport.scenario.id : null,
       app: BUILD,
@@ -186,6 +188,14 @@ export function App({ archive }: { archive: SessionArchive }) {
   const start = async (transport: Transport) => {
     await system.disconnect();
     await session.writer?.stop();
+    // Through dogd, the finished recording also goes to dogd's local store.
+    if (session.transport instanceof DogdTransport && session.writer && !session.writer.error) {
+      const w = session.writer;
+      void archive
+        .text(w.meta.key)
+        .then((text) => dogdStore(w.meta.header.recording, text))
+        .catch((e: unknown) => system.mark(`dogd store: ${e instanceof Error ? e.message : String(e)}`));
+    }
     setPalette(false);
     const next = newSession(transport, archive);
     setSession(next);
@@ -202,6 +212,13 @@ export function App({ archive }: { archive: SessionArchive }) {
         transport = await WebSerialTransport.pick();
       } catch (e) {
         system.mark(`web serial: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+    } else if (kind === 'DOGD') {
+      try {
+        transport = await DogdTransport.prepare();
+      } catch (e) {
+        system.mark(`dogd: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
     } else {
@@ -439,7 +456,8 @@ export function App({ archive }: { archive: SessionArchive }) {
         {system.trace.paused && <Tag status="WARN" label="TRACE PAUSED" />}
         {system.replayOf && <Tag status="INFO" label="REPLAY" />}
         {system.replayIntegrity && <IntegrityTag status={system.replayIntegrity.status} />}
-        {(system.transportKind === 'SIMULATOR' || system.replayOf?.origin === 'SIMULATED') && <Tag status="WARN" label="SIMULATOR" />}
+        {system.transportKind === 'DOGD' && <Tag status="INFO" label="DOGD" />}
+        {system.origin === 'SIMULATED' && <Tag status="WARN" label="SIMULATOR" />}
         <span class="state">
           <span class={`light ${system.link}`} aria-hidden="true" />
           {linkTag}

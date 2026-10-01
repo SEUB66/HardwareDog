@@ -13,6 +13,7 @@ import type {
   SerialState,
   Settings,
   Severity,
+  Origin,
   Source,
   Thresholds,
   TransportKind,
@@ -181,6 +182,8 @@ export class System {
   diagnoses: Diagnosis[] = [];
   /** Records this session as it happens (.hdlog). Null for replays. */
   recorder: SessionRecorder | null = null;
+  /** PHYSICAL or SIMULATED: where this session's evidence comes from. */
+  origin: Origin | null = null;
   /** Header of the recording being replayed, if this session is a replay. */
   replayOf: SessionHeader | null = null;
   /** Integrity of the file being replayed: VERIFIED, MODIFIED... */
@@ -300,6 +303,7 @@ export class System {
     this.transportKind = transport.kind;
     this.transportLabel = transport.label;
     this.link = 'CONNECTING';
+    this.origin = transport.origin;
     this.replayOf = transport instanceof ReplayTransport ? transport.recording.header : null;
     this.replayIntegrity = transport instanceof ReplayTransport ? (transport.recording.integrity ?? null) : null;
     // Same thresholds as when it was recorded, or the diagnosis could differ.

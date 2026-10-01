@@ -44,6 +44,7 @@ function portLabel(port: SerialPortLike): string {
 
 export class WebSerialTransport implements Transport {
   readonly kind = 'WEB SERIAL' as const;
+  readonly origin = 'PHYSICAL' as const;
   label = 'WEB SERIAL';
 
   private port: SerialPortLike | null = null;
