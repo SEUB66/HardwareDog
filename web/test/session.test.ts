@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildReport, reportToText } from '../src/core/report';
 import { SCENARIO_IDS, type ScenarioId } from '../src/core/scenarios';
 import { RULESET_VERSION } from '../src/core/diagnostics';
-import { HdlogError, ReplayTransport, newHeader, parseHdlog, recoverHdlog, toHdlog } from '../src/core/session';
+import { HDLOG_LIMITS, HdlogError, ReplayTransport, newHeader, parseHdlog, recoverHdlog, toHdlog } from '../src/core/session';
+import v1Fixture from './fixtures/hdlog-v1.hdlog?raw';
 import { sha256 } from '../src/core/sha256';
 import { System, memoryStore } from '../src/core/system';
 import { diagnosisKeys, recordSession } from './helpers';
@@ -253,5 +254,38 @@ describe('.hdlog v2 integrity and provenance', () => {
     await sys.boot(r, () => {}, 0);
     expect(sent).toEqual([]);
     expect(sys.trace.all().some((e) => e.source === 'USER' && /requested|probe|tx/.test(e.message))).toBe(false);
+  });
+});
+
+describe('.hdlog files from anyone', () => {
+  const header = JSON.stringify(newHeader({ id: 'HD-X', startedAt: 1, source: 'WEB SERIAL', endpoint: 'x', scenario: null, app: 'x' }));
+  const file = (...lines: string[]) => [header, ...lines, ''].join('\n');
+
+  it('refuses hostile content with a reason, before it reaches the engine', () => {
+    expect(() => parseHdlog(file(`{"at":2,"mark":"${'x'.repeat(2000)}"}`))).toThrow(/mark must be text/);
+    expect(() => parseHdlog(file('{"at":2,"thresholds":{"undervoltageThreshold":-1,"overcurrentThreshold":0.9,"correlationWindowMs":100}}'))).toThrow(
+      /out of range/,
+    );
+    expect(() => parseHdlog(file('{"at":2,"frame":"power"}'))).toThrow(/frame must be an object/);
+    expect(() => parseHdlog(file(`{"at":2,"mark":"a","pad":"${'x'.repeat(HDLOG_LIMITS.maxLine)}"}`))).toThrow(/longer than/);
+    expect(() => parseHdlog(file('[' .repeat(5000) + ']'.repeat(5000)))).toThrow(HdlogError);
+    expect(() => parseHdlog(header.replace('"endpoint":"x"', `"endpoint":"${'x'.repeat(300)}"`))).toThrow(/too long/);
+    // Unknown keys are tolerated (newer writers), and cannot pollute prototypes.
+    const r = parseHdlog(file('{"at":2,"mark":"a","__proto__":{"polluted":true}}'));
+    expect(r.entries).toHaveLength(1);
+    expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+  });
+
+  it('says plainly when a file comes from a newer Hardware Dog', () => {
+    expect(() => parseHdlog(header.replace('"hdlog":2', '"hdlog":3'))).toThrow(/written by a newer Hardware Dog; this build reads v1 to v2/);
+  });
+
+  it('opens a v1 file recorded by an earlier build, and replays it to the same diagnosis', async () => {
+    const r = parseHdlog(v1Fixture);
+    expect(r.integrity!.status).toBe('UNVERIFIED');
+    expect(r.header.origin).toBe('SIMULATED');
+    const { sys } = await replay(v1Fixture);
+    expect(diagnosisKeys(sys)).toEqual(['POWER_INSTABILITY:HIGH']);
+    expect(toHdlog(r)).toBe(v1Fixture); // never rewritten
   });
 });
