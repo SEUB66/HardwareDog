@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from '../src/core/types';
 
 const S = DEFAULT_SETTINGS;
 const net = (over: Partial<NetFact>, t: number): NetFact => ({
+  seq: t,
   t,
   linkUp: true,
   dhcp: 'PASS',
@@ -22,17 +23,17 @@ const facts = (f: (x: SessionFacts) => void) => {
 const ids = (x: SessionFacts, now = 100_000) => diagnose(x, S, now).map((d) => `${d.id}:${d.confidence}`);
 
 describe('power rules', () => {
-  const detach = (t: number, dropAt: number | null) => ({ t, dropAt, dropMin: dropAt ? 4.6 : null, currentAfter: 0.004 });
+  const detach = (t: number, dropAt: number | null) => ({ seq: t, t, dropAt, dropSeq: dropAt, dropMin: dropAt ? 4.6 : null, currentAfter: 0.004 });
 
   it('confidence follows the correlated count and ratio', () => {
     const one = facts((x) => {
-      x.drops.push({ start: 900, end: 1200, min: 4.6 });
+      x.drops.push({ seq: 900, start: 900, end: 1200, min: 4.6 });
       x.detaches.push(detach(960, 900));
     });
     expect(ids(one)).toEqual(['POWER_INSTABILITY:LOW']);
     const three = facts((x) => {
       for (const t of [1000, 5000, 9000]) {
-        x.drops.push({ start: t, end: t + 300, min: 4.6 });
+        x.drops.push({ seq: t, start: t, end: t + 300, min: 4.6 });
         x.detaches.push(detach(t + 60, t));
       }
     });
@@ -41,14 +42,14 @@ describe('power rules', () => {
 
   it('does not blame power when most disconnects are unexplained', () => {
     const x = facts((x) => {
-      x.drops.push({ start: 900, end: 1200, min: 4.6 });
+      x.drops.push({ seq: 900, start: 900, end: 1200, min: 4.6 });
       x.detaches.push(detach(960, 900), detach(5000, null), detach(9000, null), detach(13000, null));
     });
     expect(ids(x)).toEqual(['POWER_INSTABILITY:LOW', 'USB_INTERMITTENT:HIGH']);
   });
 
   it('reports a sag without disconnects as SUPPLY_SAG, not instability', () => {
-    const x = facts((x) => x.drops.push({ start: 1, end: 2, min: 4.7 }));
+    const x = facts((x) => x.drops.push({ seq: 1, start: 1, end: 2, min: 4.7 }));
     expect(ids(x)).toEqual(['SUPPLY_SAG:LOW']);
   });
 });
@@ -56,22 +57,22 @@ describe('power rules', () => {
 describe('target rules', () => {
   it('ignores power-on resets and needs 2 other resets', () => {
     const x = facts((x) => {
-      x.uart.resets.push({ t: 1, code: 1, reason: 'POWERON' }, { t: 2, code: 1, reason: 'POWERON' }, { t: 3, code: 8, reason: 'TG1WDT_SYS_RST' });
+      x.uart.resets.push({ seq: 1, t: 1, code: 1, reason: 'POWERON' }, { seq: 2, t: 2, code: 1, reason: 'POWERON' }, { seq: 3, t: 3, code: 8, reason: 'TG1WDT_SYS_RST' });
     });
     expect(ids(x)).toEqual([]);
-    x.uart.resets.push({ t: 6000, code: 8, reason: 'TG1WDT_SYS_RST' });
+    x.uart.resets.push({ seq: 6000, t: 6000, code: 8, reason: 'TG1WDT_SYS_RST' });
     expect(ids(x)).toEqual(['TARGET_RESET_LOOP:MEDIUM']);
   });
 
   it('parses ESP-IDF reset lines', () => {
-    expect(parseResetLine('rst:0x8 (TG1WDT_SYS_RST),boot:0x8 (SPI_FAST_FLASH_BOOT)', 5)).toEqual({ t: 5, code: 8, reason: 'TG1WDT_SYS_RST' });
+    expect(parseResetLine('rst:0x8 (TG1WDT_SYS_RST),boot:0x8 (SPI_FAST_FLASH_BOOT)', 5)).toEqual({ seq: 0, t: 5, code: 8, reason: 'TG1WDT_SYS_RST' });
     expect(parseResetLine('sensor init', 5)).toBeNull();
   });
 
   it('needs a meaningful framing error ratio, and recent errors', () => {
     const x = facts((x) => {
       x.uart.rxAtBaud = 100;
-      x.uart.framingAtBaud.push(1000, 2000, 3000);
+      x.uart.framingAtBaud.push(...[1000, 2000, 3000].map((t) => ({ t, seq: t })));
     });
     expect(ids(x, 4000)).toEqual([]); // 3 % of lines: noise, not a mismatch
     x.uart.rxAtBaud = 5;
@@ -113,7 +114,7 @@ describe('network rules', () => {
 describe('usb enumeration', () => {
   it('needs 3 s of running current with no USB device', () => {
     const x = facts((x) => {
-      x.unenumerated = { since: 1000, longestMs: 0, firstAt: 1000 };
+      x.unenumerated = { since: 1000, longestMs: 0, firstAt: 1000, firstSeq: 1 };
     });
     expect(ids(x, 3500)).toEqual([]);
     expect(ids(x, 4000)).toEqual(['USB_NOT_ENUMERATED:MEDIUM']);

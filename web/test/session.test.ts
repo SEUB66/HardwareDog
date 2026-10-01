@@ -289,3 +289,30 @@ describe('.hdlog files from anyone', () => {
     expect(toHdlog(r)).toBe(v1Fixture); // never rewritten
   });
 });
+
+describe('evidence references', () => {
+  it('cite the exact frames a diagnosis rests on, identical live and in a replay', async () => {
+    const live = await recordSession('HD-T001', 30);
+    const d = live.sys.diagnoses.find((x) => x.id === 'POWER_INSTABILITY')!;
+    expect(d.evidence.length).toBeGreaterThanOrEqual(6); // a drop + a disconnect per correlated event
+    // seq N = the N-th frame of the recording
+    const frames = live.recording.entries.flatMap((e) => ('frame' in e ? [e.frame] : []));
+    for (const seq of d.evidence) {
+      const f = frames[seq - 1]!;
+      expect(['power', 'usb.detach'], `frame #${seq}`).toContain(f.type);
+      if (f.type === 'power') expect(f.v).toBeLessThan(4.75);
+    }
+    const { sys } = await replay(toHdlog(live.recording));
+    expect(sys.diagnoses.map((x) => x.evidence)).toEqual(live.sys.diagnoses.map((x) => x.evidence));
+    // trace events carry the frame they come from
+    const drop = sys.trace.all().find((e) => e.message === 'voltage drop')!;
+    expect(d.evidence).toContain(drop.seq);
+  });
+
+  it('every diagnosis of every scenario cites evidence', async () => {
+    for (const id of SCENARIO_IDS) {
+      const live = await recordSession(id, 30, { seed: 1 });
+      for (const d of live.sys.diagnoses) expect(d.evidence.length, `${id} ${d.id}`).toBeGreaterThan(0);
+    }
+  });
+});

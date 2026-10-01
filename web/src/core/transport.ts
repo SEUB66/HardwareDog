@@ -1,6 +1,6 @@
 import type { DeviceFrame, HostCommand } from './protocol';
 import { LineSplitter, decodeFrame } from './protocol';
-import type { Thresholds, TransportKind } from './types';
+import type { Origin, Thresholds, TransportKind } from './types';
 
 /** Receives everything a transport produces. */
 export interface TransportSink {
@@ -26,6 +26,8 @@ export interface Transport {
   readonly kind: TransportKind;
   /** Human-readable description of the other end, e.g. "USB CDC 303A:1001". */
   readonly label: string;
+  /** Real hardware or the simulator, as far as this transport knows. */
+  readonly origin: Origin;
   open(sink: TransportSink): Promise<void>;
   send(cmd: HostCommand): void;
   close(): Promise<void>;

@@ -41,7 +41,8 @@ export interface CaseFile {
   ruleset: number;
   expect: {
     facts: FactSummary;
-    diagnoses: { id: DiagnosisId; confidence: Confidence }[];
+    /** evidence: the HDP frame sequence numbers each diagnosis must cite. */
+    diagnoses: { id: DiagnosisId; confidence: Confidence; evidence?: number[] }[];
   };
 }
 
@@ -81,7 +82,7 @@ export function caseFrom(sys: System, recording: Recording, fields: { id: string
     ruleset: RULESET_VERSION,
     expect: {
       facts: factSummary(sys),
-      diagnoses: sys.diagnoses.map((d) => ({ id: d.id, confidence: d.confidence })),
+      diagnoses: sys.diagnoses.map((d) => ({ id: d.id, confidence: d.confidence, evidence: d.evidence })),
     },
   };
 }
@@ -117,5 +118,11 @@ export async function checkCase(c: CaseFile, hdlog: string): Promise<string[]> {
   const want = c.expect.diagnoses.map((d) => `${d.id}:${d.confidence}`).join(' ') || 'none';
   const got = sys.diagnoses.map((d) => `${d.id}:${d.confidence}`).join(' ') || 'none';
   if (want !== got) out.push(`diagnosis: expected ${want}, replay gives ${got}`);
+  for (const d of c.expect.diagnoses) {
+    const replayed = sys.diagnoses.find((x) => x.id === d.id);
+    if (d.evidence && replayed && d.evidence.join(',') !== replayed.evidence.join(',')) {
+      out.push(`evidence of ${d.id}: expected frames ${d.evidence.join(' ')}, replay cites ${replayed.evidence.join(' ')}`);
+    }
+  }
   return out;
 }

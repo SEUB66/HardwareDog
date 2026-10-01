@@ -23,7 +23,13 @@
     "diagnoses": [
       {
         "id": "USB_INTERMITTENT",
-        "confidence": "HIGH"
+        "confidence": "HIGH",
+        "evidence": [
+          371,
+          673,
+          984,
+          1323
+        ]
       }
     ]
   }

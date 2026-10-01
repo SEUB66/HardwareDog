@@ -10,6 +10,7 @@ import { thresholdsOf } from '../src/core/types';
 /** A transport whose frames are pushed by the test. */
 export class FakeTransport implements Transport {
   readonly kind = 'SIMULATOR' as const;
+  readonly origin = 'SIMULATED' as const;
   readonly label = 'FAKE';
   sink: TransportSink | null = null;
   sent: HostCommand[] = [];

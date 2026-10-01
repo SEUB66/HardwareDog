@@ -14,9 +14,10 @@ export class Trace {
 
   constructor(private readonly capacity = 10_000) {}
 
-  append(t: number, source: Source, severity: Severity, message: string, value?: string): TraceEvent {
+  append(t: number, source: Source, severity: Severity, message: string, value?: string, seq?: number): TraceEvent {
     const event: TraceEvent = { id: this.nextId++, t, source, severity, message };
     if (value !== undefined) event.value = value;
+    if (seq !== undefined) event.seq = seq;
     // Frames can arrive slightly out of order across sources; keep the
     // timeline sorted so correlation reads the true order of events.
     let at = this.events.length;

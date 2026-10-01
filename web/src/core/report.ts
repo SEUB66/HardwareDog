@@ -198,7 +198,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
     device: sys.device.id,
     firmware: sys.device.firmware,
     source: reportSource(sys),
-    simulated: sys.transportKind === 'SIMULATOR' || sys.replayOf?.origin === 'SIMULATED',
+    simulated: sys.origin === 'SIMULATED',
     recording: recordingRef(sys),
     startedAt: sys.startedAt,
     generatedAt: now,
@@ -214,6 +214,13 @@ function reportSource(sys: System): string {
   const r = sys.replayOf;
   if (!r) return sys.transportKind ?? 'NONE';
   return `REPLAY OF ${r.origin} / ${r.id} / ${r.source}${r.scenario ? ` ${r.scenario}` : ''}`;
+}
+
+/** "HDP frames #12 #48 #97 (3)": the frames of the recording a diagnosis rests on. */
+export function evidenceText(seqs: readonly number[]): string {
+  if (seqs.length === 0) return 'none';
+  const shown = seqs.length > 12 ? [...seqs.slice(0, 6), '...', ...seqs.slice(-6)] : seqs;
+  return `HDP frames ${shown.map((s) => (typeof s === 'number' ? `#${s}` : s)).join(' ')} (${seqs.length})`;
 }
 
 const RULE = '--------------------------------';
@@ -256,7 +263,7 @@ export function reportToText(r: Report, options: { banner?: boolean } = {}): str
   out.push('', RULE, '', 'DIAGNOSIS', '');
   if (r.diagnoses.length === 0) out.push('NO FINDINGS', 'No diagnostic rule matched this session.', '');
   r.diagnoses.forEach((d, n) => {
-    out.push(`[${n + 1}] ${d.title.padEnd(34)}CONFIDENCE ${d.confidence}`, `    basis: ${d.basis}`, '');
+    out.push(`[${n + 1}] ${d.title.padEnd(34)}CONFIDENCE ${d.confidence}`, `    basis: ${d.basis}`, `    evidence: ${evidenceText(d.evidence)}`, '');
     for (const f of r.findings.filter((x) => x.diagnosis === d.id)) kv(f.kind, f.text);
     out.push('');
   });
