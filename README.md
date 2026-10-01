@@ -19,6 +19,18 @@
 hardware companion // SNIFF THE PROBLEM.
 ```
 
+```text
+ONE EVENT MODEL.
+ONE CLOCK.
+ONE TIMELINE.
+
+EVERY REAL FAILURE SHOULD BE ABLE
+TO BECOME A REPRODUCIBLE TEST.
+
+LOCAL IS THE SOURCE OF TRUTH.
+THE CLOUD IS NEVER REQUIRED.
+```
+
 Hardware Dog is my source-available hardware diagnostic companion.
 
 I am building it to observe power, USB, serial, embedded buses and network
@@ -112,6 +124,7 @@ F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
 ```
 
 ```text
+LAWS               docs/LAWS.md
 POSITIONING        docs/MARKET_POSITIONING.md
 ENGINEERING PLAN   docs/ENGINEERING_PLAN.md
 ARCHITECTURE       docs/ARCHITECTURE.md
@@ -152,7 +165,8 @@ they go deeper, Hardware Dog goes wider. See
 ## PRINCIPLES
 
 ```text
-LOCAL FIRST       no account, no cloud required, your data stays yours
+LOCAL FIRST       no account, no subscription, no telemetry, works 100 %
+                  offline; the cloud is never required (docs/LAWS.md)
 NO FAKE CERTAINTY observation / correlation / hypothesis are kept apart
 TOOL FIRST        looks like an instrument before it looks like software
 DENSE, NOT NOISY  maximum relevant information, minimum confusion
