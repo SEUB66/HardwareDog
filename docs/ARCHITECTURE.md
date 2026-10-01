@@ -9,6 +9,7 @@ STATUS
 [ OK ] device simulator       web/src/core/simulator.ts
 [ OK ] session recording      .hdlog v2 files, browser archive, replay
 [ OK ] evidence integrity     SHA-256 seals, provenance, cases/
+[ OK ] dogd                   local daemon, fourth transport (docs/DOGD.md)
 [ -- ] firmware               not started
 [ -- ] hardware / PCB         not started
 [ -- ] enclosure              not started
@@ -49,6 +50,7 @@ web/src/core/        no UI, no DOM rendering, fully unit tested
   transport.ts       Transport interface
   webserial.ts       real device over Web Serial (Chromium)
   simulator.ts       simulated device + simulated target, same protocol
+  dogd.ts            transport to dogd on 127.0.0.1, local store
   session.ts         .hdlog writer (seals, footer), reader + verifier, replay
   sha256.ts          SHA-256, synchronous (works on plain HTTP too)
   cases.ts           recording -> regression case, case checker
