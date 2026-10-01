@@ -2,7 +2,8 @@
 
 ```text
 VERSION        1
-TRANSPORT      USB CDC serial (115200 8N1), any byte stream later
+TRANSPORT      USB CDC serial (115200 8N1), or any byte stream (TCP),
+               directly or through dogd (docs/DOGD.md), always unchanged
 ENCODING       UTF-8, newline-delimited JSON (one object per line)
 MAX LINE       64 KiB, longer lines are dropped and reported
 CLOCK          "t" = device uptime in milliseconds
@@ -180,7 +181,7 @@ proto        HDP version of the frames
 recording    unique id of this recording, 128 random bits, hex
 id           human session id, HD-YYYYMMDD-HHMM
 origin       PHYSICAL | SIMULATED          where the evidence comes from
-source       WEB SERIAL | SIMULATOR        the transport it came through
+source       WEB SERIAL | SIMULATOR | DOGD the transport it came through
 scenario     simulator fault scenario, or null
 app          interface build that recorded it
 ruleset      diagnostic ruleset version in force while recording
@@ -188,7 +189,9 @@ thresholds   diagnostic thresholds in force when recording started
 ```
 
 `origin` must agree with `source` (a reader refuses a file where it does
-not) and is never rewritten. **A replay is not an origin**: it is what the
+not) and is never rewritten: SIMULATOR is SIMULATED, WEB SERIAL is
+PHYSICAL, and through DOGD it is what dogd reports for its link (a serial
+port is PHYSICAL; a TCP source is what the operator declared). **A replay is not an origin**: it is what the
 operator is looking at. Exporting a replay gives back the same file, byte
 for byte, so a file never becomes "a replay of a replay"; the interface
 and the report say `REPLAY OF PHYSICAL` or `REPLAY OF SIMULATED`.

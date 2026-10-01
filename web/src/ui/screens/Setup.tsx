@@ -67,6 +67,7 @@ function NumberField(props: { id: string; label: string; unit: string; value: nu
 function sourceCell(system: System) {
   const r = system.replayOf;
   if (r) return <Tag status={r.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`REPLAY OF ${r.origin} / ${r.id}${r.scenario ? ` ${r.scenario}` : ''}`} />;
+  if (system.transportKind === 'DOGD') return <Tag status={system.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`DOGD / ${system.origin ?? '--'}`} />;
   if (system.transportKind === 'SIMULATOR') return <Tag status="WARN" label="SIMULATOR" />;
   return system.transportKind ?? 'NONE';
 }
@@ -112,6 +113,9 @@ export function Setup({ system, scenario, onSwitch, sessions, recording }: Setup
           <div class="actions">
             <button class={`btn ${system.transportKind === 'SIMULATOR' ? 'active' : ''}`} onClick={() => onSwitch('SIMULATOR')}>
               USE SIMULATOR
+            </button>
+            <button class={`btn ${system.transportKind === 'DOGD' ? 'active' : ''}`} onClick={() => onSwitch('DOGD')} title="The local daemon on this machine (127.0.0.1:4782)">
+              CONNECT DOGD
             </button>
             <button class={`btn ${system.transportKind === 'WEB SERIAL' ? 'active' : ''}`} onClick={() => onSwitch('WEB SERIAL')} disabled={!serialOk}>
               CONNECT WEB SERIAL

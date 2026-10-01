@@ -55,6 +55,7 @@ const bootLog = (rst: string) => [
  */
 export class SimulatedDevice implements Transport {
   readonly kind = 'SIMULATOR' as const;
+  readonly origin = 'SIMULATED' as const;
   readonly label: string;
   readonly scenario: Scenario;
 
@@ -63,6 +64,7 @@ export class SimulatedDevice implements Transport {
   private readonly samplePeriod: number;
   private sink: TransportSink | null = null;
   private lines: ReturnType<typeof createLineDecoder> | null = null;
+  private wire: ((text: string) => void) | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private startedAt = 0;
   private t = 0;
@@ -96,6 +98,20 @@ export class SimulatedDevice implements Transport {
   async open(sink: TransportSink): Promise<void> {
     this.sink = sink;
     this.lines = createLineDecoder(sink);
+    this.start();
+  }
+
+  /**
+   * Run as a device on a byte stream: HDP text goes to `write` instead of a
+   * decoder, exactly what a firmware writes on its serial port. Used to put
+   * the simulator behind dogd. Commands come back through send().
+   */
+  attachWire(write: (text: string) => void): void {
+    this.wire = write;
+    this.start();
+  }
+
+  private start(): void {
     this.t = 0;
     this.emit({ type: 'hello', t: 0, proto: PROTOCOL_VERSION, device: 'HD-001', rev: 'A', fw: '0.1.0' });
     this.emit({ type: 'uart.config', t: 0, port: 'UART0', baud: this.baud, bits: 8, parity: 'NONE', stop: 1 });
@@ -118,6 +134,7 @@ export class SimulatedDevice implements Transport {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
     this.sink = null;
+    this.wire = null;
     this.queue = [];
   }
 
@@ -182,7 +199,9 @@ export class SimulatedDevice implements Transport {
 
   private emit(frame: DeviceFrame): void {
     // Serialize and decode like a real link would.
-    this.lines?.push(JSON.stringify(frame) + '\n');
+    const text = JSON.stringify(frame) + '\n';
+    if (this.wire) this.wire(text);
+    else this.lines?.push(text);
   }
 
   private log(level: 'info' | 'warn' | 'error', message: string): void {
@@ -195,7 +214,7 @@ export class SimulatedDevice implements Transport {
   }
 
   private advanceTo(target: number): void {
-    while (this.sink) {
+    while (this.sink || this.wire) {
       const nextJob = this.queue[0]?.at ?? Infinity;
       const next = Math.min(nextJob, this.nextSampleAt, target + 1);
       if (next > target) break;
