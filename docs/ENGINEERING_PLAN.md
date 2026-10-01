@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT      ENGINEERING PLAN
-VERSION       0.2 / IMPLEMENTATION-ALIGNED
+VERSION       0.3 / IMPLEMENTATION-ALIGNED
 STATUS        ACTIVE IMPLEMENTATION
 COMPANION TO  DESIGN_SPEC.md       interface and industrial design (locked)
               BRAND.md             official mascot and assets (locked)
@@ -72,7 +72,7 @@ session: create a skeleton and make a dashboard appear. That is done.
 [ OK ]   fault scenarios                    11 scenarios, HD-T000 to HD-T010
 [ OK ]   deterministic diagnostic rules     13 rules, reliability matrix
 [ OK ]   report generation                  TXT + JSON, diagnosis-driven
-[ NEXT ] session recording                  persistent sessions, replay
+[ OK ]   session recording                  .hdlog, browser archive, exact replay
 [ NEXT ] dogd integration                   Rust daemon, third transport
 [ NEXT ] physical ESP32-S3 reference device firmware on a dev board
 ```
@@ -159,12 +159,12 @@ REPORT   exportable diagnosis: TXT + JSON (HTML / PDF later)
 
 ```text
 LAYER              STATUS    WHERE
-transport          OK        web/src/core/transport.ts (Web Serial, simulator)
+transport          OK        web/src/core/transport.ts (Web Serial, simulator, replay)
 HDP decoder        OK        web/src/core/protocol.ts
 trace engine       OK        web/src/core/trace.ts
 system state       OK        web/src/core/system.ts (single source of truth)
 diagnostic rules   OK        web/src/core/diagnostics.ts
-session store      PARTIAL   in-memory session facts + JSON export; persistence NEXT
+session store      OK        web/src/core/session.ts, archive.ts (.hdlog, IndexedDB)
 UI / reports       OK        web/src/ui, web/src/core/report.ts
 dogd               PLANNED   Rust daemon, section 10
 firmware           PLANNED   ESP32-S3, section 11
@@ -291,12 +291,22 @@ credibility.
 ## 8 — SESSION STORE
 
 ```text
-NOW    in-memory session facts (web/src/core/diagnostics.ts), trace ring
-       buffer, JSON export of report + full timeline
-NEXT   persistent sessions in the browser (IndexedDB): record, reopen,
-       replay a session through the same decoder
+DONE   every live session recorded as it happens (.hdlog, PROTOCOL.md):
+       frames, rejected lines, commands, marks, threshold changes
+DONE   browser archive (IndexedDB, memory fallback): sessions streamed in
+       ordered chunks; the first failed write stops recording, no silent
+       gap; simulator sessions pruned (latest 5), hardware sessions with
+       data never deleted automatically
+DONE   replay through the same decoder: same timeline, same facts, same
+       diagnoses, on the recorded thresholds; read-only; a replayed
+       simulator session stays labeled SIMULATED
+DONE   save / open .hdlog files: a fault recorded by one person can be
+       replayed by anyone, without the device
 LATER  SQLite in dogd, same data model
 ```
+
+Everything is local. A session file leaves the machine only when the
+operator saves it and gives it to someone.
 
 Data model (dogd / SQLite, mirrored in IndexedDB):
 
@@ -310,7 +320,9 @@ reports    id, session_id, created_at, summary, diagnosis_json
 
 A recorded session stores raw HDP frames. Replaying it through the decoder
 must reproduce the same timeline and the same diagnoses: the recording
-becomes a regression test.
+becomes a regression test. `examples/sessions/*.hdlog` are such tests: each
+must replay to the diagnosis its fault scenario expects
+(`web/test/examples.test.ts`).
 
 ---
 
@@ -483,6 +495,8 @@ Silkscreen and color rules: `DESIGN_SPEC.md` sections 28–29.
 ```text
 UNIT         protocol decoder, trace, rules, commands, report, chart layout
 CONTRACT     every simulator frame validates against protocol/hdp_v1.json
+REPLAY       recording then replaying any scenario gives the same timeline,
+             facts and diagnoses; examples/sessions replay to their answer key
 SIMULATION   reliability matrix: HD-T000 .. HD-T010 (DIAGNOSTICS.md)
 PHYSICAL     HD-P001 real undervoltage (resistive cable, loaded target)
   (planned)  HD-P002 real DHCP failure (isolated switch, no server)
@@ -506,7 +520,8 @@ assets/brand/    brand pipeline       dogd/        Rust daemon
 docs/            specs and plans      firmware/    ESP32-S3
 protocol/        HDP v1 schema        hardware/    KiCad Rev A
 web/             UI, core, simulator  enclosure/   3D printable case
-.github/         CI                   examples/    recorded sessions
+examples/        recorded sessions
+.github/         CI
 ```
 
 The simulator lives in `web/src/core` today because the UI and the tests
@@ -530,8 +545,9 @@ Badges appear in the README only when the job exists and passes.
 
 ```text
 0.1  SOFTWARE REFERENCE IMPLEMENTATION     in progress (section 1)
-0.2  sessions + dogd                        IndexedDB sessions, replay, dogd with
-                                            WebSocket transport and SQLite
+0.2  sessions + dogd                        IndexedDB sessions + replay: done;
+                                            dogd with WebSocket transport and
+                                            SQLite: next
 0.3  physical reference device              ESP32-S3 dev board + INA226 + UART,
                                             firmware passing the HDP contract,
                                             physical scenarios HD-P001..005
@@ -585,6 +601,8 @@ and are not granted for unrestricted third-party branding or resale.
 ## CHANGELOG
 
 ```text
+0.3   session recording implemented (section 8): .hdlog format, browser
+      archive, replay, example sessions as regression tests
 0.2   aligned with the implementation: source-available wording, single
       licensing section, simulator as a core component, precise USB
       capabilities, HDP schema contract, design and brand by reference,

@@ -59,6 +59,7 @@ I want one instrument that can help answer a very simple question:
 [ OK ] DESIGN SPEC       docs/DESIGN_SPEC.md
 [ OK ] WEB INTERFACE     0.1.0, runs against the built-in simulator
 [ OK ] WIRE PROTOCOL     v1, docs/PROTOCOL.md
+[ OK ] SESSIONS          recorded locally, saved as .hdlog, replayed exactly
 [ -- ] FIRMWARE          NOT STARTED
 [ -- ] HARDWARE          NOT STARTED
 ```
@@ -90,6 +91,12 @@ with a marginal power supply, so every screen has something real to show.
 The simulator is labeled as such everywhere, including exported reports.
 With firmware available, **SETUP → CONNECT WEB SERIAL** talks to the real
 device (Chromium-based browsers).
+
+Every session is **recorded in your browser** as it happens, and can be
+saved as an `.hdlog` file. Anyone can open that file in **SETUP → SESSIONS**
+and replay the fault exactly, through the same decoder and rules, without
+the device: a repair shop can send a customer's failure to someone who
+knows the board. Example recordings: [`examples/sessions/`](examples/sessions).
 
 ```text
 F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
