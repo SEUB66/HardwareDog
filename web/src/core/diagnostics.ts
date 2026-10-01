@@ -57,38 +57,63 @@ export interface Diagnosis {
   next: string;
   /** Time of the first supporting evidence. */
   since: number;
+  /**
+   * EVIDENCE REFERENCES: the HDP frames this diagnosis rests on, by their
+   * sequence number in the session (1 = first frame received). Identical
+   * live, in a replay and through dogd: the same frames arrive in the
+   * same order. With the recording id, (recording, seq) names one frame
+   * of one .hdlog for good.
+   */
+  evidence: number[];
+}
+
+/** At most this many references per diagnosis: the first and the latest. */
+export const EVIDENCE_LIMIT = 64;
+
+function evidence(...seqs: (number | null | undefined)[]): number[] {
+  const all = [...new Set(seqs.filter((s): s is number => typeof s === 'number'))].sort((a, b) => a - b);
+  if (all.length <= EVIDENCE_LIMIT) return all;
+  const half = EVIDENCE_LIMIT / 2;
+  return [...all.slice(0, half), ...all.slice(-half)];
 }
 
 // ------------------------------------------------------------------ facts
 
 export interface DropFact {
+  /** HDP frame that opened the drop. */
+  seq: number;
   start: number;
   end: number | null;
   min: number;
 }
 
 export interface SpikeFact {
+  seq: number;
   start: number;
   end: number | null;
   peak: number;
 }
 
 export interface DetachFact {
+  seq: number;
   t: number;
   /** Start of the undervoltage that preceded it inside the window, if any. */
   dropAt: number | null;
+  dropSeq: number | null;
   dropMin: number | null;
   /** Target current ~100 ms after the disconnect: still running or not. */
   currentAfter: number | null;
 }
 
 export interface ResetFact {
+  seq: number;
   t: number;
   code: number;
   reason: string;
 }
 
 export interface NetFact {
+  seq: number;
   t: number;
   linkUp: boolean | null;
   dhcp: CheckStatus;
@@ -105,13 +130,13 @@ export interface SessionFacts {
   attaches: number[];
   detaches: DetachFact[];
   /** Target drawing current while no USB device is enumerated. */
-  unenumerated: { since: number | null; longestMs: number; firstAt: number | null };
+  unenumerated: { since: number | null; longestMs: number; firstAt: number | null; firstSeq: number | null };
   uart: {
     baud: number;
     rxLines: number;
     /** Counters reset whenever the baud rate changes. */
     rxAtBaud: number;
-    framingAtBaud: number[];
+    framingAtBaud: { t: number; seq: number }[];
     resets: ResetFact[];
   };
   net: NetFact[];
@@ -122,7 +147,7 @@ export const emptyFacts = (): SessionFacts => ({
   spikes: [],
   attaches: [],
   detaches: [],
-  unenumerated: { since: null, longestMs: 0, firstAt: null },
+  unenumerated: { since: null, longestMs: 0, firstAt: null, firstSeq: null },
   uart: { baud: 115200, rxLines: 0, rxAtBaud: 0, framingAtBaud: [], resets: [] },
   net: [],
 });
@@ -132,9 +157,9 @@ export const FACT_LIMIT = 500;
 export const NET_HISTORY = 30;
 
 /** "rst:0x8 (TG1WDT_SYS_RST)" -> reset fact. ESP-IDF boot banner format. */
-export function parseResetLine(line: string, t: number): ResetFact | null {
+export function parseResetLine(line: string, t: number, seq = 0): ResetFact | null {
   const m = /rst:0x([0-9a-f]+)\s*\(([A-Z0-9_]+)\)/i.exec(line);
-  return m ? { t, code: parseInt(m[1]!, 16), reason: m[2]!.toUpperCase() } : null;
+  return m ? { seq, t, code: parseInt(m[1]!, 16), reason: m[2]!.toUpperCase() } : null;
 }
 
 // ------------------------------------------------------------------ thresholds
@@ -174,6 +199,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       cause: 'The target browns out when its load rises: the supply or the cable cannot hold the rail.',
       next: 'Measure VBUS at the target under load. Try a shorter / thicker cable or a powered hub.',
       since: correlated[0]!.dropAt!,
+      evidence: evidence(...correlated.flatMap((d) => [d.dropSeq, d.seq])),
     });
   } else if (f.drops.length > 0) {
     const minV = Math.min(...f.drops.map((d) => d.min));
@@ -187,6 +213,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       cause: 'The rail sags under load but the target has survived it so far.',
       next: 'Check the supply margin before it becomes a brownout.',
       since: f.drops[0]!.start,
+      evidence: evidence(...f.drops.map((d) => d.seq)),
     });
   }
 
@@ -204,6 +231,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       cause: 'The target draws more than the configured limit: stalled motor, short circuit, or an undersized limit.',
       next: 'Identify the load active at those times; confirm the limit matches the port and the target.',
       since: f.spikes[0]!.start,
+      evidence: evidence(...f.spikes.map((x) => x.seq)),
     });
   }
 
@@ -228,6 +256,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
           : 'USB link loss that the supply does not explain.',
       next: 'Wiggle-test the connector, swap the cable, then check the target USB stack logs.',
       since: unexplained[0]!.t,
+      evidence: evidence(...unexplained.map((d) => d.seq)),
     });
   }
 
@@ -245,6 +274,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       cause: 'The target is powered but does not enumerate: charge-only cable, broken data lines, or target USB firmware.',
       next: 'Try a known data cable, then check the target boots its USB stack (serial log).',
       since: un.firstAt,
+      evidence: evidence(un.firstSeq),
     });
   }
 
@@ -269,12 +299,13 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
         : 'The firmware restarts itself (panic or software reset).',
       next: 'Read the lines before each reset on SERIAL; look for the task that stops feeding the watchdog.',
       since: resets[0]!.t,
+      evidence: evidence(...resets.map((r) => r.seq)),
     });
   }
 
   // SERIAL: framing errors at the current baud rate.
   const e = f.uart.framingAtBaud.length;
-  const lastE = f.uart.framingAtBaud.at(-1);
+  const lastE = f.uart.framingAtBaud.at(-1)?.t;
   if (e >= 3 && lastE !== undefined && now - lastE < 15_000) {
     const ratio = e / Math.max(1, f.uart.rxAtBaud);
     if (ratio >= 0.3) {
@@ -287,7 +318,8 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
         correlation: null,
         cause: 'The target UART runs at another baud rate (or data / parity / stop bits differ).',
         next: 'Try common rates on SERIAL: 9600, 57600, 115200, 921600. Errors stop at the right one.',
-        since: f.uart.framingAtBaud[0]!,
+        since: f.uart.framingAtBaud[0]!.t,
+        evidence: evidence(...f.uart.framingAtBaud.map((x) => x.seq)),
       });
     }
   }
@@ -366,6 +398,7 @@ function diagnoseNetwork(history: NetFact[]): Diagnosis | null {
       cause: text.cause,
       next: text.next,
       since: first.t,
+      evidence: evidence(...history.slice(history.length - streak).map((r) => r.seq)),
     };
   }
 
@@ -394,5 +427,6 @@ function diagnoseNetwork(history: NetFact[]): Diagnosis | null {
     cause: 'Every layer answers but the path is unreliable: weak Wi-Fi, congestion, or a failing link.',
     next: 'Compare wired vs Wi-Fi; probe the gateway repeatedly to see if loss starts on the LAN.',
     since: recent[0]!.t,
+    evidence: evidence(...recent.map((r) => r.seq)),
   };
 }

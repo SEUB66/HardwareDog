@@ -20,6 +20,8 @@ export interface TraceEvent {
   severity: Severity;
   message: string;
   value?: string;
+  /** The HDP frame (session sequence number) this event comes from. */
+  seq?: number;
 }
 
 /** Result of a single check. UNKNOWN means "not measured", never "probably fine". */
