@@ -1,16 +1,17 @@
 import { buildReport, reportToText } from '../../core/report';
 import type { System } from '../../core/system';
 import { AsciiBanner } from '../components/AsciiBanner';
-import { useNow } from '../hooks';
+import { useClock } from '../hooks';
 
 interface ReportProps {
   system: System;
   onExport: (format: 'txt' | 'json') => void;
+  onExportSession: () => void;
 }
 
 /** A report reads like engineering documentation (spec 21). */
-export function Report({ system, onExport }: ReportProps) {
-  const now = useNow(2000);
+export function Report({ system, onExport, onExportSession }: ReportProps) {
+  const now = useClock(system, 2000);
   const text = reportToText(buildReport(system, now), { banner: false });
   return (
     <>
@@ -23,6 +24,9 @@ export function Report({ system, onExport }: ReportProps) {
         </button>
         <button class="btn" onClick={() => onExport('json')}>
           EXPORT JSON
+        </button>
+        <button class="btn" onClick={onExportSession} title="Every frame of this session, replayable in any Hardware Dog interface">
+          EXPORT SESSION .HDLOG
         </button>
       </div>
       <div class="report-doc">

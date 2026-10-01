@@ -5,8 +5,10 @@ import { RULES } from '../../core/system';
 import type { Settings, TransportKind } from '../../core/types';
 import { webSerialSupported } from '../../core/webserial';
 import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from '../../core/scenarios';
+import { bytes } from '../../core/format';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
+import { SessionsPanel, type SessionsPanelProps } from '../components/SessionsPanel';
 import { Tag } from '../components/Tag';
 import { beep } from '../sound';
 
@@ -14,7 +16,10 @@ interface SetupProps {
   system: System;
   /** Active simulator scenario, or null on real hardware. */
   scenario: ScenarioId | null;
-  onSwitch: (kind: TransportKind, scenario?: ScenarioId) => void;
+  onSwitch: (kind: Exclude<TransportKind, 'REPLAY'>, scenario?: ScenarioId) => void;
+  sessions: SessionsPanelProps;
+  /** What the current session has written so far; null for a replay. */
+  recording: { entries: number; bytes: number } | null;
 }
 
 function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
@@ -57,7 +62,21 @@ function NumberField(props: { id: string; label: string; unit: string; value: nu
   );
 }
 
-export function Setup({ system, scenario, onSwitch }: SetupProps) {
+function sourceCell(system: System) {
+  const r = system.replayOf;
+  if (r) return <Tag status="INFO" label={`REPLAY ${r.id} / ${r.source}${r.scenario ? ` ${r.scenario}` : ''}`} />;
+  if (system.transportKind === 'SIMULATOR') return <Tag status="WARN" label="SIMULATOR" />;
+  return system.transportKind ?? 'NONE';
+}
+
+function recordingCell(system: System, recording: SetupProps['recording']) {
+  if (system.replayOf) return 'OFF (REPLAY, READ-ONLY)';
+  if (system.recordingError) return <Tag status="FAIL" label={`STOPPED: ${system.recordingError}`} />;
+  if (!recording) return '--';
+  return <Tag status="LIVE" label={`REC ${recording.entries.toLocaleString('en-US')} EVENTS / ${bytes(recording.bytes)}`} />;
+}
+
+export function Setup({ system, scenario, onSwitch, sessions, recording }: SetupProps) {
   const s = system.settings;
   const set = (patch: Partial<Settings>) => system.updateSettings(patch);
   const serialOk = webSerialSupported();
@@ -71,11 +90,13 @@ export function Setup({ system, scenario, onSwitch }: SetupProps) {
         <Panel title="LINK">
           <KV
             rows={[
-              ['SOURCE', system.transportKind === 'SIMULATOR' ? <Tag status="WARN" label="SIMULATOR" /> : (system.transportKind ?? 'NONE')],
+              ['SOURCE', sourceCell(system)],
               ['ENDPOINT', system.transportLabel || '--'],
               ['STATE', <Tag status={system.link === 'ONLINE' ? 'PASS' : system.link === 'LOST' ? 'FAIL' : 'UNKNOWN'} label={system.link} />],
               ['PROTOCOL', `v${PROTOCOL_VERSION} / NDJSON`],
               ['FRAME ERRORS', String(system.frameErrors)],
+              ['RECORDING', recordingCell(system, recording)],
+              ...(system.recordedThresholds ? ([['THRESHOLDS', 'AS RECORDED']] as [string, string][]) : []),
             ]}
           />
           <div class="actions">
@@ -89,6 +110,8 @@ export function Setup({ system, scenario, onSwitch }: SetupProps) {
           {!serialOk && <p class="note warn">WEB SERIAL NOT AVAILABLE IN THIS BROWSER. Use a Chromium-based browser over https or localhost.</p>}
           <p class="note">Switching source starts a new session, so simulated and real measurements are never mixed in one report.</p>
         </Panel>
+
+        <SessionsPanel {...sessions} />
 
         <Panel title="SIMULATOR SCENARIO" aside={scenario ?? 'hardware'}>
           <label class="sr-only" for="scenario">
