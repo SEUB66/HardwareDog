@@ -1,0 +1,30 @@
+{
+  "case": 1,
+  "id": "HD-C003",
+  "title": "INTERMITTENT USB DISCONNECT (simulator HD-T005)",
+  "recording": {
+    "file": "HD-C003.hdlog",
+    "sha256": "bacb5d03611cc9c4f737c81c2da051e4a75e85dbe22311de87ed64f3e5ab5164",
+    "recording": "db13d0b6e2d91a9759b2c9e22ad93e7e",
+    "origin": "SIMULATED"
+  },
+  "ruleset": 1,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 5,
+      "usbDisconnects": 4,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "USB_INTERMITTENT",
+        "confidence": "HIGH"
+      }
+    ]
+  }
+}

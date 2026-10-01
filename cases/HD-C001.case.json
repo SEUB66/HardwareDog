@@ -1,0 +1,25 @@
+{
+  "case": 1,
+  "id": "HD-C001",
+  "title": "HEALTHY BASELINE (simulator HD-T000)",
+  "recording": {
+    "file": "HD-C001.hdlog",
+    "sha256": "71c1a72709ce93cf7fb2488f1806cfe5d9d5b02c48169e566800a1476ed8b459",
+    "recording": "3845fe34f25fa4a6ead8a9658d9fa04b",
+    "origin": "SIMULATED"
+  },
+  "ruleset": 1,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": []
+  }
+}
