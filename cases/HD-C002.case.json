@@ -23,7 +23,15 @@
     "diagnoses": [
       {
         "id": "POWER_INSTABILITY",
-        "confidence": "HIGH"
+        "confidence": "HIGH",
+        "evidence": [
+          371,
+          375,
+          805,
+          809,
+          1257,
+          1261
+        ]
       }
     ]
   }

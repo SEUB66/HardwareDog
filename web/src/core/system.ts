@@ -193,6 +193,10 @@ export class System {
   private version = 0;
   private lastLoggedPower: { v: number; i: number } | null = null;
   private dropStartedAt: number | null = null;
+  /** HDP frames received in this session: the sequence of the last one. */
+  private framesReceived = 0;
+  /** Sequence of the frame being handled, null outside a frame. */
+  private frameSeq: number | null = null;
   private dropMin = Infinity;
   private lastBelowAt: number | null = null;
   private overcurrent = false;
@@ -236,7 +240,7 @@ export class System {
   }
 
   private log(t: number, source: Source, severity: Severity, message: string, value?: string): void {
-    this.trace.append(t, source, severity, message, value);
+    this.trace.append(t, source, severity, message, value, this.frameSeq ?? undefined);
   }
 
   // ------------------------------------------------------------ lifecycle
@@ -391,7 +395,28 @@ export class System {
     this.changed();
   }
 
+  /**
+   * Every HDP frame gets the next sequence number of the session (1, 2,
+   * 3...). Facts and trace events it produces carry it: diagnoses cite
+   * their evidence by it. The same frames arrive in the same order live,
+   * in a replay and through dogd, so the numbers are the same everywhere.
+   */
   onFrame(f: DeviceFrame): void {
+    this.framesReceived++;
+    this.frameSeq = this.framesReceived;
+    try {
+      this.handleFrame(f);
+    } finally {
+      this.frameSeq = null;
+    }
+  }
+
+  /** Sequence of the frame being handled (facts cite it). */
+  private get seq(): number {
+    return this.frameSeq ?? this.framesReceived;
+  }
+
+  private handleFrame(f: DeviceFrame): void {
     this.seenFrames.add(f.type);
     if (f.type === 'hello') {
       this.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: this.now() - f.t };
@@ -430,7 +455,7 @@ export class System {
         this.facts.uart.rxLines++;
         this.facts.uart.rxAtBaud++;
         {
-          const reset = parseResetLine(f.data, t);
+          const reset = parseResetLine(f.data, t, this.seq);
           if (reset) {
             this.remember(this.facts.uart.resets, reset);
             if (reset.code !== 0x1) this.log(t, 'UART', 'WARN', 'target reset', reset.reason);
@@ -484,6 +509,17 @@ export class System {
    * a new diagnosis, a confidence change, or a diagnosis that cleared.
    */
   evaluate(t = this.now()): Diagnosis[] {
+    // Rule events are conclusions, not evidence: they cite frames instead.
+    const seq = this.frameSeq;
+    this.frameSeq = null;
+    try {
+      return this.runRules(t);
+    } finally {
+      this.frameSeq = seq;
+    }
+  }
+
+  private runRules(t: number): Diagnosis[] {
     this.lastDiagnosisAt = t;
     this.diagnoses = diagnose(this.facts, this.settings, t);
     const seen = new Set<DiagnosisId>();
@@ -533,7 +569,7 @@ export class System {
         p.lastDropAt = t;
         p.lastDropVoltage = v;
         p.dropCount++;
-        this.remember(this.facts.drops, { start: t, end: null, min: v });
+        this.remember(this.facts.drops, { seq: this.seq, start: t, end: null, min: v });
         this.log(t, 'POWER', 'WARN', 'voltage drop', `${volts(v)} < ${volts(s.undervoltageThreshold)}`);
       } else if (v < this.dropMin) {
         this.dropMin = v;
@@ -552,7 +588,7 @@ export class System {
     // Rule: overcurrent.
     if (i > s.overcurrentThreshold && !this.overcurrent) {
       this.overcurrent = true;
-      this.remember(this.facts.spikes, { start: t, end: null, peak: i });
+      this.remember(this.facts.spikes, { seq: this.seq, start: t, end: null, peak: i });
       this.log(t, 'POWER', 'WARN', 'overcurrent', `${milliamps(i)} > ${milliamps(s.overcurrentThreshold)}`);
     } else if (this.overcurrent && i > s.overcurrentThreshold * 0.95) {
       const open = this.facts.spikes.at(-1);
@@ -570,7 +606,10 @@ export class System {
     const un = this.facts.unenumerated;
     if (!this.usb.connected && i >= RUNNING_CURRENT) {
       if (un.since === null) un.since = t;
-      if (un.firstAt === null) un.firstAt = t;
+      if (un.firstAt === null) {
+        un.firstAt = t;
+        un.firstSeq = this.seq;
+      }
       un.longestMs = Math.max(un.longestMs, t - un.since);
     } else {
       un.since = null;
@@ -623,8 +662,10 @@ export class System {
     const window = this.settings.correlationWindowMs;
     const correlated = this.lastBelowAt !== null && t - this.lastBelowAt <= window && t >= this.lastBelowAt;
     this.remember(this.facts.detaches, {
+      seq: this.seq,
       t,
       dropAt: correlated ? (this.power.lastDropAt ?? this.lastBelowAt) : null,
+      dropSeq: correlated ? (this.facts.drops.at(-1)?.seq ?? null) : null,
       dropMin: correlated ? this.power.lastDropVoltage : null,
       currentAfter: null,
     });
@@ -644,7 +685,7 @@ export class System {
   private onUartError(t: number, kind: string): void {
     this.serial.errors++;
     this.log(t, 'UART', 'WARN', `${kind} error`);
-    if (kind === 'framing') this.remember(this.facts.uart.framingAtBaud, t);
+    if (kind === 'framing') this.remember(this.facts.uart.framingAtBaud, { t, seq: this.seq });
     // Rule: repeated framing errors -> baud mismatch is a hypothesis, not a fact.
     if (kind !== 'framing') return;
     this.framingErrorTimes = this.framingErrorTimes.filter((x) => t - x < 5000);
@@ -686,6 +727,7 @@ export class System {
     this.remember(
       this.facts.net,
       {
+        seq: this.seq,
         t,
         linkUp: f.link ? f.link.up : null,
         dhcp: f.dhcp,
