@@ -1,0 +1,243 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/SEUB66/HardwareDog/protocol/hdp_v1.json",
+  "title": "HDP v1 — Hardware Dog Protocol",
+  "description": "One JSON object per line (NDJSON, UTF-8). Device frames carry `type` and `t` (device uptime, ms). Host commands carry `cmd`. This schema is the contract for every HDP producer: the firmware and the simulator must both emit frames that validate. Enum values are shown in their canonical case; decoders accept any case (docs/PROTOCOL.md).",
+  "definitions": {
+    "t": { "type": "number", "minimum": 0, "description": "Device uptime in milliseconds. Never goes backwards." },
+    "check": { "enum": ["PASS", "WARN", "FAIL", "PENDING", "UNKNOWN"] },
+    "optString": { "type": ["string", "null"] },
+    "optNumber": { "type": ["number", "null"] },
+    "hop": {
+      "type": "object",
+      "required": ["address", "status"],
+      "properties": {
+        "address": { "$ref": "#/definitions/optString" },
+        "status": { "$ref": "#/definitions/check" }
+      },
+      "additionalProperties": false
+    },
+    "probeTest": { "enum": ["PING", "DNS", "TCP", "HTTP"] },
+
+    "hello": {
+      "type": "object",
+      "required": ["type", "t", "proto", "device", "rev", "fw"],
+      "properties": {
+        "type": { "const": "hello" },
+        "t": { "$ref": "#/definitions/t" },
+        "proto": { "const": 1 },
+        "device": { "type": "string", "minLength": 1 },
+        "rev": { "type": "string", "minLength": 1 },
+        "fw": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "power": {
+      "type": "object",
+      "required": ["type", "t", "v", "i"],
+      "properties": {
+        "type": { "const": "power" },
+        "t": { "$ref": "#/definitions/t" },
+        "v": { "type": "number", "description": "Volts on the measured rail." },
+        "i": { "type": "number", "description": "Amps drawn by the target." }
+      },
+      "additionalProperties": false
+    },
+    "usb.attach": {
+      "type": "object",
+      "required": ["type", "t", "speed", "vid", "pid", "cls", "power"],
+      "properties": {
+        "type": { "const": "usb.attach" },
+        "t": { "$ref": "#/definitions/t" },
+        "speed": { "enum": ["LOW", "FULL", "HIGH", "SUPER"], "description": "Speed at which the device enumerated on Hardware Dog, not its maximum capability." },
+        "vid": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "pid": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "cls": { "type": "string" },
+        "power": { "enum": ["BUS", "SELF"] },
+        "manufacturer": { "$ref": "#/definitions/optString" },
+        "product": { "$ref": "#/definitions/optString" },
+        "serial": { "$ref": "#/definitions/optString" }
+      },
+      "additionalProperties": false
+    },
+    "usb.detach": {
+      "type": "object",
+      "required": ["type", "t"],
+      "properties": { "type": { "const": "usb.detach" }, "t": { "$ref": "#/definitions/t" } },
+      "additionalProperties": false
+    },
+    "uart.config": {
+      "type": "object",
+      "required": ["type", "t", "port", "baud", "bits", "parity", "stop"],
+      "properties": {
+        "type": { "const": "uart.config" },
+        "t": { "$ref": "#/definitions/t" },
+        "port": { "type": "string" },
+        "baud": { "type": "integer", "minimum": 300 },
+        "bits": { "enum": [7, 8] },
+        "parity": { "enum": ["NONE", "EVEN", "ODD"] },
+        "stop": { "enum": [1, 2] }
+      },
+      "additionalProperties": false
+    },
+    "uart.rx": {
+      "type": "object",
+      "required": ["type", "t", "data"],
+      "properties": {
+        "type": { "const": "uart.rx" },
+        "t": { "$ref": "#/definitions/t" },
+        "data": { "type": "string", "description": "One received line, without its terminator." }
+      },
+      "additionalProperties": false
+    },
+    "uart.error": {
+      "type": "object",
+      "required": ["type", "t", "kind"],
+      "properties": {
+        "type": { "const": "uart.error" },
+        "t": { "$ref": "#/definitions/t" },
+        "kind": { "type": "string", "examples": ["framing", "parity", "overrun", "break"] }
+      },
+      "additionalProperties": false
+    },
+    "i2c.scan": {
+      "type": "object",
+      "required": ["type", "t", "speed", "devices"],
+      "properties": {
+        "type": { "const": "i2c.scan" },
+        "t": { "$ref": "#/definitions/t" },
+        "speed": { "type": "number", "description": "Bus clock in Hz." },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["addr"],
+            "properties": {
+              "addr": { "type": "integer", "minimum": 0, "maximum": 127 },
+              "ident": { "$ref": "#/definitions/optString", "description": "Only when verified by the firmware." },
+              "method": { "$ref": "#/definitions/optString", "description": "How the identity was verified. Required with ident." }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "net.status": {
+      "type": "object",
+      "required": ["type", "t", "link", "address", "dhcp", "gateway", "dns", "internet", "latency", "loss"],
+      "properties": {
+        "type": { "const": "net.status" },
+        "t": { "$ref": "#/definitions/t" },
+        "link": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["up"],
+              "properties": {
+                "up": { "type": "boolean" },
+                "mbps": { "$ref": "#/definitions/optNumber" },
+                "duplex": { "enum": ["FULL", "HALF", null] }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "address": { "$ref": "#/definitions/optString" },
+        "dhcp": { "$ref": "#/definitions/check" },
+        "gateway": { "$ref": "#/definitions/hop" },
+        "dns": { "$ref": "#/definitions/hop" },
+        "internet": { "$ref": "#/definitions/check" },
+        "latency": { "$ref": "#/definitions/optNumber" },
+        "loss": { "$ref": "#/definitions/optNumber" }
+      },
+      "additionalProperties": false
+    },
+    "probe.result": {
+      "type": "object",
+      "required": ["type", "t", "id", "test", "status", "detail"],
+      "properties": {
+        "type": { "const": "probe.result" },
+        "t": { "$ref": "#/definitions/t" },
+        "id": { "type": "string" },
+        "test": { "$ref": "#/definitions/probeTest" },
+        "status": { "$ref": "#/definitions/check" },
+        "detail": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "probe.done": {
+      "type": "object",
+      "required": ["type", "t", "id"],
+      "properties": { "type": { "const": "probe.done" }, "t": { "$ref": "#/definitions/t" }, "id": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "log": {
+      "type": "object",
+      "required": ["type", "t", "level", "message"],
+      "properties": {
+        "type": { "const": "log" },
+        "t": { "$ref": "#/definitions/t" },
+        "level": { "enum": ["info", "warn", "error"] },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+
+    "deviceFrame": {
+      "oneOf": [
+        { "$ref": "#/definitions/hello" },
+        { "$ref": "#/definitions/power" },
+        { "$ref": "#/definitions/usb.attach" },
+        { "$ref": "#/definitions/usb.detach" },
+        { "$ref": "#/definitions/uart.config" },
+        { "$ref": "#/definitions/uart.rx" },
+        { "$ref": "#/definitions/uart.error" },
+        { "$ref": "#/definitions/i2c.scan" },
+        { "$ref": "#/definitions/net.status" },
+        { "$ref": "#/definitions/probe.result" },
+        { "$ref": "#/definitions/probe.done" },
+        { "$ref": "#/definitions/log" }
+      ]
+    },
+
+    "hostCommand": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["cmd", "proto"],
+          "properties": { "cmd": { "const": "hello" }, "proto": { "const": 1 } },
+          "additionalProperties": false
+        },
+        { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "usb.enumerate" } }, "additionalProperties": false },
+        {
+          "type": "object",
+          "required": ["cmd", "baud"],
+          "properties": { "cmd": { "const": "uart.config" }, "baud": { "type": "integer", "minimum": 300, "maximum": 4000000 } },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["cmd", "data"],
+          "properties": { "cmd": { "const": "uart.tx" }, "data": { "type": "string" } },
+          "additionalProperties": false
+        },
+        { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "i2c.scan" } }, "additionalProperties": false },
+        { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "net.refresh" } }, "additionalProperties": false },
+        {
+          "type": "object",
+          "required": ["cmd", "id", "target", "tests"],
+          "properties": {
+            "cmd": { "const": "probe" },
+            "id": { "type": "string" },
+            "target": { "type": "string", "pattern": "^[A-Za-z0-9.-]{1,253}$" },
+            "tests": { "type": "array", "items": { "$ref": "#/definitions/probeTest" }, "minItems": 1 }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "oneOf": [{ "$ref": "#/definitions/deviceFrame" }, { "$ref": "#/definitions/hostCommand" }]
+}

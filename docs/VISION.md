@@ -1,12 +1,12 @@
 # HARDWARE DOG / PRODUCT VISION
 
 ```text
-PROJECT TYPE     OPEN HARDWARE + FIRMWARE + INTERFACE
+PROJECT TYPE     SOURCE-AVAILABLE HARDWARE + FIRMWARE + INTERFACE
 FORM             FIELD DIAGNOSTIC BOX, FITS IN A SERVICE BAG
 QUESTION         WHAT ACTUALLY HAPPENED?
 ```
 
-Hardware Dog is a real open-source hardware + firmware + interface project,
+Hardware Dog is a real source-available hardware + firmware + interface project,
 not a gadget built to look good. It is a small field diagnostic box you can
 actually keep in your bag.
 
@@ -14,7 +14,7 @@ Plug in USB-C / USB, network, and optionally UART / I2C, and Hardware Dog
 immediately shows what is really going on:
 
 ```text
-POWER      supply and USB power negotiation, simple voltages
+POWER      voltage and current on the USB rail, drops, spikes
 USB        detected device, descriptors, connect / disconnect
 NET        link, throughput, local discovery, latency, packet loss
 SERIAL     UART logs
@@ -39,8 +39,8 @@ FIRMWARE   C/C++ or Rust, drivers, real-time acquisition,
 WEB        Hardware Dog serves its own small local dashboard.
            Plug it in -> open hardware.dog -> graphs, logs, tests, export.
 
-OPEN       PCB, firmware, 3D enclosure, frontend and documentation
-           are all public
+PUBLIC     PCB, firmware, 3D enclosure, frontend and documentation
+           are all public (source-available, see LICENSE)
 ```
 
 ---
