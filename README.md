@@ -96,6 +96,7 @@ F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
 ```
 
 ```text
+POSITIONING        docs/MARKET_POSITIONING.md
 ENGINEERING PLAN   docs/ENGINEERING_PLAN.md
 ARCHITECTURE       docs/ARCHITECTURE.md
 PROTOCOL           docs/PROTOCOL.md, protocol/hdp_v1.json
@@ -122,6 +123,13 @@ REPORT    exportable diagnostic report, engineering-doc style
 
 Hardware Dog **sniffs** (passive), **probes** (active), **watches**,
 **traces** and **reports**.
+
+> **Specialized tools investigate a layer.
+> Hardware Dog investigates the incident.**
+
+It does not replace a power profiler, a logic analyzer or a USB analyzer:
+they go deeper, Hardware Dog goes wider. See
+[`docs/MARKET_POSITIONING.md`](docs/MARKET_POSITIONING.md).
 
 ---
 
