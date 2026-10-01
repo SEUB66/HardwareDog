@@ -1,4 +1,4 @@
-{"hdlog":1,"proto":1,"id":"HD-20260930-1421","startedAt":1790778060000,"source":"SIMULATOR","endpoint":"SIMULATED DEVICE / HD-T005 INTERMITTENT USB DISCONNECT","scenario":"HD-T005","app":"0.1.0","thresholds":{"undervoltageThreshold":4.75,"overcurrentThreshold":0.9,"correlationWindowMs":100}}
+{"hdlog":2,"proto":1,"recording":"db13d0b6e2d91a9759b2c9e22ad93e7e","id":"HD-20260930-1421","startedAt":1790778060000,"origin":"SIMULATED","source":"SIMULATOR","endpoint":"SIMULATED DEVICE / HD-T005 INTERMITTENT USB DISCONNECT","scenario":"HD-T005","app":"0.1.0","ruleset":1,"thresholds":{"undervoltageThreshold":4.75,"overcurrentThreshold":0.9,"correlationWindowMs":100}}
 {"at":1790778060000,"frame":{"type":"hello","t":0,"proto":1,"device":"HD-001","rev":"A","fw":"0.1.0"}}
 {"at":1790778060000,"frame":{"type":"uart.config","t":0,"port":"UART0","baud":115200,"bits":8,"parity":"NONE","stop":1}}
 {"at":1790778060000,"frame":{"type":"net.status","t":0,"link":{"up":true,"mbps":1000,"duplex":"FULL"},"address":"192.168.1.84","dhcp":"PASS","gateway":{"address":"192.168.1.1","status":"PASS"},"dns":{"address":"1.1.1.1","status":"PASS"},"internet":"PASS","latency":13,"loss":0}}
@@ -1540,3 +1540,5 @@
 {"at":1790778089900,"frame":{"type":"power","t":29980,"v":5.05,"i":0.2909}}
 {"at":1790778089900,"frame":{"type":"power","t":30000,"v":5.054,"i":0.2964}}
 {"at":1790778089900,"frame":{"type":"net.status","t":30000,"link":{"up":true,"mbps":1000,"duplex":"FULL"},"address":"192.168.1.84","dhcp":"PASS","gateway":{"address":"192.168.1.1","status":"PASS"},"dns":{"address":"1.1.1.1","status":"PASS"},"internet":"PASS","latency":10,"loss":0}}
+{"seal":{"n":1,"lines":1541,"sha256":"e3fb0d249b3cbcde76f723f3f7d95b9bb5dfbe523a12eb86ceace9819f758dbf"}}
+{"end":{"closed":"NORMAL","startedAt":1790778060000,"endedAt":1790778089900,"entries":1541,"frames":1541,"rejects":0,"commands":0,"marks":0,"thresholds":0,"lost":0,"seals":1,"device":{"id":"HD-001","rev":"A","fw":"0.1.0"},"sha256":"b9ddbcd4a194aa73e182e6e64ec1284cd04ca573174f465da878762a913901d1"}}
