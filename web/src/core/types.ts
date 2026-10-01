@@ -173,6 +173,8 @@ export interface Settings {
 /** The settings a diagnosis depends on. */
 export type Thresholds = Pick<Settings, 'undervoltageThreshold' | 'overcurrentThreshold' | 'correlationWindowMs'>;
 
+export const THRESHOLD_KEYS = ['undervoltageThreshold', 'overcurrentThreshold', 'correlationWindowMs'] as const;
+
 export const thresholdsOf = (s: Settings): Thresholds => ({
   undervoltageThreshold: s.undervoltageThreshold,
   overcurrentThreshold: s.overcurrentThreshold,

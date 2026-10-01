@@ -73,7 +73,7 @@ export const T0 = 1_759_000_000_000;
 export async function recordSession(
   scenario: ScenarioId,
   seconds: number,
-  options: { seed?: number; settings?: Partial<Settings>; everySecond?: () => void } = {},
+  options: { seed?: number; settings?: Partial<Settings>; everySecond?: (second: number, sys: System) => void } = {},
 ) {
   let now = T0;
   const store = memoryStore();
@@ -95,7 +95,7 @@ export async function recordSession(
   for (let k = 1; k <= seconds * 10; k++) {
     sim.advance(100);
     now = T0 + sim.uptime;
-    if (k % 10 === 0) options.everySecond?.();
+    if (k % 10 === 0) options.everySecond?.(k / 10, sys);
   }
   sys.evaluate(now);
   return { sys, recorder: sys.recorder, recording: sys.recorder.recording };

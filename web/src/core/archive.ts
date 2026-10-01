@@ -56,6 +56,8 @@ export class ArchiveWriter {
 
   private pending: string[] = [];
   private pendingBytes = 0;
+  /** Bytes of all entries so far; the header is measured at each flush. */
+  private entryBytes = 0;
   private seq = 0;
   private queue: Promise<void> = Promise.resolve();
   private readonly unsubscribe: () => void;
@@ -91,6 +93,7 @@ export class ArchiveWriter {
     this.pending.push(line);
     const size = byteLength(line) + 1;
     this.pendingBytes += size;
+    this.entryBytes += size;
     this.meta.entries++;
     this.meta.bytes += size;
     this.meta.lastAt = e.at;
@@ -104,6 +107,8 @@ export class ArchiveWriter {
     this.pending = [];
     this.pendingBytes = 0;
     const seq = text ? this.seq++ : -1;
+    // The header can change once (the endpoint label after the link opens).
+    this.meta.bytes = byteLength(JSON.stringify(this.meta.header)) + 1 + this.entryBytes;
     const snapshot: SessionMeta = { ...this.meta, header: { ...this.meta.header }, diagnoses: this.summary() };
     this.queue = this.queue.then(async () => {
       if (this.error) return;

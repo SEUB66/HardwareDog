@@ -72,6 +72,18 @@ describe.each(backends)('session archive (%s)', (_, backend) => {
     expect(await archive.text(writer.meta.key)).toBe(toHdlog(rec.recording));
   });
 
+  it('measures the file again when the endpoint label changes', async () => {
+    const archive = new SessionArchive(await backend());
+    const rec = new SessionRecorder(header(T0, 'WEB SERIAL'));
+    const writer = archive.record(rec, undefined, { flushMs: null });
+    rec.header.endpoint = 'USB CDC 303A:1001'; // known only once the port is open
+    rec.add({ at: T0, mark: 'a' });
+    await writer.stop();
+    const text = await archive.text(writer.meta.key);
+    expect(text.startsWith(JSON.stringify(rec.header))).toBe(true);
+    expect((await archive.list())[0]!.bytes).toBe(new TextEncoder().encode(text).length);
+  });
+
   it('lists a session from its first second, before any entry', async () => {
     const archive = new SessionArchive(await backend());
     const rec = new SessionRecorder(header(T0, 'WEB SERIAL'));
