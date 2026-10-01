@@ -156,7 +156,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
   }
 
   return {
-    session: sessionId(sys.startedAt),
+    session: sys.replayOf?.id ?? sessionId(sys.startedAt),
     device: sys.device.id,
     firmware: sys.device.firmware,
     source: reportSource(sys),

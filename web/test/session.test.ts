@@ -80,6 +80,8 @@ describe('.hdlog recording and replay', () => {
     expect(report.simulated).toBe(true);
     expect(report.source).toContain('REPLAY');
     expect(report.source).toContain('SIMULATOR');
+    // The recording's own id, whatever the time zone of the replaying machine.
+    expect(report.session).toBe('HD-TEST');
   });
 
   it('replays on the thresholds it was recorded with, without touching the operator\'s own', async () => {
@@ -96,6 +98,17 @@ describe('.hdlog recording and replay', () => {
     sys.updateSettings({ sound: true });
     expect(store.load()?.undervoltageThreshold).toBe(4.75);
     expect(sys.settings.undervoltageThreshold).toBe(5.2);
+  });
+
+  it('replays a threshold change at the moment it was made', async () => {
+    const live = await recordSession('HD-T000', 30, {
+      everySecond: (second, sys) => second === 10 && sys.updateSettings({ undervoltageThreshold: 5.2 }),
+    });
+    expect(live.recording.entries.some((e) => 'thresholds' in e)).toBe(true);
+    expect(live.sys.diagnoses.length).toBeGreaterThan(0);
+    const { sys } = await replay(toHdlog(live.recording));
+    expect(diagnosisKeys(sys)).toEqual(diagnosisKeys(live.sys));
+    expect(sys.facts).toEqual(live.sys.facts);
   });
 
   it('plays in real time when asked, ending on its own', async () => {

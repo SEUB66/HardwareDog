@@ -9,6 +9,7 @@
  *   {"at":1759242061010,"reject":"not valid JSON","raw":"..."}  line the decoder rejected
  *   {"at":1759242061100,"cmd":{"cmd":"i2c.scan"}}           command sent to the device
  *   {"at":1759242061200,"mark":"device reboot"}             operator note
+ *   {"at":1759242061250,"thresholds":{...}}                 operator changed a threshold
  *   {"at":1759242061300,"lost":"serial stream ended"}       link lost
  *
  * `at` is host wall-clock time in ms. Frames are stored as received, so a
@@ -46,6 +47,7 @@ export type SessionEntry =
   | { at: number; reject: string; raw?: string }
   | { at: number; cmd: HostCommand }
   | { at: number; mark: string }
+  | { at: number; thresholds: Thresholds }
   | { at: number; lost: string };
 
 export interface Recording {
@@ -98,6 +100,8 @@ export function toHdlog(r: Recording): string {
 
 export class HdlogError extends Error {}
 
+const ENTRY_KINDS = ['frame', 'reject', 'cmd', 'mark', 'thresholds', 'lost'] as const;
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /**
@@ -133,14 +137,16 @@ export function parseHdlog(text: string): Recording {
     if (!isObj(e) || typeof e['at'] !== 'number' || !Number.isFinite(e['at'])) throw new HdlogError(`${where}: entry without "at"`);
     if (e['at'] < last) throw new HdlogError(`${where}: time goes backwards`);
     last = e['at'];
-    const kinds = ['frame', 'reject', 'cmd', 'mark', 'lost'].filter((k) => k in e);
-    if (kinds.length !== 1) throw new HdlogError(`${where}: entry must have exactly one of frame / reject / cmd / mark / lost`);
+    const kinds = ENTRY_KINDS.filter((k) => k in e);
+    if (kinds.length !== 1) throw new HdlogError(`${where}: entry must have exactly one of ${ENTRY_KINDS.join(' / ')}`);
     entries.push(e as SessionEntry);
   });
   return { header: header as unknown as SessionHeader, entries };
 }
 
 // ------------------------------------------------------------------ replay
+
+const INSTANT_SLICE = 2000;
 
 export interface ReplayOptions {
   /** 'instant' feeds everything at open(); a number plays at that speed. */
@@ -189,7 +195,11 @@ export class ReplayTransport implements Transport {
     const speed = this.options.speed ?? 'instant';
     if (this.options.manual) return;
     if (speed === 'instant') {
-      this.advanceTo(Infinity);
+      // In slices, so a long recording never freezes the interface.
+      while (this.sink && !this.done) {
+        this.advanceTo(Infinity, INSTANT_SLICE);
+        if (!this.done) await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       return;
     }
     const t0 = Date.now();
@@ -197,10 +207,11 @@ export class ReplayTransport implements Transport {
     this.timer = setInterval(() => this.advanceTo(start + (Date.now() - t0) * speed), 20);
   }
 
-  /** Feed every entry recorded up to host time `t`. */
-  advanceTo(t: number): void {
+  /** Feed the entries recorded up to host time `t`, at most `max` of them. */
+  advanceTo(t: number, max = Infinity): void {
     const entries = this.recording.entries;
-    while (this.sink && this.next < entries.length && entries[this.next]!.at <= t) {
+    let fed = 0;
+    while (this.sink && fed++ < max && this.next < entries.length && entries[this.next]!.at <= t) {
       const e = entries[this.next++]!;
       this.clock = e.at;
       if ('frame' in e) this.lines!.push(JSON.stringify(e.frame) + '\n');
@@ -209,6 +220,7 @@ export class ReplayTransport implements Transport {
         if (e.raw !== undefined) this.lines!.push(e.raw.replace(/\n/g, ' ') + '\n');
         else this.sink.error(e.reject);
       } else if ('mark' in e) this.sink.annotate?.(e.mark);
+      else if ('thresholds' in e) this.sink.configure?.(e.thresholds);
       else if ('lost' in e) this.sink.lost(e.lost);
       // 'cmd' entries document what was sent; a recording cannot be re-driven.
     }

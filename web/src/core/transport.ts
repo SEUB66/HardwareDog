@@ -1,6 +1,6 @@
 import type { DeviceFrame, HostCommand } from './protocol';
 import { LineSplitter, decodeFrame } from './protocol';
-import type { TransportKind } from './types';
+import type { Thresholds, TransportKind } from './types';
 
 /** Receives everything a transport produces. */
 export interface TransportSink {
@@ -11,6 +11,8 @@ export interface TransportSink {
   lost(reason: string): void;
   /** An operator note carried by the source (recordings only). */
   annotate?(text: string): void;
+  /** Thresholds changed by the operator at this point (recordings only). */
+  configure?(thresholds: Thresholds): void;
   /** A finite source (a recording) has delivered everything. */
   ended?(): void;
 }

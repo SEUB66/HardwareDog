@@ -14,16 +14,20 @@ import type {
   Settings,
   Severity,
   Source,
+  Thresholds,
   TransportKind,
   UsbState,
 } from './types';
-import { DEFAULT_SETTINGS } from './types';
+import { DEFAULT_SETTINGS, THRESHOLD_KEYS, thresholdsOf } from './types';
 import { hex, i2cAddress, milliamps, ms, volts } from './format';
 import type { Confidence, Diagnosis, DiagnosisId, SessionFacts } from './diagnostics';
 import type { HostCommand } from './protocol';
 import type { SessionHeader, SessionRecorder } from './session';
 import { ReplayTransport } from './session';
 import { FACT_LIMIT, NET_HISTORY, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
+
+const describeThresholds = (t: Thresholds) =>
+  `UV ${volts(t.undervoltageThreshold)}  OC ${t.overcurrentThreshold.toFixed(2)} A  WINDOW ${t.correlationWindowMs} ms`;
 
 /** Key/value persistence. Local only: nothing ever leaves the machine. */
 export interface SettingsStore {
@@ -179,6 +183,8 @@ export class System {
   recorder: SessionRecorder | null = null;
   /** Header of the recording being replayed, if this session is a replay. */
   replayOf: SessionHeader | null = null;
+  /** Why recording stopped (storage refused a write), if it did. */
+  recordingError: string | null = null;
 
   private transport: Transport | null = null;
   private listeners = new Set<Listener>();
@@ -307,9 +313,11 @@ export class System {
           this.onLost(reason);
         },
         annotate: (text) => this.mark(text),
+        configure: (thresholds) => this.useThresholds(thresholds),
         ended: () => this.onReplayEnded(),
       });
-      if (this.link !== 'CONNECTING') return true; // a replay may already have ended
+      // A replay may already have ended; a live link may already have dropped.
+      if (this.link !== 'CONNECTING') return this.replayOf !== null;
       this.transportLabel = transport.label;
       if (this.recorder) this.recorder.header.endpoint = transport.label;
       this.link = 'ONLINE';
@@ -821,6 +829,26 @@ export class System {
     this.own = { ...this.own, ...patch };
     this.settings = { ...this.settings, ...patch };
     this.storageOk = this.store.save(this.own);
+    if (THRESHOLD_KEYS.some((k) => k in patch)) {
+      const t = thresholdsOf(this.settings);
+      // A replay must apply the change at the same moment to diagnose the same.
+      this.recorder?.add({ at: this.now(), thresholds: t });
+      this.log(this.now(), 'SYS', 'INFO', 'thresholds changed', describeThresholds(t));
+    }
+    this.changed();
+  }
+
+  /** Thresholds carried by a recording: applied, never saved as the operator's. */
+  private useThresholds(thresholds: Thresholds): void {
+    this.settings = { ...this.settings, ...thresholds };
+    this.log(this.now(), 'SYS', 'INFO', 'thresholds changed (recorded)', describeThresholds(thresholds));
+    this.changed();
+  }
+
+  /** The session archive refused a write: say so on the timeline. */
+  recordingStopped(reason: string): void {
+    this.recordingError = reason;
+    this.log(this.now(), 'SYS', 'WARN', 'session recording stopped', reason);
     this.changed();
   }
 
