@@ -1,0 +1,9 @@
+# The deployable site is the Vite/Preact app in web/.
+# dogd/ (Rust) is a local daemon and is not built or deployed by Netlify.
+[build]
+  base = "web"
+  command = "npm ci --include=dev && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
