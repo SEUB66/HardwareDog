@@ -303,6 +303,46 @@ export function toHdlog(r: Recording): string {
 
 export class HdlogError extends Error {}
 
+/**
+ * Limits for files from anyone. A hostile or broken file is refused with
+ * a reason; it never exhausts the browser or reaches the engine malformed.
+ */
+export const HDLOG_LIMITS = {
+  /** Whole file. About 15 hours of a live session at 50 power frames/s. */
+  maxBytes: 256 * 1024 * 1024,
+  /** One line: an HDP frame is at most 64 KiB, plus the entry around it. */
+  maxLine: 128 * 1024,
+  /** Free-text header fields and marks. */
+  maxText: 1000,
+} as const;
+
+/** The same ranges the interface accepts (SETUP). */
+const THRESHOLD_RANGES: Record<keyof Thresholds, [number, number]> = {
+  undervoltageThreshold: [3, 5.5],
+  overcurrentThreshold: [0.05, 5],
+  correlationWindowMs: [10, 2000],
+};
+
+function checkThresholds(t: unknown, where: string): void {
+  if (!isObj(t)) throw new HdlogError(`${where}: thresholds must be an object`);
+  for (const [k, [lo, hi]] of Object.entries(THRESHOLD_RANGES)) {
+    const v = t[k];
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi) throw new HdlogError(`${where}: threshold ${k} out of range (${lo}..${hi})`);
+  }
+}
+
+const isText = (v: unknown, max: number = HDLOG_LIMITS.maxText): v is string => typeof v === 'string' && v.length <= max;
+
+/** What each entry kind must carry. The frame itself is checked by the HDP decoder at replay. */
+function checkEntry(e: Record<string, unknown>, where: string): void {
+  if ('frame' in e && !isObj(e['frame'])) throw new HdlogError(`${where}: frame must be an object`);
+  if ('reject' in e && (!isText(e['reject']) || ('raw' in e && !isText(e['raw'], HDLOG_LIMITS.maxLine)))) throw new HdlogError(`${where}: malformed reject`);
+  if ('cmd' in e && !isObj(e['cmd'])) throw new HdlogError(`${where}: cmd must be an object`);
+  if ('mark' in e && !isText(e['mark'])) throw new HdlogError(`${where}: mark must be text, at most ${HDLOG_LIMITS.maxText} characters`);
+  if ('lost' in e && !isText(e['lost'])) throw new HdlogError(`${where}: malformed lost`);
+  if ('thresholds' in e) checkThresholds(e['thresholds'], where);
+}
+
 function readHeader(line: string): SessionHeader {
   let header: unknown;
   try {
@@ -310,11 +350,18 @@ function readHeader(line: string): SessionHeader {
   } catch {
     throw new HdlogError('line 1: header is not JSON');
   }
-  if (!isObj(header) || (header['hdlog'] !== 1 && header['hdlog'] !== 2)) throw new HdlogError('line 1: not an .hdlog header (v1 or v2)');
-  for (const k of ['id', 'source', 'endpoint', 'app'] as const) {
-    if (typeof header[k] !== 'string') throw new HdlogError(`line 1: header field "${k}" missing`);
+  if (!isObj(header) || typeof header['hdlog'] !== 'number') throw new HdlogError('line 1: not an .hdlog file');
+  if (header['hdlog'] > HDLOG_VERSION) {
+    throw new HdlogError(`line 1: hdlog v${header['hdlog']} was written by a newer Hardware Dog; this build reads v1 to v${HDLOG_VERSION}`);
   }
-  if (typeof header['startedAt'] !== 'number') throw new HdlogError('line 1: header field "startedAt" missing');
+  if (header['hdlog'] !== 1 && header['hdlog'] !== 2) throw new HdlogError(`line 1: unknown hdlog version ${String(header['hdlog'])}`);
+  for (const k of ['id', 'source', 'endpoint', 'app'] as const) {
+    if (!isText(header[k], 256)) throw new HdlogError(`line 1: header field "${k}" missing or too long`);
+  }
+  if (header['scenario'] !== undefined && header['scenario'] !== null && !isText(header['scenario'], 64)) throw new HdlogError('line 1: header field "scenario" malformed');
+  if (typeof header['startedAt'] !== 'number' || !Number.isFinite(header['startedAt']) || header['startedAt'] < 0) throw new HdlogError('line 1: header field "startedAt" missing');
+  if (header['proto'] !== undefined && !Number.isInteger(header['proto'])) throw new HdlogError('line 1: header field "proto" malformed');
+  if (header['thresholds'] !== undefined) checkThresholds(header['thresholds'], 'line 1');
   if (header['source'] !== 'SIMULATOR' && header['source'] !== 'WEB SERIAL') throw new HdlogError('line 1: unknown source');
   const derived: Origin = header['source'] === 'SIMULATOR' ? 'SIMULATED' : 'PHYSICAL';
   if (header['hdlog'] === 1) {
@@ -335,8 +382,11 @@ function readHeader(line: string): SessionHeader {
  * CONTENT is validated later by the real decoder during replay.
  */
 export function parseHdlog(text: string): Recording {
+  if (text.length > HDLOG_LIMITS.maxBytes) throw new HdlogError(`file larger than ${HDLOG_LIMITS.maxBytes / 1024 / 1024} MiB`);
   const raw = text.split('\n');
   if (raw.at(-1) === '') raw.pop();
+  const long = raw.findIndex((l) => l.length > HDLOG_LIMITS.maxLine);
+  if (long >= 0) throw new HdlogError(`line ${long + 1}: longer than ${HDLOG_LIMITS.maxLine / 1024} KiB`);
   if (raw.length === 0 || raw[0]!.trim() === '') throw new HdlogError('empty file');
   const header = readHeader(raw[0]!);
   const v2 = header.hdlog === 2;
@@ -396,6 +446,7 @@ export function parseHdlog(text: string): Recording {
     last = e['at'];
     const kinds = ENTRY_KINDS.filter((k) => k in e);
     if (kinds.length !== 1) throw new HdlogError(`${where}: entry must have exactly one of ${ENTRY_KINDS.join(' / ')}`);
+    checkEntry(e, where);
     const entry = e as SessionEntry;
     entries.push(entry);
     count(counts, entry);
