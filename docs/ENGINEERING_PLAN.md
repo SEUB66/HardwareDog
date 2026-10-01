@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT      ENGINEERING PLAN
-VERSION       0.5 / IMPLEMENTATION-ALIGNED
+VERSION       0.6 / IMPLEMENTATION-ALIGNED
 STATUS        ACTIVE IMPLEMENTATION
 COMPANION TO  LAWS.md              the laws of the project
               DESIGN_SPEC.md       interface and industrial design (locked)
@@ -83,7 +83,7 @@ session: create a skeleton and make a dashboard appear. That is done.
 [ OK ]   deterministic diagnostic rules     13 rules, reliability matrix
 [ OK ]   report generation                  TXT + JSON, diagnosis-driven
 [ OK ]   session recording                  .hdlog, browser archive, exact replay
-[ NEXT ] dogd integration                   Rust daemon, fourth transport
+[ OK ]   dogd integration                   Rust daemon, fourth transport
 [ NEXT ] physical ESP32-S3 reference device firmware on a dev board
 ```
 
@@ -194,14 +194,14 @@ REPORT   exportable diagnosis: TXT + JSON (HTML / PDF later)
 
 ```text
 LAYER              STATUS    WHERE
-transport          OK        web/src/core/transport.ts (Web Serial, simulator, replay)
+transport          OK        web/src/core/transport.ts (Web Serial, simulator, replay, dogd)
 HDP decoder        OK        web/src/core/protocol.ts
 trace engine       OK        web/src/core/trace.ts
 system state       OK        web/src/core/system.ts (single source of truth)
 diagnostic rules   OK        web/src/core/diagnostics.ts
 session store      OK        web/src/core/session.ts, archive.ts (.hdlog, IndexedDB)
 UI / reports       OK        web/src/ui, web/src/core/report.ts
-dogd               PLANNED   Rust daemon, section 10
+dogd               OK        dogd/, section 10, DOGD.md
 firmware           PLANNED   ESP32-S3, section 11
 ```
 
@@ -377,45 +377,34 @@ LATER      HTML / PDF
 
 ---
 
-## 10 — DOGD, LOCAL DAEMON (PLANNED)
+## 10 — DOGD, LOCAL DAEMON
 
-Rust, local only. It discovers Hardware Dog devices, keeps sessions, stores
-them in SQLite and serves the UI.
+Rust, local only: `dogd/`, documented in [`DOGD.md`](DOGD.md).
 
 ```text
 Rust, Tokio, Axum, Serde, SQLite
+
+dogd/src/
+├── main.rs        serve, status, devices, sessions
+├── config.rs      local by default, --listen-lan explicit
+├── api/           the local API, host + origin guard, HDP socket
+├── transport/     the device link: bridge, reconnect
+├── device/        port listing, HDP hello identification
+├── sessions/      .hdlog integrity check (same algorithm as the reader)
+├── storage/       SQLite index + files
+└── protocol/      HDP constants, hello watcher
 ```
 
 ```text
-dogd/
-├── src/
-│   ├── main.rs
-│   ├── api/
-│   ├── device/
-│   ├── sessions/
-│   ├── diagnostics/
-│   ├── storage/
-│   ├── websocket/
-│   └── rules/
+DISCOVER  CONNECT  BRIDGE  STORE  SERVE
+never: interpret differently, invent events, rewrite HDP, become SaaS
 ```
 
-API:
-
-```text
-GET  /api/v1/device
-GET  /api/v1/status
-GET  /api/v1/sessions
-GET  /api/v1/sessions/:id
-POST /api/v1/probes/{ping,dns,http}
-POST /api/v1/reports
-WS   /api/v1/live            the HDP event stream, unchanged
-```
-
-Integration rule: dogd is **a third transport**. `WS /api/v1/live` carries
-HDP v1 frames exactly as the device emits them, so the UI plugs dogd in
-next to Web Serial and the simulator without changing the trace engine.
-The diagnostic rules move to Rust only with a shared test corpus: the same
-scenarios must produce the same diagnoses in both implementations.
+dogd is **the fourth transport**. `WS /v1/hdp` carries the device bytes
+exactly as they arrive; the interface decodes them with the same decoder as
+Web Serial. dogd owns no diagnostic rule: `dogd = transport + storage`,
+`web = trace + diagnosis`. Headless diagnosis, if ever, will come from one
+shared rule representation, not from a manual port to Rust.
 
 ---
 
@@ -602,8 +591,8 @@ LVL   NAME                                  STATUS
 40    .hdlog becomes technical evidence      DONE
 45    diagnostic engine v1                   PARTIAL   13 rules, scenarios
 50    .hdlog becomes a CASE                  PARTIAL   format + test suite
-55    dogd, the local backbone               NEXT
-60    first physical Hardware Dog            PLANNED
+55    dogd, the local backbone               DONE      gate passed, real ESP32 at 60
+60    first physical Hardware Dog            NEXT
 65    calibration + truthfulness             PLANNED
 70    real fault lab                         PLANNED
 75    professional reports                   PARTIAL   TXT + JSON
@@ -660,8 +649,8 @@ I2C_BUS_INSTABILITY          [ -- ] needs I2C error frames in HDP
 ```
 
 Every diagnosis returns OBSERVED, CORRELATED, POSSIBLE CAUSE, CONFIDENCE,
-RECOMMENDED CHECK and EVIDENCE REFERENCES (the trace events it rests on:
-`[ -- ]` today). Never "the problem is definitely X".
+RECOMMENDED CHECK and EVIDENCE REFERENCES (`[ OK ]`: the HDP frames it
+rests on, by sequence number). Never "the problem is definitely X".
 
 GATE: every diagnosis has a scenario, an .hdlog, an expected answer and a
 regression test (cases: 3 of 10 today).
@@ -679,9 +668,10 @@ incident.hdlog -> CREATE CASE -> HD-Cxxx -> hwdog test cases/
 [ -- ] hwdog test cases/: a command line runner outside the test suite
 ```
 
-### LVL 55 — dogd, THE LOCAL BACKBONE
+### LVL 55 — dogd, THE LOCAL BACKBONE        DONE
 
 dogd is not a second brain, and not an Internet backend (LAWS.md).
+Everything about it: [`DOGD.md`](DOGD.md), with the gate checklist.
 
 ```text
 DEVICE DISCOVERY   SESSION STORAGE   HDP TRANSPORT
@@ -693,7 +683,14 @@ dogd ──────┘
 ```
 
 GATE: the interface connected over Web Serial or through dogd receives the
-same frames and reaches the same results.
+same frames and reaches the same results. Proven in CI against the real
+binary (`web/test/dogd.test.ts`): simulator direct == simulator through
+dogd, same facts, same diagnosis, same evidence references.
+
+Locked before dogd: **evidence references**. Every HDP frame has a sequence
+number in its session; every diagnosis cites the frames it rests on. The
+numbers are the same live, replayed and through dogd, so dogd can index
+sessions without a migration later.
 
 ### LVL 60 — FIRST PHYSICAL HARDWARE DOG
 
@@ -861,6 +858,7 @@ and are not granted for unrestricted third-party branding or resale.
 ## CHANGELOG
 
 ```text
+0.6   LVL 55 done: dogd (DOGD.md), evidence references locked before it
 0.5   laws of the project (LAWS.md); roadmap by level, LVL 40 to MAX LVL;
       LVL 40 closed: hostile-file limits, compatibility rule, v1 fixture
 0.4   milestone EVIDENCE INTEGRITY + CASES (section 1): .hdlog v2 with

@@ -112,8 +112,11 @@ LICENSE SERVER UNAVAILABLE
 ```
 
 **dogd is a local daemon, not an Internet backend.** It listens on the
-machine it runs on, stores sessions on that machine, and works with the
-network cable unplugged.
+machine it runs on (127.0.0.1 unless `--listen-lan` is given), stores
+sessions on that machine, contains no HTTP client, and works with the
+network cable unplugged. It refuses requests that do not name a loopback
+host and browser pages from origins it was not told to trust
+([`DOGD.md`](DOGD.md)).
 
 ```text
 ENFORCED BY   web/test/laws.test.ts                the interface source
@@ -121,7 +124,10 @@ ENFORCED BY   web/test/laws.test.ts                the interface source
                                                     (fetch, XHR, WebSocket,
                                                     beacon, EventSource)
                                                     and loads nothing
-                                                    remote
+                                                    remote; only dogd.ts
+                                                    talks, to 127.0.0.1
+              dogd/src/config.rs, dogd/src/api     loopback by default,
+                                                    host + origin guard
 ```
 
 Hosting the interface on a web server (a demo site, the device itself) is

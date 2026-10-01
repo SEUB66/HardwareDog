@@ -73,6 +73,7 @@ I want one instrument that can help answer a very simple question:
 [ OK ] WIRE PROTOCOL     v1, docs/PROTOCOL.md
 [ OK ] SESSIONS          recorded locally, sealed (SHA-256), replayed exactly
 [ OK ] CASES             recorded incidents as regression tests, cases/
+[ OK ] DOGD              local daemon: device link, session store (docs/DOGD.md)
 [ -- ] FIRMWARE          NOT STARTED
 [ -- ] HARDWARE          NOT STARTED
 ```
@@ -91,6 +92,14 @@ npm ci
 npm run dev        # http://localhost:5173
 npm run check      # typecheck + tests + production build
 npm run demo       # open the interface against the simulator
+```
+
+Optional, the local daemon (Rust): it holds the device link and stores
+sessions on this machine. Never a cloud service: [`docs/DOGD.md`](docs/DOGD.md).
+
+```sh
+cd dogd
+cargo run --release -- --source serial:/dev/ttyACM0   # then SETUP -> CONNECT DOGD
 ```
 
 The simulator runs 11 physical **fault scenarios** (undervoltage, DHCP,
@@ -125,6 +134,7 @@ F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
 
 ```text
 LAWS               docs/LAWS.md
+DOGD               docs/DOGD.md
 POSITIONING        docs/MARKET_POSITIONING.md
 ENGINEERING PLAN   docs/ENGINEERING_PLAN.md
 ARCHITECTURE       docs/ARCHITECTURE.md
