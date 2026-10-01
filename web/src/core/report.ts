@@ -1,7 +1,14 @@
 import { BANNER, DESCRIPTOR, TAGLINE } from './ascii';
 import type { System } from './system';
 import type { Diagnosis } from './diagnostics';
-import { diagnose } from './diagnostics';
+import { RULESET_VERSION, diagnose } from './diagnostics';
+import type { Footer, IntegrityStatus, Origin } from './session';
+
+const CLOSED_TEXT: Record<Footer['closed'], string> = {
+  NORMAL: 'NORMAL, by the recorder',
+  RECOVERED: 'RECOVERED after an unclean stop',
+  SNAPSHOT: 'SNAPSHOT, exported while recording',
+};
 import { duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
 
 /**
@@ -35,12 +42,43 @@ export interface Report {
   firmware: string;
   source: string;
   simulated: boolean;
+  /** The recording behind this report: live, or the file being replayed. */
+  recording: RecordingRef | null;
   startedAt: number;
   generatedAt: number;
   duration: string;
   sections: ReportSection[];
   diagnoses: Diagnosis[];
   findings: Finding[];
+}
+
+export interface RecordingRef {
+  id: string;
+  origin: Origin;
+  /** null while the session is still being recorded live. */
+  integrity: IntegrityStatus | null;
+  fileSha256: string | null;
+  problems: string[];
+  closed: Footer['closed'] | null;
+  /** Ruleset the recording was made with, and the one that produced this report. */
+  ruleset: number;
+  rulesetNow: number;
+}
+
+function recordingRef(sys: System): RecordingRef | null {
+  const h = sys.replayOf ?? sys.recorder?.header ?? null;
+  if (!h) return null;
+  const i = sys.replayOf ? sys.replayIntegrity : null;
+  return {
+    id: h.recording,
+    origin: h.origin,
+    integrity: i?.status ?? null,
+    fileSha256: i?.fileSha256 ?? null,
+    problems: i?.problems ?? [],
+    closed: i?.footer?.closed ?? null,
+    ruleset: h.ruleset,
+    rulesetNow: RULESET_VERSION,
+  };
 }
 
 export function buildReport(sys: System, now = sys.now()): Report {
@@ -160,7 +198,8 @@ export function buildReport(sys: System, now = sys.now()): Report {
     device: sys.device.id,
     firmware: sys.device.firmware,
     source: reportSource(sys),
-    simulated: sys.transportKind === 'SIMULATOR' || sys.replayOf?.source === 'SIMULATOR',
+    simulated: sys.transportKind === 'SIMULATOR' || sys.replayOf?.origin === 'SIMULATED',
+    recording: recordingRef(sys),
     startedAt: sys.startedAt,
     generatedAt: now,
     duration: duration(now - sys.startedAt),
@@ -174,7 +213,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
 function reportSource(sys: System): string {
   const r = sys.replayOf;
   if (!r) return sys.transportKind ?? 'NONE';
-  return `REPLAY of ${r.id} / ${r.source}${r.scenario ? ` ${r.scenario}` : ''}`;
+  return `REPLAY OF ${r.origin} / ${r.id} / ${r.source}${r.scenario ? ` ${r.scenario}` : ''}`;
 }
 
 const RULE = '--------------------------------';
@@ -191,7 +230,21 @@ export function reportToText(r: Report, options: { banner?: boolean } = {}): str
   kv('SOURCE', r.source);
   kv('DURATION', r.duration);
   kv('GENERATED', `${new Date(r.generatedAt).toISOString()}`);
+  const rec = r.recording;
+  if (rec) {
+    kv('RECORDING', rec.id || 'hdlog v1, no recording id');
+    kv('ORIGIN', rec.origin);
+    if (rec.integrity === null) kv('INTEGRITY', 'RECORDING, NOT FINALIZED: hashed when the session ends');
+    else kv('INTEGRITY', rec.integrity);
+    if (rec.closed) kv('CLOSED', CLOSED_TEXT[rec.closed]);
+    if (rec.fileSha256) kv('FILE SHA-256', rec.fileSha256);
+    kv('RULESET', rec.ruleset === rec.rulesetNow || rec.integrity === null ? `v${rec.rulesetNow}` : `recorded v${rec.ruleset}, diagnosed v${rec.rulesetNow}`);
+  }
   if (r.simulated) out.push('', '!! SIMULATED DATA. NOT A MEASUREMENT OF REAL HARDWARE.');
+  if (rec?.integrity === 'MODIFIED') out.push('', '!! MODIFIED RECORDING. BYTES CHANGED AFTER THEY WERE SEALED. NOT EVIDENCE.', ...rec.problems.map((p) => `   ${p}`));
+  if (rec?.integrity === 'INCOMPLETE') out.push('', '!! INCOMPLETE RECORDING. NEVER FINALIZED: SEALED LINES ARE INTACT, THE END IS MISSING.');
+  if (rec?.integrity === 'RECOVERED') out.push('', 'NOTE  Recording closed after an unclean stop (RECOVERED). Every sealed line is intact.');
+  if (rec?.integrity === 'UNVERIFIED') out.push('', 'NOTE  hdlog v1 file: no integrity data. Content cannot be verified.');
 
   for (const s of r.sections) {
     out.push('', RULE, '', s.title, '');

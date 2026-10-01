@@ -19,6 +19,13 @@
 import type { CheckStatus, Settings } from './types';
 import { clock, milliamps, ms, volts } from './format';
 
+/**
+ * Version of the rules below. Bump it whenever a rule, a default threshold
+ * or a confidence definition changes: recordings carry the version they
+ * were made with, and a replay on other rules says so.
+ */
+export const RULESET_VERSION = 1;
+
 export const DIAGNOSIS_IDS = [
   'POWER_INSTABILITY',
   'SUPPLY_SAG',

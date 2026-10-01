@@ -8,15 +8,19 @@
  *   chunks     [key, seq] -> NDJSON text, in write order
  *
  * An archived session exports byte for byte as an .hdlog file: header
- * line, then the chunks in order.
+ * line, then the chunks in order. Every chunk ends with a seal (hash
+ * chain); stop() writes the footer. A session the browser never closed
+ * (tab closed, crash) is finalized as RECOVERED the next time the archive
+ * opens: only sealed lines are kept, and the file says how it ended.
  *
  * Retention: simulator sessions are pruned (newest SIM_RETENTION kept).
  * Sessions recorded from real hardware are never deleted automatically:
  * they are evidence. The operator deletes them.
  */
 
-import type { Recording, SessionEntry, SessionHeader, SessionRecorder } from './session';
-import { encodeEntry, parseHdlog } from './session';
+import type { Footer, Recording, SessionEntry, SessionHeader, SessionRecorder } from './session';
+import { HdlogSealer, parseHdlog, recoverHdlog } from './session';
+import { Sha256, sha256 } from './sha256';
 
 export const SIM_RETENTION = 5;
 /** Flush to storage when this much text is waiting, even between ticks. */
@@ -25,6 +29,8 @@ const CHUNK_BYTES = 256 * 1024;
 export interface SessionMeta {
   key: string;
   header: SessionHeader;
+  /** The header exactly as written: the hashes cover these bytes. */
+  headerLine?: string;
   entries: number;
   /** Size of the .hdlog file, header included. */
   bytes: number;
@@ -32,6 +38,10 @@ export interface SessionMeta {
   lastAt: number;
   /** Diagnoses as "ID:CONFIDENCE" when last written. */
   diagnoses: string[];
+  /** How the file was closed; null while recording (or never closed). */
+  closed: Footer['closed'] | null;
+  /** sha256 of the finalized file, hex; null until closed. */
+  fileSha256: string | null;
 }
 
 export interface ArchiveBackend {
@@ -54,10 +64,10 @@ export class ArchiveWriter {
   /** Set when a write failed. Recording stops there: no silent gaps. */
   error: string | null = null;
 
-  private pending: string[] = [];
+  private readonly sealer: HdlogSealer;
+  /** Hash of the whole file as written, for the finalized meta. */
+  private readonly file = new Sha256();
   private pendingBytes = 0;
-  /** Bytes of all entries so far; the header is measured at each flush. */
-  private entryBytes = 0;
   private seq = 0;
   private queue: Promise<void> = Promise.resolve();
   private readonly unsubscribe: () => void;
@@ -72,13 +82,18 @@ export class ArchiveWriter {
     options: { flushMs?: number | null; onError?: (message: string) => void } = {},
   ) {
     const h = recorder.header;
+    this.sealer = new HdlogSealer(h);
+    this.file.update(this.sealer.headerLine);
     this.meta = {
-      key: `${h.startedAt}-${Math.random().toString(36).slice(2, 6)}`,
+      key: `${h.startedAt}-${h.recording.slice(0, 8)}`,
       header: h,
+      headerLine: this.sealer.headerLine,
       entries: 0,
-      bytes: byteLength(JSON.stringify(h)) + 1,
+      bytes: byteLength(this.sealer.headerLine),
       lastAt: h.startedAt,
       diagnoses: [],
+      closed: null,
+      fileSha256: null,
     };
     this.onError = options.onError ?? (() => {});
     this.unsubscribe = recorder.onEntry((e) => this.add(e));
@@ -89,27 +104,29 @@ export class ArchiveWriter {
 
   private add(e: SessionEntry): void {
     if (this.stopped) return;
-    const line = encodeEntry(e);
-    this.pending.push(line);
-    const size = byteLength(line) + 1;
+    const size = byteLength(this.sealer.add(e));
     this.pendingBytes += size;
-    this.entryBytes += size;
     this.meta.entries++;
-    this.meta.bytes += size;
     this.meta.lastAt = e.at;
     if (this.pendingBytes >= CHUNK_BYTES) void this.flush();
   }
 
-  /** Write what is waiting. Writes are queued, so chunks never reorder. */
+  /** Seal and write what is waiting. Writes are queued, so chunks never reorder. */
   flush(): Promise<void> {
+    return this.write(this.sealer.seal());
+  }
+
+  private write(text: string, final = false): Promise<void> {
     if (this.error) return this.queue;
-    const text = this.pending.length ? this.pending.join('\n') + '\n' : '';
-    this.pending = [];
     this.pendingBytes = 0;
     const seq = text ? this.seq++ : -1;
-    // The header can change once (the endpoint label after the link opens).
-    this.meta.bytes = byteLength(JSON.stringify(this.meta.header)) + 1 + this.entryBytes;
-    const snapshot: SessionMeta = { ...this.meta, header: { ...this.meta.header }, diagnoses: this.summary() };
+    this.meta.bytes += byteLength(text);
+    this.file.update(text);
+    if (final) {
+      this.meta.closed = 'NORMAL';
+      this.meta.fileSha256 = this.file.hex();
+    }
+    const snapshot: SessionMeta = { ...this.meta, diagnoses: this.summary() };
     this.queue = this.queue.then(async () => {
       if (this.error) return;
       try {
@@ -123,10 +140,27 @@ export class ArchiveWriter {
     return this.queue;
   }
 
-  /** Final write, then detach from the recorder. */
+  /**
+   * A finalized copy of the session so far (closed: SNAPSHOT), while
+   * recording goes on: the archive text up to `chunks`, then `footer`.
+   */
+  async snapshot(): Promise<{ chunks: number; footer: string }> {
+    if (this.error) throw new Error(`recording stopped: ${this.error}`);
+    const text = this.sealer.seal();
+    const footer = this.sealer.footer('SNAPSHOT');
+    const write = this.write(text);
+    const chunks = this.seq; // write() numbered our chunk synchronously
+    await write;
+    if (this.error) throw new Error(`recording stopped: ${this.error}`);
+    return { chunks, footer };
+  }
+
+  /** Final write with the footer, then detach from the recorder. */
   async stop(): Promise<void> {
-    await this.flush();
+    if (this.stopped) return this.queue;
     this.close();
+    if (this.error) return;
+    await this.write(this.sealer.finish('NORMAL'), true);
   }
 
   private close(): void {
@@ -165,11 +199,48 @@ export class SessionArchive {
     return new ArchiveWriter(this.backend, recorder, summary, options);
   }
 
-  /** The archived session as an .hdlog file. */
-  async text(key: string): Promise<string> {
+  /** The archived session as an .hdlog file (its first `chunks` chunks, if given). */
+  async text(key: string, chunks?: number): Promise<string> {
     const meta = (await this.backend.list()).find((m) => m.key === key);
     if (!meta) throw new Error(`no archived session ${key}`);
-    return JSON.stringify(meta.header) + '\n' + (await this.backend.chunks(key)).join('');
+    const stored = await this.backend.chunks(key);
+    return (meta.headerLine ?? JSON.stringify(meta.header) + '\n') + stored.slice(0, chunks ?? stored.length).join('');
+  }
+
+  /** A verifiable .hdlog of a session that is still recording. */
+  async snapshotText(writer: ArchiveWriter): Promise<string> {
+    const { chunks, footer } = await writer.snapshot();
+    return (await this.text(writer.meta.key, chunks)) + footer;
+  }
+
+  /**
+   * Finalize sessions whose recording never closed (tab closed, crash) as
+   * RECOVERED. Only sealed lines are kept. `active` keys are recording now.
+   */
+  async recover(active: readonly string[] = []): Promise<string[]> {
+    const done: string[] = [];
+    for (const m of await this.backend.list()) {
+      if (active.includes(m.key) || m.header.hdlog !== 2 || m.closed) continue;
+      const stored = await this.text(m.key);
+      const recovered = recoverHdlog(stored);
+      if (recovered === null) continue;
+      const meta: SessionMeta = {
+        ...m,
+        entries: parseHdlog(recovered).entries.length,
+        bytes: byteLength(recovered),
+        closed: 'RECOVERED',
+        fileSha256: sha256(recovered),
+      };
+      const headerLine = meta.headerLine ?? JSON.stringify(m.header) + '\n';
+      if (recovered.startsWith(stored)) {
+        await this.backend.append(meta, (await this.backend.chunks(m.key)).length, recovered.slice(stored.length));
+      } else {
+        await this.backend.remove(m.key);
+        await this.backend.append(meta, 0, recovered.slice(headerLine.length));
+      }
+      done.push(m.key);
+    }
+    return done;
   }
 
   async load(key: string): Promise<Recording> {
