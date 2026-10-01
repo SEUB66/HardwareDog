@@ -2,9 +2,10 @@
 
 ```text
 DOCUMENT      ENGINEERING PLAN
-VERSION       0.4 / IMPLEMENTATION-ALIGNED
+VERSION       0.5 / IMPLEMENTATION-ALIGNED
 STATUS        ACTIVE IMPLEMENTATION
-COMPANION TO  DESIGN_SPEC.md       interface and industrial design (locked)
+COMPANION TO  LAWS.md              the laws of the project
+              DESIGN_SPEC.md       interface and industrial design (locked)
               BRAND.md             official mascot and assets (locked)
               VISION.md            product vision
               PROTOCOL.md          HDP v1, human-readable
@@ -19,11 +20,20 @@ their own unit and use it for permitted non-commercial purposes. Commercial
 manufacturing, distribution, integration and commercial service use require
 a separate Hardware Dog commercial license (see [LICENSING](#licensing)).
 
-The central engineering principle is:
+The laws of the project ([`LAWS.md`](LAWS.md)) are architecture
+boundaries, not preferences:
 
-> **ONE EVENT MODEL.**
-> **ONE CLOCK.**
-> **ONE TIMELINE.**
+```text
+ONE EVENT MODEL.
+ONE CLOCK.
+ONE TIMELINE.
+
+EVERY REAL FAILURE SHOULD BE ABLE
+TO BECOME A REPRODUCIBLE TEST.
+
+LOCAL IS THE SOURCE OF TRUTH.
+THE CLOUD IS NEVER REQUIRED.
+```
 
 A real Hardware Dog device and the simulator must produce the same HDP
 event stream. The trace engine and the UI must not need to know which one
@@ -572,27 +582,246 @@ Badges appear in the README only when the job exists and passes.
 
 ---
 
-## 17 — ROADMAP
+## 17 — ROADMAP, BY LEVEL
 
 ```text
-0.1  SOFTWARE REFERENCE IMPLEMENTATION     in progress (section 1)
-0.2  sessions + dogd                        IndexedDB sessions, replay, evidence
-                                            integrity, cases: done; dogd with
-                                            WebSocket transport and SQLite: next
-0.3  physical reference device              ESP32-S3 dev board + INA226 + UART,
-                                            firmware passing the HDP contract,
-                                            physical scenarios HD-P001..005
-0.4  Ethernet + I2C scanner on hardware     W5500, verified I2C identities
-0.5  Rev A PCB + display + enclosure        KiCad, 3D printed case
-1.0  coherent product                       all of the above, documented
+DESTINATION   Hardware Dog = the local-first incident recorder and
+              diagnostic layer for physical hardware.
+
+              Specialized tools measure one layer deeply.
+              Hardware Dog preserves what happened across the system.
 ```
+
+The project climbs one level at a time. A level is done when its **gate**
+passes, not when its code exists. MAX LVL does not mean forty protocols: it
+means a technician can trust Hardware Dog with a fault, share the proof,
+reproduce it, and make a decision on it.
+
+```text
+LVL   NAME                                  STATUS
+40    .hdlog becomes technical evidence      DONE
+45    diagnostic engine v1                   PARTIAL   13 rules, scenarios
+50    .hdlog becomes a CASE                  PARTIAL   format + test suite
+55    dogd, the local backbone               NEXT
+60    first physical Hardware Dog            PLANNED
+65    calibration + truthfulness             PLANNED
+70    real fault lab                         PLANNED
+75    professional reports                   PARTIAL   TXT + JSON
+80    network + I2C on hardware              PLANNED
+85    PCB Rev A                              PLANNED
+90    probe architecture                     PLANNED
+95    community incident library             PLANNED
+100   Hardware Dog 1.0                       PLANNED
+MAX   incidents make Hardware Dog better     PLANNED
+```
+
+### LVL 40 — .hdlog BECOMES TECHNICAL EVIDENCE        DONE
+
+```text
+[ OK ] versions in every file: hdlog, HDP, ruleset, app (firmware from the
+       hello frame, in the footer)
+[ OK ] immutable provenance: origin PHYSICAL | SIMULATED, never rewritten;
+       a replay is shown as REPLAY OF PHYSICAL | REPLAY OF SIMULATED
+[ OK ] SHA-256 seal chain + footer hash of the final content
+[ OK ] final counts: frames, rejects, commands, marks, thresholds, lost
+[ OK ] unfinished files explicitly INCOMPLETE; RECOVERED after a crash
+[ OK ] size and line limits, field validation, hostile-file tests
+[ OK ] compatibility: every version is read forever, files are never
+       rewritten; a newer file says it needs a newer Hardware Dog
+[ OK ] report.json references the recording id, origin, integrity, hash
+```
+
+GATE: a file recorded today opens in two years without ambiguity.
+`web/test/fixtures/hdlog-v1.hdlog` (written by an earlier build) and
+`cases/*.hdlog` (v2) must parse and replay to the same diagnosis on every
+commit.
+
+Why there is no REPLAYED_* origin in the file: replaying does not change
+where the evidence came from. Exporting a replay gives back the same bytes,
+so a file can never become "a replay of a replay". The replay state is
+shown by the interface and the report, never written into the evidence.
+
+### LVL 45 — DIAGNOSTIC ENGINE V1
+
+Not 150 rules. Ten diagnostics that are extremely solid.
+
+```text
+WANTED                       TODAY (id kept: ids live in case files)
+POWER_INSTABILITY            [ OK ] POWER_INSTABILITY
+USB_RECONNECT_LOOP           [ OK ] USB_INTERMITTENT
+USB_ENUMERATION_FAILURE      [ OK ] USB_NOT_ENUMERATED
+PERIODIC_DEVICE_REBOOT       [ OK ] TARGET_RESET_LOOP
+UART_CONFIGURATION_MISMATCH  [ OK ] SERIAL_CONFIGURATION_MISMATCH
+DHCP_FAILURE                 [ OK ] DHCP_FAILURE
+DNS_FAILURE                  [ OK ] DNS_FAILURE
+UNSTABLE_NETWORK             [ OK ] NETWORK_UNSTABLE
+I2C_DEVICE_DISAPPEARED       [ -- ] needs repeated I2C scans
+I2C_BUS_INSTABILITY          [ -- ] needs I2C error frames in HDP
+```
+
+Every diagnosis returns OBSERVED, CORRELATED, POSSIBLE CAUSE, CONFIDENCE,
+RECOMMENDED CHECK and EVIDENCE REFERENCES (the trace events it rests on:
+`[ -- ]` today). Never "the problem is definitely X".
+
+GATE: every diagnosis has a scenario, an .hdlog, an expected answer and a
+regression test (cases: 3 of 10 today).
+
+### LVL 50 — .hdlog BECOMES A CASE
+
+```text
+incident.hdlog -> CREATE CASE -> HD-Cxxx -> hwdog test cases/
+```
+
+```text
+[ OK ] case = recording + SHA-256 + expected facts + diagnosis + confidence
+[ OK ] SAVE AS CASE in the interface; every case runs on each commit
+[ -- ] description, hardware context, notes in the case file
+[ -- ] hwdog test cases/: a command line runner outside the test suite
+```
+
+### LVL 55 — dogd, THE LOCAL BACKBONE
+
+dogd is not a second brain, and not an Internet backend (LAWS.md).
+
+```text
+DEVICE DISCOVERY   SESSION STORAGE   HDP TRANSPORT
+LOCAL API          WEBSOCKET         REPORT GENERATION
+
+WebSerial ─┐
+Simulator ─┼─> HDP v1        no special Rust event, same contract everywhere
+dogd ──────┘
+```
+
+GATE: the interface connected over Web Serial or through dogd receives the
+same frames and reaches the same results.
+
+### LVL 60 — FIRST PHYSICAL HARDWARE DOG
+
+No custom PCB. ESP32-S3 dev board, INA226, UART, Wi-Fi.
+`REAL HARDWARE -> HDP v1 -> existing software`, the frontend barely
+changes.
+
+```text
+GATE   SIMULATOR   PASS
+       FIRMWARE    PASS     same contract test
+       REPLAY      PASS
+```
+
+### LVL 65 — CALIBRATION + TRUTHFULNESS
+
+Every measurement exposes its range, sample rate, expected accuracy,
+resolution, calibration date, sensor identity, firmware and limitations,
+and says: `DIAGNOSTIC MEASUREMENT, NOT CERTIFIED METROLOGY`. Several
+INA226 boards are tested against a reference instrument: the goal is to
+know exactly how far the numbers can be trusted.
+
+### LVL 70 — REAL FAULT LAB
+
+Faults created on purpose: cheap USB cable, undervoltage, brownout, loose
+connector, wrong baud, missing I2C pull-up, intermittent I2C, DHCP loss,
+DNS loss, network latency, boot loop, USB reconnect loop.
+
+```text
+PHYSICAL FAILURE -> HDLOG -> CASE -> REGRESSION TEST
+```
+
+The simulator gradually stops being made of imagined scenarios and starts
+reproducing traces of real failures.
+
+### LVL 75 — PROFESSIONAL REPORTS
+
+A document a technician attaches to a ticket: device, session, provenance,
+recording hash, observations, correlations, diagnoses, confidence,
+recommended checks, timeline excerpt, measurement limitations.
+Exports TXT, JSON, HTML, PDF. JSON stays the machine-readable truth.
+TXT and JSON exist today.
+
+### LVL 80 — NETWORK + I2C ON HARDWARE
+
+W5500 Ethernet, I2C scanner, network probes, correlated with everything
+else. Not "ping works", but the chain:
+
+```text
+12:01:22  POWER     sag
+12:01:22  SYSTEM    reboot
+12:01:23  LINK      down
+12:01:26  LINK      up
+12:01:27  DHCP      acquired
+12:01:28  DNS       ready
+```
+
+### LVL 85 — PCB REV A
+
+KiCad: USB power path, current sensing, ESP32-S3, Ethernet, UART
+protection, I2C, display, ESD and power protection, test points,
+programming / debug. Delivered with schematic, PCB, BOM, Gerbers, assembly
+notes and a test procedure.
+
+**No PCB before the physical prototype has many real hours of diagnosis
+behind it.** Otherwise the mistakes get etched into copper.
+
+### LVL 90 — PROBE ARCHITECTURE
+
+Hardware Dog stops being a box and becomes a platform, without growing a
+Frankenstein core: CAN DOG, USB DOG, POWER DOG, ENVIRONMENT, RS-485, GPIO
+are probes, and every probe simply produces HDP.
+
+### LVL 95 — COMMUNITY INCIDENT LIBRARY
+
+Not a social network. A repository of anonymized, reproducible cases
+(`cases/power`, `usb`, `uart`, `network`, `i2c`). Submissions are a pull
+request: .hdlog, description, hardware, expected behavior; tests run
+automatically, then review. A real library of hardware failures is worth
+more than code.
+
+### LVL 100 — HARDWARE DOG 1.0
+
+```text
+[ ] stable HDP v1                  [ ] USB
+[ ] stable HDLOG                   [ ] power
+[ ] deterministic replay           [ ] UART
+[ ] evidence integrity             [ ] I2C
+[ ] diagnostic engine              [ ] network
+[ ] physical reference hardware    [ ] custom PCB
+[ ] documented measurement limits  [ ] enclosure
+[ ] real fault regression library  [ ] reproducible build
+[ ] dogd                           [ ] firmware update procedure
+[ ] session archive                [ ] recovery / failed update path
+[ ] professional reports           [ ] complete documentation
+[ ] security review                [ ] license + trademark docs
+```
+
+Then, without exaggeration:
+
+> Hardware Dog 1.0 is a source-available, local-first hardware diagnostic
+> system that records electrical, protocol and network evidence on one
+> synchronized timeline and turns real incidents into reproducible
+> diagnostic cases.
+
+### MAX LVL — AFTER 1.0
+
+```text
+LIVE INCIDENT -> .HDLOG -> ANONYMIZE -> CASE LIBRARY -> REGRESSION
+              -> BETTER RULES -> BETTER HARDWARE DOG
+```
+
+No mandatory cloud: users choose to contribute an incident. Hardware Dog
+learns in the engineering sense, more reproducible cases, more tests,
+better diagnoses. AI, if ever, comes last and only explains:
+
+```text
+FACTS + CORRELATIONS + RULE RESULTS -> OPTIONAL LOCAL AI -> HUMAN EXPLANATION
+```
+
+Never `raw signals -> AI guess -> trust me bro`.
 
 ### Not now
 
 ```text
-advanced Bluetooth diagnostics     CAN bus           JTAG / SWD debugger
-full USB-PD analyzer               oscilloscope      16-channel logic analyzer
-USB packet analyzer                advanced packet analyzer     AI everywhere
+advanced Bluetooth diagnostics     CAN bus (until LVL 90 probes)
+JTAG / SWD debugger                full USB-PD analyzer
+oscilloscope                       16-channel logic analyzer
+USB packet analyzer                AI everywhere
 ```
 
 Otherwise Hardware Dog becomes a Frankenstein before it has an identity.
@@ -632,6 +861,8 @@ and are not granted for unrestricted third-party branding or resale.
 ## CHANGELOG
 
 ```text
+0.5   laws of the project (LAWS.md); roadmap by level, LVL 40 to MAX LVL;
+      LVL 40 closed: hostile-file limits, compatibility rule, v1 fixture
 0.4   milestone EVIDENCE INTEGRITY + CASES (section 1): .hdlog v2 with
       provenance, sealed hash chain and footer; recovery and snapshots;
       cases as regression tests
