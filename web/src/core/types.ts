@@ -27,7 +27,7 @@ export type CheckStatus = 'PASS' | 'WARN' | 'FAIL' | 'PENDING' | 'UNKNOWN';
 
 export type LinkState = 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'LOST';
 
-export type TransportKind = 'SIMULATOR' | 'WEB SERIAL';
+export type TransportKind = 'SIMULATOR' | 'WEB SERIAL' | 'REPLAY';
 
 export interface DeviceInfo {
   id: string;
@@ -169,6 +169,15 @@ export interface Settings {
   overcurrentThreshold: number;
   correlationWindowMs: number;
 }
+
+/** The settings a diagnosis depends on. */
+export type Thresholds = Pick<Settings, 'undervoltageThreshold' | 'overcurrentThreshold' | 'correlationWindowMs'>;
+
+export const thresholdsOf = (s: Settings): Thresholds => ({
+  undervoltageThreshold: s.undervoltageThreshold,
+  overcurrentThreshold: s.overcurrentThreshold,
+  correlationWindowMs: s.correlationWindowMs,
+});
 
 export const DEFAULT_SETTINGS: Settings = {
   sound: false,
