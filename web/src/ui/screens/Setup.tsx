@@ -8,6 +8,8 @@ import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from '../../core/scenarios';
 import { bytes } from '../../core/format';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
+import type { ComponentChildren } from 'preact';
+import { IntegrityTag } from '../components/IntegrityTag';
 import { SessionsPanel, type SessionsPanelProps } from '../components/SessionsPanel';
 import { Tag } from '../components/Tag';
 import { beep } from '../sound';
@@ -64,7 +66,7 @@ function NumberField(props: { id: string; label: string; unit: string; value: nu
 
 function sourceCell(system: System) {
   const r = system.replayOf;
-  if (r) return <Tag status="INFO" label={`REPLAY ${r.id} / ${r.source}${r.scenario ? ` ${r.scenario}` : ''}`} />;
+  if (r) return <Tag status={r.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`REPLAY OF ${r.origin} / ${r.id}${r.scenario ? ` ${r.scenario}` : ''}`} />;
   if (system.transportKind === 'SIMULATOR') return <Tag status="WARN" label="SIMULATOR" />;
   return system.transportKind ?? 'NONE';
 }
@@ -96,9 +98,17 @@ export function Setup({ system, scenario, onSwitch, sessions, recording }: Setup
               ['PROTOCOL', `v${PROTOCOL_VERSION} / NDJSON`],
               ['FRAME ERRORS', String(system.frameErrors)],
               ['RECORDING', recordingCell(system, recording)],
+              ...(system.replayIntegrity ? ([['INTEGRITY', <IntegrityTag status={system.replayIntegrity.status} />]] as [string, ComponentChildren][]) : []),
               ...(system.recordedThresholds ? ([['THRESHOLDS', 'AS RECORDED']] as [string, string][]) : []),
             ]}
           />
+          {system.replayIntegrity && system.replayIntegrity.problems.length > 0 && (
+            <ul class="note warn" role="alert">
+              {system.replayIntegrity.problems.slice(0, 8).map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          )}
           <div class="actions">
             <button class={`btn ${system.transportKind === 'SIMULATOR' ? 'active' : ''}`} onClick={() => onSwitch('SIMULATOR')}>
               USE SIMULATOR

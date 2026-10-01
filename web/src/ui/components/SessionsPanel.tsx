@@ -20,6 +20,14 @@ export interface SessionsPanelProps {
   onOpen: (file: File) => void;
 }
 
+/** How the file stands: still recording, finalized (with its hash), or not. */
+function sealState(m: SessionMeta, active: boolean): string {
+  if (m.header.hdlog !== 2) return 'HDLOG V1 / NO INTEGRITY DATA';
+  if (active) return 'RECORDING / SEALED EVERY 2 S';
+  if (m.closed && m.fileSha256) return `${m.closed === 'NORMAL' ? 'FINALIZED' : 'RECOVERED'} / SHA-256 ${m.fileSha256.slice(0, 16)}…`;
+  return 'NOT CLOSED / RECOVERED ON NEXT START';
+}
+
 /** "POWER_INSTABILITY:HIGH" -> "POWER INSTABILITY HIGH" */
 const finding = (d: string) => d.replace(/_/g, ' ').replace(':', ' ');
 
@@ -65,6 +73,7 @@ export function SessionsPanel({ list, activeKey, persistent, message, onReplay, 
                   {clockShort(h.startedAt)} / {duration(m.lastAt - h.startedAt)} / {m.entries.toLocaleString('en-US')} EVENTS / {bytes(m.bytes)}
                 </div>
                 <div class="session-findings">{m.diagnoses.length ? m.diagnoses.map(finding).join(' / ') : 'NO FINDINGS'}</div>
+                <div class="dim">{sealState(m, active)}</div>
                 <div class="actions">
                   <button class="btn" onClick={() => onReplay(m.key)} disabled={active} title={active ? 'Recording now' : 'Replay, read-only'}>
                     REPLAY
@@ -115,8 +124,9 @@ export function SessionsPanel({ list, activeKey, persistent, message, onReplay, 
         </p>
       )}
       <p class="note">
-        Live sessions are recorded in this browser only. The latest {SIM_RETENTION} simulator sessions are kept; sessions from real hardware are
-        never deleted automatically. A replay goes through the same decoder and rules as a live device, and is read-only.
+        <strong>DON'T SEND A SCREENSHOT. SEND THE .HDLOG.</strong> Live sessions are recorded in this browser only. The latest {SIM_RETENTION} simulator sessions are kept; sessions from real hardware are
+        never deleted automatically. A replay goes through the same decoder and rules as a live device, and is read-only. Every file is sealed with
+        SHA-256 hashes: any byte changed afterwards is reported as MODIFIED.
       </p>
     </Panel>
   );
