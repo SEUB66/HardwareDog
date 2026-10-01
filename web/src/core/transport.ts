@@ -9,6 +9,10 @@ export interface TransportSink {
   error(message: string, raw?: string): void;
   /** The link went away. Not called after a deliberate close(). */
   lost(reason: string): void;
+  /** An operator note carried by the source (recordings only). */
+  annotate?(text: string): void;
+  /** A finite source (a recording) has delivered everything. */
+  ended?(): void;
 }
 
 /**

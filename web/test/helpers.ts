@@ -3,6 +3,9 @@ import type { Transport, TransportSink } from '../src/core/transport';
 import { System, memoryStore } from '../src/core/system';
 import { SimulatedDevice } from '../src/core/simulator';
 import type { ScenarioId } from '../src/core/scenarios';
+import { SessionRecorder, newHeader } from '../src/core/session';
+import type { Settings } from '../src/core/types';
+import { thresholdsOf } from '../src/core/types';
 
 /** A transport whose frames are pushed by the test. */
 export class FakeTransport implements Transport {
@@ -63,3 +66,39 @@ export async function runScenario(scenario: ScenarioId, seed: number, sessionMs 
   }
   return { sys, sim, diagnoses: sys.evaluate(now) };
 }
+
+export const T0 = 1_759_000_000_000;
+
+/** Record a live simulator session through a System, as the app does. */
+export async function recordSession(
+  scenario: ScenarioId,
+  seconds: number,
+  options: { seed?: number; settings?: Partial<Settings>; everySecond?: () => void } = {},
+) {
+  let now = T0;
+  const store = memoryStore();
+  const sys = new System(store, () => now);
+  if (options.settings) sys.updateSettings(options.settings);
+  sys.recorder = new SessionRecorder(
+    newHeader({
+      id: 'HD-TEST',
+      startedAt: now,
+      source: 'SIMULATOR',
+      endpoint: 'test',
+      scenario,
+      app: 'test',
+      thresholds: thresholdsOf(sys.settings),
+    }),
+  );
+  const sim = new SimulatedDevice({ seed: options.seed ?? 4, manual: true, scenario });
+  await sys.boot(sim, () => {}, 0);
+  for (let k = 1; k <= seconds * 10; k++) {
+    sim.advance(100);
+    now = T0 + sim.uptime;
+    if (k % 10 === 0) options.everySecond?.();
+  }
+  sys.evaluate(now);
+  return { sys, recorder: sys.recorder, recording: sys.recorder.recording };
+}
+
+export const diagnosisKeys = (sys: System) => sys.diagnoses.map((d) => `${d.id}:${d.confidence}`);

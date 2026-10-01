@@ -43,7 +43,7 @@ export interface Report {
   findings: Finding[];
 }
 
-export function buildReport(sys: System, now = Date.now()): Report {
+export function buildReport(sys: System, now = sys.now()): Report {
   const p = sys.power;
   const u = sys.usb;
   const s = sys.serial;
@@ -159,8 +159,8 @@ export function buildReport(sys: System, now = Date.now()): Report {
     session: sessionId(sys.startedAt),
     device: sys.device.id,
     firmware: sys.device.firmware,
-    source: sys.transportKind ?? 'NONE',
-    simulated: sys.transportKind === 'SIMULATOR',
+    source: reportSource(sys),
+    simulated: sys.transportKind === 'SIMULATOR' || sys.replayOf?.source === 'SIMULATOR',
     startedAt: sys.startedAt,
     generatedAt: now,
     duration: duration(now - sys.startedAt),
@@ -168,6 +168,13 @@ export function buildReport(sys: System, now = Date.now()): Report {
     diagnoses,
     findings,
   };
+}
+
+/** A replay names what it replays: a recording keeps its origin. */
+function reportSource(sys: System): string {
+  const r = sys.replayOf;
+  if (!r) return sys.transportKind ?? 'NONE';
+  return `REPLAY of ${r.id} / ${r.source}${r.scenario ? ` ${r.scenario}` : ''}`;
 }
 
 const RULE = '--------------------------------';

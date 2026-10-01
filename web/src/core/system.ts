@@ -20,6 +20,9 @@ import type {
 import { DEFAULT_SETTINGS } from './types';
 import { hex, i2cAddress, milliamps, ms, volts } from './format';
 import type { Confidence, Diagnosis, DiagnosisId, SessionFacts } from './diagnostics';
+import type { HostCommand } from './protocol';
+import type { SessionHeader, SessionRecorder } from './session';
+import { ReplayTransport } from './session';
 import { FACT_LIMIT, NET_HISTORY, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
 
 /** Key/value persistence. Local only: nothing ever leaves the machine. */
@@ -172,6 +175,10 @@ export class System {
   facts: SessionFacts = emptyFacts();
   /** Current output of the diagnostic engine. */
   diagnoses: Diagnosis[] = [];
+  /** Records this session as it happens (.hdlog). Null for replays. */
+  recorder: SessionRecorder | null = null;
+  /** Header of the recording being replayed, if this session is a replay. */
+  replayOf: SessionHeader | null = null;
 
   private transport: Transport | null = null;
   private listeners = new Set<Listener>();
@@ -190,13 +197,18 @@ export class System {
   private lastDiagnosisAt = -Infinity;
   private reported = new Map<DiagnosisId, Confidence>();
 
+  /** The operator's own settings, as stored. A replay may run on others. */
+  private own: Settings;
+
   constructor(
     private readonly store: SettingsStore = memoryStore(),
-    private readonly now: () => number = Date.now,
+    /** Host clock. A replay passes the recording's clock. */
+    readonly now: () => number = Date.now,
   ) {
     this.startedAt = this.now();
-    this.settings = { ...DEFAULT_SETTINGS, ...(store.load() ?? {}) };
-    this.storageOk = store.save(this.settings);
+    this.own = { ...DEFAULT_SETTINGS, ...(store.load() ?? {}) };
+    this.settings = { ...this.own };
+    this.storageOk = store.save(this.own);
   }
 
   // ------------------------------------------------------------ subscription
@@ -276,14 +288,30 @@ export class System {
     this.transportKind = transport.kind;
     this.transportLabel = transport.label;
     this.link = 'CONNECTING';
+    this.replayOf = transport instanceof ReplayTransport ? transport.recording.header : null;
+    // Same thresholds as when it was recorded, or the diagnosis could differ.
+    if (this.replayOf?.thresholds) this.settings = { ...this.settings, ...this.replayOf.thresholds };
     this.changed();
     try {
       await transport.open({
-        frame: (f) => this.onFrame(f),
-        error: (message, raw) => this.onFrameError(message, raw),
-        lost: (reason) => this.onLost(reason),
+        frame: (f) => {
+          this.recorder?.add({ at: this.now(), frame: f });
+          this.onFrame(f);
+        },
+        error: (message, raw) => {
+          this.recorder?.add(raw === undefined ? { at: this.now(), reject: message } : { at: this.now(), reject: message, raw });
+          this.onFrameError(message, raw);
+        },
+        lost: (reason) => {
+          this.recorder?.add({ at: this.now(), lost: reason });
+          this.onLost(reason);
+        },
+        annotate: (text) => this.mark(text),
+        ended: () => this.onReplayEnded(),
       });
+      if (this.link !== 'CONNECTING') return true; // a replay may already have ended
       this.transportLabel = transport.label;
+      if (this.recorder) this.recorder.header.endpoint = transport.label;
       this.link = 'ONLINE';
       this.log(this.now(), 'SYS', 'PASS', `link up: ${transport.kind}`, transport.label);
       this.changed();
@@ -329,6 +357,16 @@ export class System {
     this.suppressedFrameErrors = 0;
     this.lastFrameErrorLogAt = t;
     this.log(t, 'SYS', 'WARN', message + extra, raw ? raw.slice(0, 60) : undefined);
+    this.changed();
+  }
+
+  /** A recording has been fully played: final diagnosis, link closed. */
+  private onReplayEnded(): void {
+    const t = this.now();
+    this.transport = null;
+    if (this.link !== 'LOST') this.link = 'OFFLINE';
+    this.evaluate(t);
+    this.log(t, 'SYS', 'INFO', 'replay ended', this.replayOf ? `${this.replayOf.id} / ${this.replayOf.source}` : undefined);
     this.changed();
   }
 
@@ -665,6 +703,7 @@ export class System {
 
   private requireLink(action: string): string | null {
     if (this.online) return null;
+    if (this.transportKind === 'REPLAY') return `${action}: recorded session, read-only`;
     const msg = `${action}: no device link (${this.link})`;
     this.log(this.now(), 'SYS', 'WARN', msg);
     this.changed();
@@ -692,7 +731,14 @@ export class System {
     this.changed();
   }
 
+  /** Send a command to the device and record it. */
+  private send(cmd: HostCommand): void {
+    this.transport!.send(cmd);
+    this.recorder?.add({ at: this.now(), cmd });
+  }
+
   mark(text: string): void {
+    this.recorder?.add({ at: this.now(), mark: text });
     this.log(this.now(), 'USER', 'INFO', `mark: ${text}`);
     this.changed();
   }
@@ -701,7 +747,7 @@ export class System {
   enumerateUsb(): string | null {
     const err = this.requireLink('usb enumerate');
     if (err) return err;
-    this.transport!.send({ cmd: 'usb.enumerate' });
+    this.send({ cmd: 'usb.enumerate' });
     this.log(this.now(), 'USER', 'INFO', 'usb enumerate requested');
     this.changed();
     return null;
@@ -711,7 +757,7 @@ export class System {
     if (!Number.isInteger(baud) || baud < 300 || baud > 4_000_000) return `invalid baud rate: ${baud}`;
     const err = this.requireLink('serial config');
     if (err) return err;
-    this.transport!.send({ cmd: 'uart.config', baud });
+    this.send({ cmd: 'uart.config', baud });
     this.log(this.now(), 'USER', 'INFO', `serial baud -> ${baud}`);
     this.framingErrorTimes = [];
     this.changed();
@@ -722,7 +768,7 @@ export class System {
     const err = this.requireLink('serial send');
     if (err) return err;
     const t = this.now();
-    this.transport!.send({ cmd: 'uart.tx', data: text });
+    this.send({ cmd: 'uart.tx', data: text });
     this.serial.txBytes += utf8Length(text) + 1;
     this.pushSerial({ t, dir: 'TX', text });
     this.log(t, 'USER', 'INFO', `uart tx: ${text}`);
@@ -734,7 +780,7 @@ export class System {
     const err = this.requireLink('i2c scan');
     if (err) return err;
     this.bus.state = 'SCANNING';
-    this.transport!.send({ cmd: 'i2c.scan' });
+    this.send({ cmd: 'i2c.scan' });
     this.log(this.now(), 'USER', 'INFO', 'i2c scan requested', 'ACTIVE: address probe 0x08-0x77');
     this.changed();
     return null;
@@ -743,7 +789,7 @@ export class System {
   refreshNet(): string | null {
     const err = this.requireLink('net refresh');
     if (err) return err;
-    this.transport!.send({ cmd: 'net.refresh' });
+    this.send({ cmd: 'net.refresh' });
     this.changed();
     return null;
   }
@@ -765,15 +811,21 @@ export class System {
     };
     this.probes.unshift(run);
     if (this.probes.length > 20) this.probes.length = 20;
-    this.transport!.send({ cmd: 'probe', id: run.id, target: clean, tests: run.tests });
+    this.send({ cmd: 'probe', id: run.id, target: clean, tests: run.tests });
     this.log(run.startedAt, 'USER', 'INFO', `probe ${clean}`, `ACTIVE: ${run.tests.join(' ')}`);
     this.changed();
     return run;
   }
 
   updateSettings(patch: Partial<Settings>): void {
+    this.own = { ...this.own, ...patch };
     this.settings = { ...this.settings, ...patch };
-    this.storageOk = this.store.save(this.settings);
+    this.storageOk = this.store.save(this.own);
     this.changed();
+  }
+
+  /** True when a replay runs on the thresholds it was recorded with. */
+  get recordedThresholds(): boolean {
+    return this.replayOf?.thresholds !== undefined;
   }
 }
