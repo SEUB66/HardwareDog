@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { SIM_RETENTION, SessionArchive, idbBackend, memoryBackend, type ArchiveBackend } from '../src/core/archive';
-import { ReplayTransport, SessionRecorder, newHeader, toHdlog } from '../src/core/session';
+import { ReplayTransport, SessionRecorder, newHeader, parseHdlog } from '../src/core/session';
+import { sha256 } from '../src/core/sha256';
 import { System, memoryStore } from '../src/core/system';
 import { T0, diagnosisKeys, recordSession } from './helpers';
 
@@ -24,7 +25,7 @@ async function archived(archive: SessionArchive, startedAt: number, source: 'SIM
 }
 
 describe.each(backends)('session archive (%s)', (_, backend) => {
-  it('streams a live session to storage and exports it byte for byte', async () => {
+  it('streams a live session to storage, sealed, and finalizes it on stop', async () => {
     const archive = new SessionArchive(await backend());
     const live = await recordSession('HD-T005', 30);
     // Stream the session again, flushing as the app does while it runs.
@@ -37,10 +38,15 @@ describe.each(backends)('session archive (%s)', (_, backend) => {
     await writer.stop();
 
     const text = await archive.text(writer.meta.key);
-    expect(text).toBe(toHdlog(live.recording));
+    const file = parseHdlog(text);
+    expect(file.integrity!.status).toBe('VERIFIED');
+    expect(file.integrity!.footer!.seals).toBeGreaterThanOrEqual(4); // one per flush with data
+    expect(file.entries).toEqual(live.recording.entries);
     const [meta] = await archive.list();
     expect(meta!.entries).toBe(live.recording.entries.length);
     expect(meta!.bytes).toBe(new TextEncoder().encode(text).length);
+    expect(meta!.closed).toBe('NORMAL');
+    expect(meta!.fileSha256).toBe(sha256(text));
     expect(meta!.diagnoses).toEqual(diagnosisKeys(live.sys));
     expect(meta!.diagnoses.some((d) => d.startsWith('USB_INTERMITTENT'))).toBe(true);
   });
@@ -69,19 +75,51 @@ describe.each(backends)('session archive (%s)', (_, backend) => {
       void writer.flush(); // never awaited: the queue orders them
     }
     await writer.stop();
-    expect(await archive.text(writer.meta.key)).toBe(toHdlog(rec.recording));
+    const file = parseHdlog(await archive.text(writer.meta.key));
+    expect(file.integrity!.status).toBe('VERIFIED');
+    expect(file.entries).toEqual(rec.entries);
   });
 
-  it('measures the file again when the endpoint label changes', async () => {
+  it('recovers a session that was never closed, keeping only sealed lines', async () => {
     const archive = new SessionArchive(await backend());
     const rec = new SessionRecorder(header(T0, 'WEB SERIAL'));
     const writer = archive.record(rec, undefined, { flushMs: null });
-    rec.header.endpoint = 'USB CDC 303A:1001'; // known only once the port is open
-    rec.add({ at: T0, mark: 'a' });
-    await writer.stop();
+    for (let k = 0; k < 10; k++) rec.add({ at: T0 + k, mark: `m${k}` });
+    await writer.flush();
+    rec.add({ at: T0 + 99, mark: 'never sealed' }); // the tab closes here
+    const before = await archive.text(writer.meta.key);
+    expect(parseHdlog(before).integrity!.status).toBe('INCOMPLETE');
+
+    expect(await archive.recover([writer.meta.key])).toEqual([]); // still recording: untouched
+    expect(await archive.recover()).toEqual([writer.meta.key]);
     const text = await archive.text(writer.meta.key);
-    expect(text.startsWith(JSON.stringify(rec.header))).toBe(true);
-    expect((await archive.list())[0]!.bytes).toBe(new TextEncoder().encode(text).length);
+    const file = parseHdlog(text);
+    expect(file.integrity!.status).toBe('RECOVERED');
+    expect(file.entries).toHaveLength(10);
+    expect(text.startsWith(before)).toBe(true); // sealed bytes untouched
+    const [meta] = await archive.list();
+    expect(meta!.closed).toBe('RECOVERED');
+    expect(meta!.fileSha256).toBe(sha256(text));
+    expect(await archive.recover()).toEqual([]); // once
+  });
+
+  it('exports a live session as a verifiable SNAPSHOT while it keeps recording', async () => {
+    const archive = new SessionArchive(await backend());
+    const rec = new SessionRecorder(header(T0, 'WEB SERIAL'));
+    const writer = archive.record(rec, undefined, { flushMs: null });
+    for (let k = 0; k < 6; k++) rec.add({ at: T0 + k, mark: `m${k}` });
+    await writer.flush();
+    rec.add({ at: T0 + 6, mark: 'pending at export time' });
+    const snap = parseHdlog(await archive.snapshotText(writer));
+    expect(snap.integrity!.status).toBe('VERIFIED');
+    expect(snap.integrity!.footer!.closed).toBe('SNAPSHOT');
+    expect(snap.entries).toHaveLength(7);
+    for (let k = 7; k < 12; k++) rec.add({ at: T0 + k, mark: `m${k}` });
+    await writer.stop();
+    const full = parseHdlog(await archive.text(writer.meta.key));
+    expect(full.integrity!.status).toBe('VERIFIED');
+    expect(full.integrity!.footer!.closed).toBe('NORMAL');
+    expect(full.entries).toHaveLength(12);
   });
 
   it('lists a session from its first second, before any entry', async () => {
@@ -121,7 +159,7 @@ describe.each(backends)('session archive (%s)', (_, backend) => {
     await archive.remove(a);
     expect((await archive.list()).map((m) => m.key)).toEqual([b]);
     expect(await archive.backend.chunks(a)).toEqual([]);
-    expect((await archive.text(b)).split('\n').filter(Boolean)).toHaveLength(6);
+    expect(parseHdlog(await archive.text(b)).entries).toHaveLength(5);
     await expect(archive.text(a)).rejects.toThrow(/no archived session/);
   });
 });

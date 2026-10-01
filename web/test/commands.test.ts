@@ -37,6 +37,8 @@ describe('session', () => {
     bytes: 90_000,
     lastAt: T0 + 42_000,
     diagnoses,
+    closed: 'NORMAL',
+    fileSha256: null,
   });
 
   it('lists, replays and exports recorded sessions through the context', async () => {

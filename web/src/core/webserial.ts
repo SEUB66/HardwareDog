@@ -34,6 +34,14 @@ const LINK_BAUD = 115200;
  * Talks to real Hardware Dog firmware over USB CDC using Web Serial.
  * Requires a Chromium-based browser and a user gesture to pick the port.
  */
+/** "USB CDC 303A:1001". Known as soon as the port is picked, before it opens. */
+function portLabel(port: SerialPortLike): string {
+  const info = port.getInfo();
+  if (info.usbVendorId === undefined || info.usbProductId === undefined) return 'WEB SERIAL';
+  const h = (n: number) => n.toString(16).toUpperCase().padStart(4, '0');
+  return `USB CDC ${h(info.usbVendorId)}:${h(info.usbProductId)}`;
+}
+
 export class WebSerialTransport implements Transport {
   readonly kind = 'WEB SERIAL' as const;
   label = 'WEB SERIAL';
@@ -53,17 +61,13 @@ export class WebSerialTransport implements Transport {
     if (!api) throw new Error('Web Serial is not available in this browser');
     const t = new WebSerialTransport();
     t.port = await api.requestPort();
+    t.label = portLabel(t.port);
     return t;
   }
 
   async open(sink: TransportSink): Promise<void> {
     if (!this.port) throw new Error('no serial port selected');
     await this.port.open({ baudRate: LINK_BAUD });
-    const info = this.port.getInfo();
-    if (info.usbVendorId !== undefined && info.usbProductId !== undefined) {
-      const h = (n: number) => n.toString(16).toUpperCase().padStart(4, '0');
-      this.label = `USB CDC ${h(info.usbVendorId)}:${h(info.usbProductId)}`;
-    }
     if (!this.port.readable || !this.port.writable) throw new Error('serial port opened without streams');
     this.writer = this.port.writable.getWriter();
     this.reader = this.port.readable.getReader();
