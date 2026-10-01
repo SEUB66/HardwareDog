@@ -1,0 +1,44 @@
+name: dogd
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'dogd/**'
+      - 'web/**'
+      - 'cases/**'
+      - '.github/workflows/dogd.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: format
+        working-directory: dogd
+        run: cargo fmt --check
+      - name: lint
+        working-directory: dogd
+        run: cargo clippy --all-targets -- -D warnings
+      - name: unit tests
+        working-directory: dogd
+        run: cargo test
+      - name: build
+        working-directory: dogd
+        run: cargo build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: install interface
+        working-directory: web
+        run: npm ci
+      # LVL 55 gate: the interface through a real dogd == the interface direct.
+      - name: dogd is transparent
+        working-directory: web
+        run: DOGD_BIN="$GITHUB_WORKSPACE/dogd/target/debug/dogd" npx vitest run test/dogd.test.ts
