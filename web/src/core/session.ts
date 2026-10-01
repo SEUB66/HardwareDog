@@ -35,11 +35,11 @@ import { PROTOCOL_VERSION } from './protocol';
 import { Sha256, sha256 } from './sha256';
 import type { Transport, TransportSink } from './transport';
 import { createLineDecoder } from './transport';
-import type { Thresholds, TransportKind } from './types';
+import type { Origin, Thresholds, TransportKind } from './types';
 
 export const HDLOG_VERSION = 2;
 
-export type Origin = 'PHYSICAL' | 'SIMULATED';
+export type { Origin };
 
 export interface SessionHeader {
   hdlog: number;
@@ -51,7 +51,7 @@ export interface SessionHeader {
   startedAt: number;
   /** Real hardware or the simulator. Set once, never rewritten. */
   origin: Origin;
-  /** The transport the events came through. */
+  /** The transport the events came through (DOGD: through the local daemon). */
   source: Exclude<TransportKind, 'REPLAY'>;
   endpoint: string;
   /** Simulator fault scenario, when the origin is SIMULATED. */
@@ -143,15 +143,23 @@ export function newRecordingId(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+/** Origin a source implies; dogd says it per link (a TCP source can be a simulator). */
+function originOf(source: SessionHeader['source'], declared?: Origin): Origin {
+  if (source === 'SIMULATOR') return 'SIMULATED';
+  if (source === 'WEB SERIAL') return 'PHYSICAL';
+  if (!declared) throw new Error('a DOGD recording needs the origin dogd reports');
+  return declared;
+}
+
 export const newHeader = (
-  fields: Omit<SessionHeader, 'hdlog' | 'proto' | 'recording' | 'origin' | 'ruleset'> & { recording?: string },
+  fields: Omit<SessionHeader, 'hdlog' | 'proto' | 'recording' | 'origin' | 'ruleset'> & { recording?: string; origin?: Origin },
 ): SessionHeader => ({
   hdlog: HDLOG_VERSION,
   proto: PROTOCOL_VERSION,
   recording: fields.recording ?? newRecordingId(),
   id: fields.id,
   startedAt: fields.startedAt,
-  origin: fields.source === 'SIMULATOR' ? 'SIMULATED' : 'PHYSICAL',
+  origin: originOf(fields.source, fields.origin),
   source: fields.source,
   endpoint: fields.endpoint,
   scenario: fields.scenario,
@@ -362,8 +370,9 @@ function readHeader(line: string): SessionHeader {
   if (typeof header['startedAt'] !== 'number' || !Number.isFinite(header['startedAt']) || header['startedAt'] < 0) throw new HdlogError('line 1: header field "startedAt" missing');
   if (header['proto'] !== undefined && !Number.isInteger(header['proto'])) throw new HdlogError('line 1: header field "proto" malformed');
   if (header['thresholds'] !== undefined) checkThresholds(header['thresholds'], 'line 1');
-  if (header['source'] !== 'SIMULATOR' && header['source'] !== 'WEB SERIAL') throw new HdlogError('line 1: unknown source');
-  const derived: Origin = header['source'] === 'SIMULATOR' ? 'SIMULATED' : 'PHYSICAL';
+  if (header['source'] !== 'SIMULATOR' && header['source'] !== 'WEB SERIAL' && header['source'] !== 'DOGD') throw new HdlogError('line 1: unknown source');
+  // Through dogd either origin is possible: dogd reports it per link.
+  const derived: Origin = header['source'] === 'SIMULATOR' ? 'SIMULATED' : header['source'] === 'DOGD' ? (header['origin'] as Origin) : 'PHYSICAL';
   if (header['hdlog'] === 1) {
     // v1 had no explicit origin: it follows from the source.
     return { ...(header as object), origin: derived, recording: '', ruleset: 0, scenario: (header['scenario'] as string | null) ?? null } as SessionHeader;
@@ -524,6 +533,10 @@ export interface ReplayOptions {
 export class ReplayTransport implements Transport {
   readonly kind = 'REPLAY' as const;
   readonly label: string;
+  /** A replay is not an origin: the recording keeps its own. */
+  get origin(): Origin {
+    return this.recording.header.origin;
+  }
   /** Host time of the entry being played: the System uses it as "now". */
   clock: number;
 

@@ -97,8 +97,8 @@ export function Status({ system }: { system: System }) {
                 'SOURCE',
                 system.replayOf ? (
                   <Tag status={system.replayOf.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`REPLAY OF ${system.replayOf.origin}`} />
-                ) : system.transportKind === 'SIMULATOR' ? (
-                  <Tag status="WARN" label="SIMULATOR" />
+                ) : system.origin === 'SIMULATED' ? (
+                  <Tag status="WARN" label={system.transportKind === 'DOGD' ? 'DOGD / SIMULATED' : 'SIMULATOR'} />
                 ) : (
                   (system.transportKind ?? 'NONE')
                 ),

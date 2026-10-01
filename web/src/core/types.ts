@@ -29,7 +29,10 @@ export type CheckStatus = 'PASS' | 'WARN' | 'FAIL' | 'PENDING' | 'UNKNOWN';
 
 export type LinkState = 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'LOST';
 
-export type TransportKind = 'SIMULATOR' | 'WEB SERIAL' | 'REPLAY';
+export type TransportKind = 'SIMULATOR' | 'WEB SERIAL' | 'REPLAY' | 'DOGD';
+
+/** Where evidence comes from: real hardware or the simulator. Never a transport. */
+export type Origin = 'PHYSICAL' | 'SIMULATED';
 
 export interface DeviceInfo {
   id: string;
