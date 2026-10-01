@@ -7,7 +7,7 @@ import { duration, sessionId } from '../core/format';
 import { buildReport, reportToText } from '../core/report';
 import { SimulatedDevice } from '../core/simulator';
 import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
-import { ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
+import { HDLOG_LIMITS, ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
 import { System, browserStore } from '../core/system';
 import type { Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
@@ -225,6 +225,8 @@ export function App({ archive }: { archive: SessionArchive }) {
 
   const openFile = async (file: File) => {
     try {
+      // Refuse an oversized file before reading it into memory.
+      if (file.size > HDLOG_LIMITS.maxBytes) throw new Error(`larger than ${HDLOG_LIMITS.maxBytes / 1024 / 1024} MiB`);
       replay(parseHdlog(await file.text()));
     } catch (e) {
       setSessionMessage(`${file.name}: ${e instanceof Error ? e.message : String(e)}`);

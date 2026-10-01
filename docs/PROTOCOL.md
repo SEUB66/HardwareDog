@@ -279,6 +279,35 @@ not change since they were sealed. It does not prove who wrote them: anyone
 can write a new file and hash it. Signing recordings with a key held by the
 device is planned with the firmware.
 
+### compatibility
+
+```text
+[ 1 ] Every hdlog version is read forever. v1 files open as UNVERIFIED.
+[ 2 ] Files are never migrated or rewritten: the bytes that were sealed
+      are the evidence. A newer reader understands an older file as is.
+[ 3 ] A file from a newer Hardware Dog is refused with a plain message:
+      "hdlog v3 was written by a newer Hardware Dog".
+[ 4 ] Readers ignore keys they do not know: a newer writer may add
+      fields without breaking older readers.
+[ 5 ] Proof: web/test/fixtures/hdlog-v1.hdlog (written by an earlier
+      build) and cases/*.hdlog must open and replay on every commit.
+```
+
+### limits
+
+Files come from anyone. A reader refuses, with a reason and a line number,
+anything that could exhaust the browser or reach the engine malformed:
+
+```text
+FILE         256 MiB at most (about 15 h of a live session)
+LINE         128 KiB at most (an HDP frame is at most 64 KiB)
+TEXT         header fields 256 characters, marks 1000 characters
+THRESHOLDS   the ranges SETUP accepts (UV 3-5.5 V, OC 0.05-5 A,
+             window 10-2000 ms)
+ENTRIES      frame / cmd are objects, reject / mark / lost are text;
+             frame content is validated by the HDP decoder at replay
+```
+
 ### replay rules
 
 ```text
