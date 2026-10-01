@@ -34,3 +34,12 @@ export function useNow(period = 1000): number {
   }, [period]);
   return now;
 }
+
+/**
+ * The system's clock, refreshed every `period` ms. Live, it is wall-clock
+ * time; in a replay, it is the time of the recording.
+ */
+export function useClock(system: System, period = 1000): number {
+  useNow(period);
+  return system.now();
+}

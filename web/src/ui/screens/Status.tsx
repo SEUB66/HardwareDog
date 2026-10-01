@@ -5,11 +5,11 @@ import { ErrorBlock } from '../components/ErrorBlock';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
-import { useNow } from '../hooks';
+import { useClock } from '../hooks';
 
 /** What is happening right now? (spec 12) */
 export function Status({ system }: { system: System }) {
-  const now = useNow();
+  const now = useClock(system);
   const { device, power, usb, net, serial, bus } = system;
   const recent = system.trace.all().slice(-8).reverse();
   const powerTag =
@@ -29,7 +29,14 @@ export function Status({ system }: { system: System }) {
               ['REV', device.rev],
               ['FIRMWARE', device.firmware],
               ['UPTIME', device.bootedAt === null ? '--' : duration(now - device.bootedAt)],
-              ['STATE', <Tag status={system.link === 'ONLINE' ? 'PASS' : system.link === 'LOST' ? 'FAIL' : 'UNKNOWN'} label={system.link} />],
+              [
+                'STATE',
+                system.replayOf ? (
+                  <Tag status="UNKNOWN" label={system.link === 'LOST' ? 'RECORDED, LINK LOST' : 'RECORDED'} />
+                ) : (
+                  <Tag status={system.link === 'ONLINE' ? 'PASS' : system.link === 'LOST' ? 'FAIL' : 'UNKNOWN'} label={system.link} />
+                ),
+              ],
             ]}
           />
         </Panel>
@@ -86,7 +93,16 @@ export function Status({ system }: { system: System }) {
               ['MODE', 'LOCAL'],
               ['CLOUD', 'DISABLED'],
               ['DEVICE DATA', 'LOCAL ONLY'],
-              ['SOURCE', system.transportKind === 'SIMULATOR' ? <Tag status="WARN" label="SIMULATOR" /> : (system.transportKind ?? 'NONE')],
+              [
+                'SOURCE',
+                system.replayOf ? (
+                  <Tag status={system.replayOf.source === 'SIMULATOR' ? 'WARN' : 'INFO'} label={`REPLAY OF ${system.replayOf.source}`} />
+                ) : system.transportKind === 'SIMULATOR' ? (
+                  <Tag status="WARN" label="SIMULATOR" />
+                ) : (
+                  (system.transportKind ?? 'NONE')
+                ),
+              ],
               ['ENDPOINT', system.transportLabel || '--'],
               ['I2C', bus.lastScanAt ? `${bus.devices.length} device(s)` : 'not scanned'],
             ]}

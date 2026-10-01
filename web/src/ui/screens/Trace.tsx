@@ -54,7 +54,7 @@ export function Trace({ system, only }: { system: System; only?: Source[] | null
           {system.trace.paused ? (
             <Tag status="WARN" label={`PAUSED / ${system.trace.buffered} BUFFERED`} />
           ) : (
-            <Tag status="LIVE" label="LIVE" />
+            <Tag status="LIVE" label={system.replayOf ? 'RECORDED' : 'LIVE'} />
           )}
           <span class="dim">{`  ${system.trace.size} EVENTS`}</span>
         </span>
