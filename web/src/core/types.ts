@@ -40,6 +40,8 @@ export interface DeviceInfo {
   firmware: string;
   /** Host wall-clock time at which the device reported uptime 0. */
   bootedAt: number | null;
+  /** What it can observe (hello.caps); null = not declared = everything. */
+  caps: readonly string[] | null;
 }
 
 export interface PowerSample {

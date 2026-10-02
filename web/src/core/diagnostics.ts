@@ -24,7 +24,7 @@ import { clock, milliamps, ms, volts } from './format';
  * or a confidence definition changes: recordings carry the version they
  * were made with, and a replay on other rules says so.
  */
-export const RULESET_VERSION = 1;
+export const RULESET_VERSION = 2;
 
 export const DIAGNOSIS_IDS = [
   'POWER_INSTABILITY',
