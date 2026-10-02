@@ -88,6 +88,13 @@ export class SimulatedDevice implements Transport {
   private nextNetAt = 0;
   private nextChatterAt = 0;
   private resetting = false;
+  /** Network device powered by the rail (followsPower): where it is in its reboot. */
+  private netPhase: 'UP' | 'DOWN' | 'LINK' | 'DHCP' = 'UP';
+  /** Periodic I2C scan (i2c watch). 0 = off. */
+  private i2cWatchMs = 0;
+  private i2cTimer = 0;
+  /** The flaky device is off the bus until this time. */
+  private i2cAbsentUntil = -1;
 
   constructor(options: SimulatorOptions = {}) {
     this.rand = prng(options.seed ?? 0x0d06);
@@ -126,6 +133,11 @@ export class SimulatedDevice implements Transport {
     if (target.usbDrops) this.at(this.between(target.usbDrops.every), () => this.usbDrop());
     if (target.resetLoop) this.at(this.between(target.resetLoop.every), () => this.watchdogReset());
     if (target.spikes) this.at(this.between(target.spikes.every), () => this.spike());
+    const i2c = this.scenario.i2c;
+    if (i2c) {
+      this.setI2cWatch(i2c.watchMs);
+      if (i2c.flaky) this.at(this.between(i2c.flaky.every), () => this.i2cDrop());
+    }
     this.at(180, () => this.powerUp('rst:0x1 (POWERON)'));
     if (!this.manual) {
       this.startedAt = Date.now();
@@ -171,19 +183,14 @@ export class SimulatedDevice implements Transport {
         this.at(this.t + 12, () => this.targetSays(this.powered ? `? unknown command: ${cmd.data.trim()}` : ''));
         break;
       case 'i2c.scan':
-        this.at(this.t + 260, () =>
-          this.emit({
-            type: 'i2c.scan',
-            t: this.t,
-            speed: 400000,
-            devices: [
-              { addr: 0x3c, ident: null, method: null },
-              { addr: 0x40, ident: 'INA226', method: 'manufacturer ID register 0xFE = 0x5449' },
-              { addr: 0x52, ident: null, method: null },
-              { addr: 0x76, ident: 'BME280', method: 'chip ID register 0xD0 = 0x60' },
-            ],
-          }),
-        );
+        this.at(this.t + 260, () => this.emitScan());
+        break;
+      case 'i2c.watch':
+        this.setI2cWatch(cmd.every_ms);
+        break;
+      case 'net.watch':
+        // The simulated network is checked on every report already.
+        this.at(this.t + 30, () => this.emitNet());
         break;
       case 'net.refresh':
         this.at(this.t + 30, () => this.emitNet());
@@ -317,6 +324,47 @@ export class SimulatedDevice implements Transport {
     }
   }
 
+  private setI2cWatch(everyMs: number): void {
+    this.i2cWatchMs = everyMs >= 1000 ? everyMs : 0;
+    const timer = ++this.i2cTimer;
+    const tick = () => {
+      if (timer !== this.i2cTimer || this.i2cWatchMs === 0) return;
+      this.emitScan(true);
+      this.at(this.t + this.i2cWatchMs, tick);
+    };
+    if (this.i2cWatchMs) this.at(this.t + this.i2cWatchMs, tick);
+  }
+
+  /** One scan of the target bus: a stuck line is a bus fault, never an empty scan. */
+  private emitScan(periodic = false): void {
+    const fault = this.scenario.i2c?.fault;
+    if (fault) {
+      this.emit({ type: 'i2c.error', t: this.t, kind: fault.kind, detail: 'line low while the bus is idle', ...(periodic ? { every_ms: this.i2cWatchMs } : {}) });
+      return;
+    }
+    const flaky = this.scenario.i2c?.flaky;
+    const devices = [
+      { addr: 0x3c, ident: null, method: null },
+      { addr: 0x40, ident: 'INA226', method: 'manufacturer ID register 0xFE = 0x5449' },
+      { addr: 0x52, ident: null, method: null },
+      { addr: 0x76, ident: 'BME280', method: 'chip ID register 0xD0 = 0x60' },
+    ].filter((d) => !(flaky && d.addr === flaky.addr && this.t < this.i2cAbsentUntil));
+    this.emit({ type: 'i2c.scan', t: this.t, speed: 400000, devices, ...(periodic ? { every_ms: this.i2cWatchMs } : {}) });
+  }
+
+  /** The loose wire: the flaky device leaves the bus for a while. */
+  private i2cDrop(): void {
+    const flaky = this.scenario.i2c!.flaky!;
+    this.i2cAbsentUntil = this.t + this.between(flaky.outage);
+    this.at(this.t + this.between(flaky.every), () => this.i2cDrop());
+  }
+
+  /** The network device behind the port reboots with the rail: link, then DHCP, then DNS. */
+  private setNetPhase(phase: 'UP' | 'DOWN' | 'LINK' | 'DHCP'): void {
+    this.netPhase = phase;
+    this.emitNet();
+  }
+
   /** Target gets power and boots. */
   private powerUp(rst: string): void {
     this.powered = true;
@@ -343,6 +391,16 @@ export class SimulatedDevice implements Transport {
     if (this.usbConnected) {
       this.usbConnected = false;
       this.emit({ type: 'usb.detach', t: this.t });
+    }
+    if (this.scenario.net.followsPower && this.netPhase === 'UP') {
+      const down = 100 + Math.round(this.rand() * 300);
+      const link = down + 2500 + Math.round(this.rand() * 1500);
+      const dhcp = link + 900 + Math.round(this.rand() * 900);
+      const dns = dhcp + 300 + Math.round(this.rand() * 300);
+      this.at(this.t + down, () => this.setNetPhase('DOWN'));
+      this.at(this.t + link, () => this.setNetPhase('LINK'));
+      this.at(this.t + dhcp, () => this.setNetPhase('DHCP'));
+      this.at(this.t + dns, () => this.setNetPhase('UP'));
     }
     this.at(this.t + 1200 + Math.round(this.rand() * 600), () => this.powerUp('rst:0x1 (POWERON)'));
   }
@@ -416,7 +474,17 @@ export class SimulatedDevice implements Transport {
   }
 
   private emitNet(): void {
-    const n = this.scenario.net;
+    const phase = this.netPhase;
+    const base = this.scenario.net;
+    // While the network device reboots: link first, then DHCP, then DNS.
+    const n: Scenario['net'] =
+      phase === 'UP'
+        ? base
+        : phase === 'DOWN'
+          ? { ...base, link: false }
+          : phase === 'LINK'
+            ? { ...base, dhcp: 'PENDING', gateway: 'UNKNOWN', dns: 'UNKNOWN', internet: 'UNKNOWN' }
+            : { ...base, dns: 'PENDING', internet: 'UNKNOWN' };
     const up = n.link;
     const has = (st: CheckStatus) => st === 'PASS' || st === 'WARN';
     this.emit({

@@ -1,0 +1,46 @@
+{
+  "case": 1,
+  "id": "HD-C016",
+  "title": "I2C MISSING PULL-UP (simulator HD-T015)",
+  "recording": {
+    "file": "HD-C016.hdlog",
+    "sha256": "3d9b940b042afab8e97aa50760855937a37701531441f9c3278d2bead00f6fb8",
+    "recording": "088a3e58326bc41891473ed955fafb8e",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "The pull-up resistors of the target I2C bus are missing: SDA sits low, every scan fails.",
+    "hardware": "None: built-in simulator, scenario HD-T015, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 3,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "I2C_BUS_INSTABILITY",
+        "confidence": "HIGH",
+        "evidence": [
+          163,
+          316,
+          470,
+          623,
+          777,
+          930,
+          1083,
+          1236,
+          1390,
+          1542
+        ]
+      }
+    ]
+  }
+}

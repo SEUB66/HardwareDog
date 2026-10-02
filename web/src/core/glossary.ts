@@ -142,6 +142,16 @@ const TERMS: Record<string, string> = {
   'METER/BASIS': 'Where the error figures come from: worst case from the datasheets, or measured against a named reference instrument.',
   'METER/CAL POINTS': 'Comparisons with the reference waiting to be fitted: meter cal "<reference>" in the command palette.',
 
+  // I2C watch
+  'BUS/WATCH': 'Periodic scan of the target bus (ACTIVE). Only changes go on the timeline: a device that stops answering, or comes back.',
+  'BUS/SCANS': 'Scans of the target bus this session. SEEN in the device list counts how many of them each address answered.',
+  'BUS/FAULTS': 'Bus faults reported by the device: a line stuck low while idle (missing pull-up, a device holding it) or transfers that fail.',
+
+  // Network watch
+  'WATCH/EVERY': 'How often the device checks the network (ACTIVE).',
+  'WATCH/DNS NAME': 'The name the device resolves at each check. DNS PASS means this name resolved.',
+  'WATCH/UPSTREAM': 'A host beyond the gateway the device opens a TCP connection to (port 443). INTERNET PASS means it answered.',
+
   // Trace columns
   'TRACE/TIME': 'When it happened, on the one clock shared by every source (hh:mm:ss.mmm).',
   'TRACE/SOURCE': 'Who produced the event: POWER, USB, UART, I2C, NET, a RULE, Hardware Dog itself (SYS) or you (USER).',
@@ -210,6 +220,10 @@ const STATUS: Record<string, string> = {
   'REPLAY OF SIMULATED': 'Replay of a recording made with simulated data, not a real device.',
   'REPLAY OF PHYSICAL': 'Replay of a recording made on a real device.',
   'DOGD / SIMULATED': 'Data through dogd, from a simulated source: not a real device.',
+  GONE: 'Answered an earlier scan, not the last one.',
+  'AFTER DROP': 'The link went down within seconds of a voltage drop.',
+  'AFTER RESET': 'The link went down within seconds of a target reset.',
+  'NO CAUSE SEEN': 'Nothing recorded just before the link loss explains it.',
   LOW: 'Few matching events: a lead, not a conclusion.',
   MEDIUM: 'Several matching events: likely, still to confirm.',
   HIGH: 'Most events match the pattern: strong lead. Still confirm with the next check.',
@@ -246,6 +260,8 @@ const PANELS: Record<string, string> = {
   RESULTS: 'Result of each probe, newest first.',
   INTERFACE: 'How this interface looks and sounds. Stored in this browser.',
   MEASUREMENT: 'What the power numbers are worth: sensor, range, resolution, rate and expected error. Diagnostic measurement, not certified metrology.',
+  WATCH: 'Periodic network checks by the device (ACTIVE): ping the gateway, resolve a name, reach a host beyond the gateway. Nothing runs until you start it.',
+  OUTAGES: 'Every loss of the network link this session, what came just before it (a voltage drop, a target reset), and how long the way back took: link, DHCP, DNS.',
   'SIMULATOR SCENARIO': 'Made-up data to try the interface without hardware. Always labeled SIMULATED.',
 };
 

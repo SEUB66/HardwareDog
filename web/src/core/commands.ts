@@ -44,6 +44,8 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'watch <power|usb|serial|bus|net>', summary: 'open a view and resume the trace' },
   { usage: 'probe net <target> [ping dns tcp http]', summary: 'ACTIVE: run network tests' },
   { usage: 'probe i2c', summary: 'ACTIVE: scan the I2C bus' },
+  { usage: 'i2c watch <seconds|off>', summary: 'ACTIVE: scan the I2C bus periodically, log what changes' },
+  { usage: 'net watch <seconds|off> [dns-name] [upstream-host]', summary: 'ACTIVE: ping gateway, resolve, reach upstream, periodically' },
   { usage: 'usb enumerate', summary: 'ACTIVE: re-read USB descriptors' },
   { usage: 'serial <baud>', summary: 'set UART baud rate' },
   { usage: 'meter', summary: 'what the power numbers are worth: sensor, range, accuracy' },
@@ -172,6 +174,18 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
       if (typeof run === 'string') return fail(run);
       ctx.navigate('PROBE');
       return ok(`probe ${run.id} -> ${run.target}: ${run.tests.join(' ')}`);
+    }
+
+    case 'i2c': {
+      if (a0 !== 'watch' || !args[1]) return fail('usage: i2c watch <seconds|off>');
+      const sec = args[1].toLowerCase() === 'off' ? 0 : Number(args[1]);
+      return result(sys.watchI2c(sec), sec ? `i2c watch every ${sec} s (ACTIVE)` : 'i2c watch off');
+    }
+
+    case 'net': {
+      if (a0 !== 'watch' || !args[1]) return fail('usage: net watch <seconds|off> [dns-name] [upstream-host]');
+      const sec = args[1].toLowerCase() === 'off' ? 0 : Number(args[1]);
+      return result(sys.watchNet(sec, args[2], args[3]), sec ? `net watch every ${sec} s (ACTIVE)` : 'net watch off');
     }
 
     case 'usb':

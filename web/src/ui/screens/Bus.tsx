@@ -23,6 +23,11 @@ const ADDRESS_HINTS: Record<number, string> = {
 
 export function Bus({ system }: { system: System }) {
   const b = system.bus;
+  const scans = system.facts.i2c.scans;
+  // Every address seen in any scan: a device that left is still listed, as GONE.
+  const seen = [...new Set(scans.flatMap((x) => x.addresses))].sort((x, y) => x - y);
+  const answered = (a: number) => scans.filter((x) => x.addresses.includes(a)).length;
+  const lost = seen.filter((a) => !b.devices.some((d) => d.address === a));
   return (
     <>
       <h1 class="screen-title">
@@ -35,14 +40,29 @@ export function Bus({ system }: { system: System }) {
               ['SPEED', frequency(b.speedHz)],
               ['STATE', <Tag status={b.state === 'ACTIVE' ? 'LIVE' : b.state === 'FAULT' ? 'FAIL' : b.state === 'SCANNING' ? 'WARN' : 'UNKNOWN'} label={b.state} />],
               ['LAST SCAN', b.lastScanAt ? clock(b.lastScanAt) : '--'],
+              ['WATCH', b.watchMs ? <Tag status="LIVE" label={`EVERY ${b.watchMs / 1000} S`} /> : 'OFF'],
+              ['SCANS', String(scans.length)],
+              ['FAULTS', b.faults ? <Tag status="FAIL" label={`${b.faults} / ${b.lastFault?.kind ?? ''}`} /> : '0'],
             ]}
           />
           <div class="actions">
             <button class="btn primary" onClick={() => system.scanI2c()} disabled={!system.online || b.state === 'SCANNING'}>
               SCAN BUS
             </button>
+            {b.watchMs ? (
+              <button class="btn" onClick={() => system.watchI2c(0)} disabled={!system.online}>
+                STOP WATCH
+              </button>
+            ) : (
+              <button class="btn" onClick={() => system.watchI2c(5)} disabled={!system.online}>
+                WATCH EVERY 5 S
+              </button>
+            )}
           </div>
-          <p class="note">ACTIVE: addresses 0x08 to 0x77 each receive an address-only write. Devices that ACK are listed.</p>
+          <p class="note">
+            ACTIVE: addresses 0x08 to 0x77 each receive an address-only write. Devices that ACK are listed. WATCH repeats the scan, and puts on the
+            timeline only what changes: a device that stops answering, or comes back.
+          </p>
         </Panel>
 
         <Panel title="FOUND DEVICES" aside={b.lastScanAt ? `${b.devices.length} found` : undefined}>
@@ -58,6 +78,7 @@ export function Bus({ system }: { system: System }) {
                     <th scope="col">ADDR</th>
                     <th scope="col">IDENTITY</th>
                     <th scope="col">BASIS</th>
+                    {scans.length > 1 && <th scope="col">SEEN</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -72,6 +93,17 @@ export function Bus({ system }: { system: System }) {
                             ? `HYPOTHESIS by address only: ${ADDRESS_HINTS[d.address]}`
                             : 'no known part at this address'}
                       </td>
+                      {scans.length > 1 && <td class="dim">{`${answered(d.address)}/${scans.length}`}</td>}
+                    </tr>
+                  ))}
+                  {lost.map((a) => (
+                    <tr key={`lost-${a}`}>
+                      <td class="cyan">{i2cAddress(a)}</td>
+                      <td>
+                        <Tag status="FAIL" label="GONE" />
+                      </td>
+                      <td class="dim msg">answered earlier, not in the last scan</td>
+                      {scans.length > 1 && <td class="dim">{`${answered(a)}/${scans.length}`}</td>}
                     </tr>
                   ))}
                 </tbody>
