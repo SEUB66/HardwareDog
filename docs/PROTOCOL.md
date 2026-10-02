@@ -45,8 +45,15 @@ Sent on boot and in reply to a host `hello`. Anchors the device clock to the
 host clock.
 
 ```json
-{"type":"hello","t":0,"proto":1,"device":"HD-001","rev":"A","fw":"0.1.0"}
+{"type":"hello","t":0,"proto":1,"device":"HD-3A1F2C","rev":"DEVKIT-S3","fw":"0.1.0","caps":["power","uart","i2c","net"]}
 ```
+
+`caps` (optional) is what the device can observe: `power`, `usb`, `uart`,
+`i2c`, `net`, `probe`. A hello without `caps` (devices made before it)
+means every capability. **Silence about a capability the device does not
+have is never an observation**: without `usb`, no USB frame is not "no USB
+device", and the engine makes no USB diagnosis from it. Decoders ignore
+capability names they do not know.
 
 ### power
 
