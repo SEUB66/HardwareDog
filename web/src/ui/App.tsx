@@ -5,6 +5,8 @@ import { caseFrom } from '../core/cases';
 import { SCREENS, type CommandContext, type Screen } from '../core/commands';
 import { duration, sessionId } from '../core/format';
 import { buildReport, reportToText } from '../core/report';
+import { reportToHtml, reportToPdf } from '../core/reportFormats';
+import type { ReportFormat } from '../core/commands';
 import { SimulatedDevice } from '../core/simulator';
 import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
 import { HDLOG_LIMITS, ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
@@ -100,8 +102,8 @@ function newSession(transport: Transport, archive: SessionArchive): Session {
   return { system, transport, key: ++sessionCounter, writer };
 }
 
-function download(name: string, type: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
+function download(name: string, type: string, content: string | Uint8Array) {
+  const url = URL.createObjectURL(new Blob([content as BlobPart], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = name;
@@ -193,10 +195,12 @@ export function App({ archive }: { archive: SessionArchive }) {
     }
   };
 
-  const exportReport = (format: 'txt' | 'json') => {
+  const exportReport = (format: ReportFormat) => {
     const report = buildReport(system);
     const name = `hwdog-${report.session}`;
     if (format === 'txt') download(`${name}.txt`, 'text/plain', reportToText(report));
+    else if (format === 'html') download(`${name}.html`, 'text/html', reportToHtml(report));
+    else if (format === 'pdf') download(`${name}.pdf`, 'application/pdf', reportToPdf(report));
     else download(`${name}.json`, 'application/json', JSON.stringify({ report, trace: system.trace.all() }, null, 2));
     system.mark(`report exported (${format})`);
   };

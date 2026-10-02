@@ -10,7 +10,8 @@ const CLOSED_TEXT: Record<Footer['closed'], string> = {
   RECOVERED: 'RECOVERED after an unclean stop',
   SNAPSHOT: 'SNAPSHOT, exported while recording',
 };
-import { duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
+import { clock, duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
+import type { TraceEvent } from './types';
 
 /**
  * Diagnostic report generation.
@@ -53,6 +54,75 @@ export interface Report {
   findings: Finding[];
   /** What the power numbers are worth, as the device declared it. Null: not declared. */
   measurement: Meter | null;
+  /** The events the diagnoses rest on, with a little context around them. */
+  timeline: TimelineExcerpt;
+}
+
+export interface TimelineEntry {
+  t: number;
+  source: TraceEvent['source'];
+  severity: TraceEvent['severity'];
+  message: string;
+  value: string | null;
+  seq: number | null;
+  /** A diagnosis cites this event's frame, or a rule produced it. */
+  evidence: boolean;
+}
+
+export interface TimelineExcerpt {
+  entries: TimelineEntry[];
+  /** Events of the session not shown here (the full trace is in the JSON export). */
+  omitted: number;
+  /** How the excerpt was chosen, said in the report. */
+  basis: 'EVIDENCE' | 'WARNINGS' | 'LATEST' | 'EMPTY';
+}
+
+const CONTEXT = 2;
+
+/**
+ * A technician reads a timeline, not a list of counts. The excerpt is the
+ * events the diagnoses cite (and the rule events), each with the two
+ * events before and after it. Without a diagnosis: the warnings, else the
+ * latest events. Chronological, capped, and it says what it left out.
+ */
+export function timelineExcerpt(events: readonly TraceEvent[], diagnoses: readonly Diagnosis[], limit = 60): TimelineExcerpt {
+  const cited = new Set(diagnoses.flatMap((d) => d.evidence));
+  const isEvidence = (e: TraceEvent) => (e.seq !== undefined && cited.has(e.seq)) || e.source === 'RULE';
+  let picked: number[] = [];
+  let basis: TimelineExcerpt['basis'] = 'EVIDENCE';
+  const keys = events.flatMap((e, i) => (isEvidence(e) ? [i] : []));
+  if (keys.length > 0) {
+    const set = new Set<number>();
+    for (const i of keys) for (let k = Math.max(0, i - CONTEXT); k <= Math.min(events.length - 1, i + CONTEXT); k++) set.add(k);
+    picked = [...set].sort((a, b) => a - b);
+  } else {
+    const warn = events.flatMap((e, i) => (e.severity === 'WARN' || e.severity === 'FAIL' ? [i] : []));
+    basis = warn.length ? 'WARNINGS' : events.length ? 'LATEST' : 'EMPTY';
+    picked = warn.length ? warn.slice(-20) : events.map((_, i) => i).slice(-10);
+  }
+  const shown = picked.slice(0, limit);
+  return {
+    entries: shown.map((i) => {
+      const e = events[i]!;
+      return { t: e.t, source: e.source, severity: e.severity, message: e.message, value: e.value ?? null, seq: e.seq ?? null, evidence: isEvidence(e) };
+    }),
+    omitted: events.length - shown.length,
+    basis,
+  };
+}
+
+const TIMELINE_BASIS: Record<TimelineExcerpt['basis'], string> = {
+  EVIDENCE: 'events cited as evidence (>), with 2 events of context on each side',
+  WARNINGS: 'no diagnosis: the warnings of the session',
+  LATEST: 'no diagnosis, no warning: the latest events',
+  EMPTY: 'no event recorded',
+};
+
+/** One timeline line, the same in every format. */
+export function timelineLine(e: TimelineEntry): string {
+  const mark = e.evidence ? '>' : ' ';
+  const seq = e.seq !== null ? ` #${e.seq}` : '';
+  return `${mark} ${clock(e.t)}  ${e.source.padEnd(5)} ${e.severity.padEnd(4)}  ${e.message}${e.value ? `  ${e.value}` : ''}${seq}`;
 }
 
 export interface RecordingRef {
@@ -211,6 +281,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
     diagnoses,
     findings,
     measurement: sys.meter,
+    timeline: timelineExcerpt(sys.trace.all(), diagnoses),
   };
 }
 
@@ -249,12 +320,39 @@ export function evidenceText(seqs: readonly number[]): string {
 
 const RULE = '--------------------------------';
 
-/** Plain-text report. Readable with no color, no fonts, no software. */
-export function reportToText(r: Report, options: { banner?: boolean } = {}): string {
-  const out: string[] = [];
-  const kv = (k: string, v: string) => out.push(`${k.padEnd(22)}${v}`);
-  if (options.banner ?? true) out.push(BANNER, '', DESCRIPTOR, '');
-  out.push('HARDWARE DOG', 'DIAGNOSTIC REPORT', '');
+/** How a line of the report is set: the same words in every format, only the emphasis changes. */
+export type LineStyle = 'normal' | 'banner' | 'title' | 'alert' | 'note' | 'evidence' | 'rule';
+
+export interface DocLine {
+  text: string;
+  style: LineStyle;
+}
+
+/**
+ * The report as styled lines. TXT, HTML and PDF are all made from this,
+ * so no format can say something another one does not.
+ */
+export function reportLines(r: Report, options: { banner?: boolean } = {}): DocLine[] {
+  const out: DocLine[] = [];
+  const line = (text: string, style: LineStyle = 'normal') => out.push({ text, style });
+  const blank = () => line('');
+  const kv = (k: string, v: string) => line(`${k.padEnd(22)}${v}`);
+  const section = (title: string) => {
+    blank();
+    line(RULE, 'rule');
+    blank();
+    line(title, 'title');
+    blank();
+  };
+  if (options.banner ?? true) {
+    for (const b of BANNER.split('\n')) line(b, 'banner');
+    blank();
+    line(DESCRIPTOR);
+    blank();
+  }
+  line('HARDWARE DOG', 'title');
+  line('DIAGNOSTIC REPORT', 'title');
+  blank();
   kv('SESSION', r.session);
   kv('DEVICE', r.device);
   kv('FIRMWARE', r.firmware);
@@ -271,34 +369,91 @@ export function reportToText(r: Report, options: { banner?: boolean } = {}): str
     if (rec.fileSha256) kv('FILE SHA-256', rec.fileSha256);
     kv('RULESET', rec.ruleset === rec.rulesetNow || rec.integrity === null ? `v${rec.rulesetNow}` : `recorded v${rec.ruleset}, diagnosed v${rec.rulesetNow}`);
   }
-  if (r.simulated) out.push('', '!! SIMULATED DATA. NOT A MEASUREMENT OF REAL HARDWARE.');
-  if (rec?.integrity === 'MODIFIED') out.push('', '!! MODIFIED RECORDING. BYTES CHANGED AFTER THEY WERE SEALED. NOT EVIDENCE.', ...rec.problems.map((p) => `   ${p}`));
-  if (rec?.integrity === 'INCOMPLETE') out.push('', '!! INCOMPLETE RECORDING. NEVER FINALIZED: SEALED LINES ARE INTACT, THE END IS MISSING.');
-  if (rec?.integrity === 'RECOVERED') out.push('', 'NOTE  Recording closed after an unclean stop (RECOVERED). Every sealed line is intact.');
-  if (rec?.integrity === 'UNVERIFIED') out.push('', 'NOTE  hdlog v1 file: no integrity data. Content cannot be verified.');
+  if (r.simulated) {
+    blank();
+    line('!! SIMULATED DATA. NOT A MEASUREMENT OF REAL HARDWARE.', 'alert');
+  }
+  if (rec?.integrity === 'MODIFIED') {
+    blank();
+    line('!! MODIFIED RECORDING. BYTES CHANGED AFTER THEY WERE SEALED. NOT EVIDENCE.', 'alert');
+    for (const p of rec.problems) line(`   ${p}`, 'alert');
+  }
+  if (rec?.integrity === 'INCOMPLETE') {
+    blank();
+    line('!! INCOMPLETE RECORDING. NEVER FINALIZED: SEALED LINES ARE INTACT, THE END IS MISSING.', 'alert');
+  }
+  if (rec?.integrity === 'RECOVERED') {
+    blank();
+    line('NOTE  Recording closed after an unclean stop (RECOVERED). Every sealed line is intact.', 'note');
+  }
+  if (rec?.integrity === 'UNVERIFIED') {
+    blank();
+    line('NOTE  hdlog v1 file: no integrity data. Content cannot be verified.', 'note');
+  }
 
-  out.push('', RULE, '', 'MEASUREMENT', '');
+  section('MEASUREMENT');
   for (const [k, v] of measurementLines(r.measurement)) kv(k, v);
-  out.push('', METROLOGY);
+  blank();
+  line(METROLOGY, 'note');
 
   for (const s of r.sections) {
-    out.push('', RULE, '', s.title, '');
+    section(s.title);
     for (const [k, v] of s.rows) kv(k, v);
-    out.push('', 'RESULT', s.result);
-    if (s.notes.length) out.push('', ...s.notes);
+    blank();
+    line('RESULT');
+    line(s.result, s.result === 'PASS' || s.result === 'NO DATA' ? 'normal' : 'alert');
+    if (s.notes.length) {
+      blank();
+      for (const n of s.notes) line(n);
+    }
   }
 
-  out.push('', RULE, '', 'DIAGNOSIS', '');
-  if (r.diagnoses.length === 0) out.push('NO FINDINGS', 'No diagnostic rule matched this session.', '');
+  section('DIAGNOSIS');
+  if (r.diagnoses.length === 0) {
+    line('NO FINDINGS');
+    line('No diagnostic rule matched this session.');
+    blank();
+  }
   r.diagnoses.forEach((d, n) => {
-    out.push(`[${n + 1}] ${d.title.padEnd(34)}CONFIDENCE ${d.confidence}`, `    basis: ${d.basis}`, `    evidence: ${evidenceText(d.evidence)}`, '');
+    line(`[${n + 1}] ${d.title.padEnd(34)}CONFIDENCE ${d.confidence}`, 'alert');
+    line(`    basis: ${d.basis}`);
+    line(`    evidence: ${evidenceText(d.evidence)}`);
+    blank();
     for (const f of r.findings.filter((x) => x.diagnosis === d.id)) kv(f.kind, f.text);
-    out.push('');
+    blank();
   });
   if (r.diagnoses.length > 0) {
-    out.push('POSSIBLE CAUSE is a hypothesis ranked by the evidence above.', 'Confidence rules: docs/DIAGNOSTICS.md', '');
+    line('POSSIBLE CAUSE is a hypothesis ranked by the evidence above.', 'note');
+    line('Confidence rules: docs/DIAGNOSTICS.md', 'note');
+    blank();
   }
 
-  out.push(RULE, '', 'MODE          LOCAL', 'DEVICE DATA   LOCAL ONLY', '', `${DESCRIPTOR} // ${TAGLINE}`, '');
-  return out.join('\n');
+  line(RULE, 'rule');
+  blank();
+  line('TIMELINE EXCERPT', 'title');
+  blank();
+  line(TIMELINE_BASIS[r.timeline.basis], 'note');
+  blank();
+  for (const e of r.timeline.entries) line(timelineLine(e), e.evidence ? 'evidence' : 'normal');
+  if (r.timeline.omitted > 0) {
+    blank();
+    line(`${r.timeline.omitted} other events not shown: full trace in the JSON export and the .hdlog.`, 'note');
+  }
+  blank();
+
+  line(RULE, 'rule');
+  blank();
+  line('MODE          LOCAL');
+  line('DEVICE DATA   LOCAL ONLY');
+  blank();
+  line(`${DESCRIPTOR} // ${TAGLINE}`);
+  blank();
+  return out;
+}
+
+/** Plain-text report. Readable with no color, no fonts, no software. */
+export function reportToText(r: Report, options: { banner?: boolean } = {}): string {
+  return reportLines(r, options)
+    .map((l) => l.text)
+    .join('\n');
 }
