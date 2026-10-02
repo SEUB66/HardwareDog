@@ -127,3 +127,9 @@ h1{font-size:clamp(76px,5.2vw,104px)}
 :root{--cursor-pink:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M3 2L3 24L9 18L14 29L19 27L14 16L24 16Z' fill='%23ff4fa3' stroke='%23fff7fc' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 3 2}
 body{cursor:var(--cursor-pink),auto}a,button,[role=button]{cursor:var(--cursor-pink),pointer}input,textarea{caret-color:#ff4fa3}
 }
+/* Repository access is a prominent, labeled button. */
+.github-button{display:inline-flex;align-items:center;justify-content:center;gap:14px;min-height:64px;padding:18px 26px;border-radius:12px;font-size:16px;font-weight:600;background:linear-gradient(135deg,#ffffff10,#ffffff03),var(--glass);border:1px solid var(--pink);color:var(--text);box-shadow:inset 0 1px 0 #ffffff20,0 8px 24px #ff4fa312}
+.github-button .github-icon{width:28px;height:28px}.github-button:hover{background:#ff4fa31c;border-color:#ff4fa3;box-shadow:0 12px 32px #ff4fa329;transform:translateY(-3px)}
+.creator-story .github-button{width:100%;margin-top:12px}
+.signal-panel .github-button{color:#ece8de;background:#171619cc;border-color:#ff4fa3;margin-top:18px}
+@media(max-width:760px){.github-button{width:100%;font-size:15px;padding:18px 16px}}
