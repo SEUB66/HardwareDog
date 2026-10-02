@@ -132,6 +132,16 @@ const TERMS: Record<string, string> = {
   'RULES/OVERCURRENT': `Above this current, the draw counts as overcurrent (default ${OC}).`,
   'RULES/CORRELATION WINDOW': `How close in time two events must be to count as related, e.g. a disconnect after a drop (default ${WINDOW}).`,
 
+  // Measurement (power.meter)
+  'METER/SENSOR': 'The chip that measures the rail, as the device verified it, and the shunt resistor the current flows through.',
+  'METER/RANGE': 'Highest voltage measured within specification, and the current full scale in either direction.',
+  'METER/RESOLUTION': 'Smallest step the sensor can show (one LSB). Resolution is not accuracy.',
+  'METER/RATE': 'Power samples per second. Events shorter than one sample can be missed.',
+  'METER/VOLTAGE ERROR': 'Largest expected voltage error: a percentage of the reading plus a fixed part.',
+  'METER/CURRENT ERROR': 'Largest expected current error. Without calibration, the shunt resistor tolerance dominates.',
+  'METER/BASIS': 'Where the error figures come from: worst case from the datasheets, or measured against a named reference instrument.',
+  'METER/CAL POINTS': 'Comparisons with the reference waiting to be fitted: meter cal "<reference>" in the command palette.',
+
   // Trace columns
   'TRACE/TIME': 'When it happened, on the one clock shared by every source (hh:mm:ss.mmm).',
   'TRACE/SOURCE': 'Who produced the event: POWER, USB, UART, I2C, NET, a RULE, Hardware Dog itself (SYS) or you (USER).',
@@ -235,6 +245,7 @@ const PANELS: Record<string, string> = {
   SETUP: 'What the probe will send, announced before anything is sent.',
   RESULTS: 'Result of each probe, newest first.',
   INTERFACE: 'How this interface looks and sounds. Stored in this browser.',
+  MEASUREMENT: 'What the power numbers are worth: sensor, range, resolution, rate and expected error. Diagnostic measurement, not certified metrology.',
   'SIMULATOR SCENARIO': 'Made-up data to try the interface without hardware. Always labeled SIMULATED.',
 };
 

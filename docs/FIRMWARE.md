@@ -149,9 +149,11 @@ expect; a different result is a finding, not a failure to hide.
                    (dogd --source serial:PORT) or CONNECT WEB SERIAL.
                    expect: timeline "INA226 not answering at 0x40", no power
 [ ] 4  POWER       INA226 wired, target powered through it.
-                   expect: power frames at 50 Hz, voltage within a few mV of
-                   a multimeter on VIN-. Write down 3 points (no load, ~100 mA,
-                   ~500 mA): instrument vs Hardware Dog. These seed LVL 65.
+                   expect: power frames at 50 Hz, voltage within the declared
+                   error (POWER -> MEASUREMENT) of a multimeter on VIN-.
+                   3 points with `meter point` (no load, ~100 mA, ~500 mA),
+                   then `meter cal "<multimeter>"`: CALIBRATION survives a
+                   reboot. These points seed the LVL 65 gate.
 [ ] 5  UART        target TX on GPIO 18. expect: its lines on SERIAL.
                    Set a wrong baud: expect framing errors, then
                    SERIAL CONFIGURATION MISMATCH.
@@ -167,6 +169,39 @@ When 1 to 7 pass, LVL 60 is done. The recording of step 8 becomes the first
 **PHYSICAL** case (`cases/HD-C004`): send the `.hdlog`.
 
 ---
+
+## CALIBRATION (LVL 65)
+
+The firmware declares what its numbers are worth (`power.meter`): the
+INA226 datasheet worst case until the board is calibrated against a
+reference instrument. Out of the box, with a 1 % R100 shunt:
+
+```text
+VOLTAGE   +-0.1 % + 8.75 mV     (5 V rail: +-13.8 mV)
+CURRENT   +-1.1 % + 0.12 mA     (300 mA: +-3.4 mA)   the shunt tolerance dominates
+```
+
+Calibrating, from the command palette (CTRL+K), with a multimeter on the
+same rail and the same load:
+
+```text
+meter                         what the numbers are worth now
+meter point 5.012 2.1         no load: what the multimeter reads (V, mA)
+meter point 4.981 101.4       ~100 mA load
+meter point 4.874 498.0       ~500 mA load
+meter cal "Fluke 87V"         fit, store on the device (NVS), declare
+meter clear                   back to datasheet accuracy
+```
+
+Each point averages the last second of samples, taken before any stored
+calibration. Voltage: one gain. Current: gain and offset when the points
+span 50 mA or more. The device stores the largest residual seen and
+declares it as its accuracy, with the date and the reference named.
+Disagreement above 10 % is refused: that is a wiring fault, not a
+calibration.
+
+**What this is not:** traceable metrology. A calibration is worth the
+reference it was made with, and its accuracy is not included.
 
 ## RULES OF THE FIRMWARE
 

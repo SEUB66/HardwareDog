@@ -1,4 +1,4 @@
-import type { DeviceFrame, HostCommand } from './protocol';
+import type { DeviceFrame, HostCommand, MeterCalibration } from './protocol';
 import type { Transport, TransportSink } from './transport';
 import { createLineDecoder } from './transport';
 import type { CheckStatus, ProbeTest } from './types';
@@ -74,6 +74,8 @@ export class SimulatedDevice implements Transport {
   private powered = false;
   private usbConnected = false;
   private baud = MONITOR_BAUD;
+  /** Calibration stored by meter.cal, with the residuals it was given. */
+  private cal: { cal: MeterCalibration; v_err: number; i_err: number } | null = null;
   private runCurrent = 0.112;
   private nextBurstAt = Infinity;
   private burstUntil = 0;
@@ -115,6 +117,7 @@ export class SimulatedDevice implements Transport {
     this.t = 0;
     this.emit({ type: 'hello', t: 0, proto: PROTOCOL_VERSION, device: 'HD-001', rev: 'A', fw: '0.1.0', caps: [...CAPABILITIES] });
     this.emit({ type: 'uart.config', t: 0, port: 'UART0', baud: this.baud, bits: 8, parity: 'NONE', stop: 1 });
+    this.emitMeter();
     this.emitNet();
     this.nextNetAt = 2000;
     this.nextChatterAt = 3000;
@@ -188,7 +191,42 @@ export class SimulatedDevice implements Transport {
       case 'probe':
         this.runProbe(cmd.id, cmd.target, cmd.tests);
         break;
+      case 'meter.cal': {
+        const { cmd: _cmd, v_err, i_err, ...cal } = cmd;
+        this.cal = { cal, v_err, i_err };
+        this.at(this.t + 5, () => this.emitMeter());
+        break;
+      }
+      case 'meter.clear':
+        this.cal = null;
+        this.at(this.t + 5, () => this.emitMeter());
+        break;
     }
+  }
+
+  /**
+   * The simulated meter declares the accuracy of the INA226 it imitates,
+   * from the datasheet (or from the calibration it was given). Its sensor
+   * name says it is simulated: rule 6, no identity it does not have.
+   */
+  private emitMeter(): void {
+    const c = this.cal;
+    this.emit({
+      type: 'power.meter',
+      t: this.t,
+      sensor: 'SIMULATED INA226',
+      shunt_ohm: 0.1,
+      v_max: 36,
+      i_max: 0.8,
+      v_res: 0.00125,
+      i_res: 0.0000245,
+      rate_hz: 50,
+      // Same figures as the firmware: datasheet worst case, or residual + one LSB.
+      v_err: c ? { pct: 0, abs: c.v_err + 0.00125 } : { pct: 0.1, abs: 0.00875 },
+      i_err: c ? { pct: 0, abs: c.i_err + 0.0000245 } : { pct: 1.1, abs: 0.0001245 },
+      basis: c ? 'CALIBRATION' : 'DATASHEET',
+      cal: c ? c.cal : null,
+    });
   }
 
   // ---------------------------------------------------------------- internals
@@ -261,7 +299,11 @@ export class SimulatedDevice implements Transport {
       }
     }
 
-    this.emit({ type: 'power', t, v: round(voltage, 3), i: round(Math.max(0, current), 4) });
+    // A stored calibration corrects the reading, as on the device.
+    const g = this.cal?.cal;
+    const v = g ? voltage * g.v_gain : voltage;
+    const i = g ? Math.max(0, current) * g.i_gain + g.i_offset : Math.max(0, current);
+    this.emit({ type: 'power', t, v: round(v, 3), i: round(i, 4) });
 
     if (this.powered && !this.resetting && t >= this.nextChatterAt) {
       this.nextChatterAt = t + 2500 + this.rand() * 2500;

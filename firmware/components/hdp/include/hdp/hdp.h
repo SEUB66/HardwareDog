@@ -33,6 +33,15 @@ typedef struct {
     char dns[40];
 } hdp_net_t;
 
+/* A calibration against a reference instrument (LVL 65). Stored by the HAL. */
+typedef struct {
+    bool valid;
+    char date[11];  /* YYYY-MM-DD */
+    char ref[65];   /* reference instrument */
+    float v_gain, i_gain, i_offset;
+    float v_err, i_err; /* largest residual seen against the reference (V, A) */
+} hdp_cal_t;
+
 typedef struct {
     void *ctx;
     /* Device uptime in ms. Never goes backwards. */
@@ -50,6 +59,10 @@ typedef struct {
     void (*uart_write)(void *ctx, const char *data, size_t len);
     /* Network state, filled on request. NULL = no network on this hardware. */
     void (*net_status)(void *ctx, hdp_net_t *out);
+    /* Calibration storage (NVS on the device). NULL = not kept across reboots.
+       load returns 0 and fills out when a calibration is stored. */
+    int (*cal_load)(void *ctx, hdp_cal_t *out);
+    int (*cal_save)(void *ctx, const hdp_cal_t *cal); /* cal->valid false = erase */
 } hdp_hal_t;
 
 /* What this board can observe, announced in hello.caps (HDP v1). */
@@ -72,6 +85,7 @@ typedef struct {
     uint32_t sample_ms;   /* power frame period */
     uint32_t net_ms;      /* net.status period, 0 = on request only */
     uint32_t caps;        /* HDP_CAP_* this board really has */
+    float shunt_tol_pct;  /* shunt resistor tolerance, % (1 for common R100 boards) */
 } hdp_config_t;
 
 typedef struct {
@@ -80,6 +94,7 @@ typedef struct {
     /* INA226 */
     bool ina_ok;
     float current_lsb;
+    hdp_cal_t cal;
     uint32_t next_sample;
     uint32_t next_net;
     uint32_t last_t;
