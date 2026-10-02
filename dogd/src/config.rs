@@ -73,7 +73,10 @@ HW DOG / DOGD — local Hardware Dog daemon
 USAGE
   dogd [serve] [options]      run the daemon
   dogd status [--port N]      ask a running dogd how it is
-  dogd devices [--identify]   list serial ports; --identify sends HDP hello
+  dogd devices [--identify]   what is plugged in, and who it is (read only);
+                              --identify sends one HDP hello per port
+  dogd devices --known        every device identity dogd remembers
+  dogd alias HW-ID NAME       name a device once (--clear removes the name)
   dogd sessions [--data DIR]  list stored sessions (works with dogd stopped)
 
 OPTIONS (serve)
