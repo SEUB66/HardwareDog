@@ -21,6 +21,7 @@ import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Hint } from './components/Hint';
 import { IntegrityTag } from './components/IntegrityTag';
+import { SimBanner } from './components/SimBanner';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
 import { Bus } from './screens/Bus';
@@ -54,6 +55,21 @@ let sessionCounter = 0;
 function initialScenario(): ScenarioId {
   const q = new URLSearchParams(location.search).get('scenario')?.toUpperCase() ?? '';
   return isScenarioId(q) ? q : DEFAULT_SCENARIO;
+}
+
+/** How the data reaches this screen, in one short phrase for the header. */
+function viaLabel(system: System): string {
+  if (system.replayOf) return 'RECORDING';
+  switch (system.transportKind) {
+    case 'SIMULATOR':
+      return 'SIMULATOR (DEMO)';
+    case 'WEB SERIAL':
+      return system.transportLabel;
+    case 'DOGD':
+      return system.origin === 'SIMULATED' ? 'DOGD (SIMULATED)' : `DOGD ${system.transportLabel}`;
+    default:
+      return 'NOT CONNECTED';
+  }
 }
 
 const simulator = (scenario: ScenarioId) => new SimulatedDevice({ seed: Date.now() & 0xffff, scenario });
@@ -453,6 +469,12 @@ export function App({ archive }: { archive: SessionArchive }) {
           </Hint>
           <span class="v">{system.device.id}</span>
         </span>
+        <span class="field opt via">
+          <Hint text={explain('VIA', 'HEADER')} class="k">
+            VIA
+          </Hint>
+          <span class={`v${system.origin === 'SIMULATED' ? ' warn' : ''}`}>{viaLabel(system)}</span>
+        </span>
         <span class="field opt">
           <Hint text={explain('SESSION', 'HEADER')} class="k">
             SESSION
@@ -469,8 +491,11 @@ export function App({ archive }: { archive: SessionArchive }) {
         {system.trace.paused && <Tag status="WARN" label="TRACE PAUSED" />}
         {system.replayOf && <Tag status="INFO" label="REPLAY" />}
         {system.replayIntegrity && <IntegrityTag status={system.replayIntegrity.status} />}
-        {system.transportKind === 'DOGD' && <Tag status="INFO" label="DOGD" />}
-        {system.origin === 'SIMULATED' && <Tag status="WARN" label="SIMULATOR" />}
+        {/* On a phone VIA is hidden: these two words say it instead. */}
+        <span class="narrow-only">
+          {system.transportKind === 'DOGD' && <Tag status="INFO" label="DOGD" />}
+          {system.origin === 'SIMULATED' && <Tag status="WARN" label="SIMULATOR" />}
+        </span>
         <span class="state">
           <span class={`light ${system.link}`} aria-hidden="true" />
           {linkTag}
@@ -507,6 +532,11 @@ export function App({ archive }: { archive: SessionArchive }) {
       </nav>
 
       <main class="work" id="workspace">
+        <SimBanner
+          system={system}
+          scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario : null}
+          onConnect={() => navigate('SETUP')}
+        />
         {body}
       </main>
 

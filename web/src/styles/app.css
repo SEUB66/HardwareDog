@@ -145,6 +145,42 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+.head .field .v.warn {
+  color: var(--amber);
+}
+
+.head .via .v {
+  max-width: 30ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.head .narrow-only {
+  display: none;
+}
+
+/* Simulated data, said on every screen (LAWS 5). */
+.sim-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: var(--gap);
+  padding: 6px 10px;
+  border: 1px solid var(--amber);
+  border-left-width: 3px;
+  background: color-mix(in srgb, var(--amber) 8%, var(--panel));
+  font-size: var(--fs-text);
+}
+.sim-banner b {
+  color: var(--amber);
+  letter-spacing: 0.08em;
+}
+.sim-banner .btn {
+  margin-left: auto;
+}
+
 /* Tiny status light: the word next to it carries the meaning. */
 .head .state {
   display: flex;
@@ -1081,6 +1117,10 @@ select {
   .head .opt,
   .foot {
     display: none;
+  }
+
+  .head .narrow-only {
+    display: contents;
   }
 
   .nav {
