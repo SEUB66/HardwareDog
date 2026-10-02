@@ -117,6 +117,7 @@ const TERMS: Record<string, string> = {
 
   // Header
   'HEADER/DEVICE': 'The Hardware Dog device this interface is reading.',
+  'HEADER/VIA': 'How the data reaches this screen: SIMULATOR (demo, not real), WEB SERIAL (the port you picked) or DOGD (local daemon), with the USB VID:PID of the port.',
   'HEADER/SESSION': 'Time since this session started.',
   'HEADER/SESSION ID': 'Identifier of this session. Recordings and reports carry it.',
 
