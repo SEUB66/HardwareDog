@@ -1,0 +1,7 @@
+CONFIG_IDF_TARGET="esp32s3"
+# HDP owns the native USB port (USB-Serial-JTAG). Logs go to UART0 only:
+# nothing but HDP may ever be written on the host link.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
