@@ -7,6 +7,8 @@
 mod api;
 mod config;
 mod device;
+mod discovery;
+mod identity;
 mod protocol;
 mod sessions;
 mod storage;
@@ -20,7 +22,7 @@ use config::{Config, DEFAULT_PORT, USAGE};
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (cmd, rest) = match args.first().map(String::as_str) {
-        Some("serve") | Some("status") | Some("devices") | Some("sessions") => {
+        Some("serve") | Some("status") | Some("devices") | Some("sessions") | Some("alias") => {
             (args[0].as_str(), &args[1..])
         }
         Some("--help") | Some("-h") | Some("help") => {
@@ -43,6 +45,7 @@ fn main() {
             "status" => status(rest).await,
             "devices" => devices(rest).await,
             "sessions" => sessions(rest),
+            "alias" => alias(rest),
             _ => unreachable!(),
         }
     });
@@ -71,11 +74,29 @@ async fn serve(cfg: Config) -> i32 {
         .local_addr()
         .map(|a| a.to_string())
         .unwrap_or_default();
-    let seen = store.clone();
+    let discovery = Arc::new(discovery::Discovery::default());
+    let (seen, found) = (store.clone(), discovery.clone());
     let link = transport::Link::new(&cfg.source, cfg.origin, move |hello, port| {
-        seen.saw_device(hello, port)
+        seen.saw_device(hello, port);
+        // The HDP device id comes from the chip: the strongest identity there is.
+        if let Some(line) = found.identified(&seen, port, &hello.device) {
+            println!("{line}");
+        }
     });
     tokio::spawn(link.clone().run(cfg.source.clone()));
+    // Hot-plug: one scan a second. Listing ports never writes to them.
+    let (scan_store, scan) = (store.clone(), discovery.clone());
+    tokio::spawn(async move {
+        loop {
+            let ports = tokio::task::spawn_blocking(device::list_ports)
+                .await
+                .unwrap_or_default();
+            for line in scan.scan(&scan_store, &ports) {
+                println!("{line}");
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
 
     println!("HW DOG / DOGD");
     row("VERSION", api::VERSION);
@@ -94,6 +115,7 @@ async fn serve(cfg: Config) -> i32 {
     let state = api::AppState {
         link,
         store,
+        discovery,
         cfg: Arc::new(cfg),
     };
     let app = api::router(state);
@@ -178,8 +200,54 @@ async fn status(args: &[String]) -> i32 {
     0
 }
 
+fn data_dir(args: &[String]) -> std::path::PathBuf {
+    args.iter()
+        .position(|a| a == "--data")
+        .and_then(|i| args.get(i + 1))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(config::default_data_dir)
+}
+
+/// Every identity dogd knows (works with dogd stopped).
+fn known_devices(store: &storage::Store) -> i32 {
+    let rows = store.hw_devices();
+    if rows.is_empty() {
+        println!("NO DEVICE KNOWN YET");
+    }
+    for d in rows {
+        let usb = match (d.vid, d.pid) {
+            (Some(v), Some(p)) => format!("{v:04X}:{p:04X}"),
+            _ => "--".into(),
+        };
+        let name = d
+            .alias
+            .as_deref()
+            .map(|a| format!("'{a}'"))
+            .unwrap_or_default();
+        println!(
+            "{:<15}{:<22}{:<11}{:<11}{}",
+            d.id, name, usb, d.strength, d.basis
+        );
+        if let Some(a) = d.ambiguous_with {
+            println!(
+                "{:<15}looks like {a}: give it an alias (dogd alias {} NAME)",
+                "", d.id
+            );
+        }
+    }
+    0
+}
+
 async fn devices(args: &[String]) -> i32 {
     let identify = args.iter().any(|a| a == "--identify");
+    // Read-only: this command resolves against what dogd knows, it records nothing.
+    let store = storage::Store::open(&data_dir(args)).ok();
+    if args.iter().any(|a| a == "--known") {
+        return match &store {
+            Some(s) => known_devices(s),
+            None => fail("no dogd index"),
+        };
+    }
     let ports = tokio::task::spawn_blocking(device::list_ports)
         .await
         .unwrap_or_default();
@@ -187,6 +255,37 @@ async fn devices(args: &[String]) -> i32 {
         println!("NO SERIAL PORT");
         return 0;
     }
+    let fps: Vec<identity::Fingerprint> = ports.iter().map(discovery::fingerprint).collect();
+    let known = store.as_ref().map(|s| s.known()).unwrap_or_default();
+    for (p, fp) in ports.iter().zip(&fps) {
+        let others: Vec<identity::Fingerprint> =
+            fps.iter().filter(|f| f.port != fp.port).cloned().collect();
+        let serial = identity::usable_serial(fp, &others);
+        let who = match identity::resolve(fp, &serial, &known, &[]) {
+            identity::Resolution::Known {
+                id,
+                strength,
+                basis,
+            } => {
+                let alias = known
+                    .iter()
+                    .find(|k| k.id == id)
+                    .and_then(|k| k.alias.clone())
+                    .map(|a| format!(" '{a}'"))
+                    .unwrap_or_default();
+                format!("{id}{alias} {} ({basis})", strength.as_str())
+            }
+            identity::Resolution::New { strength, basis } => {
+                format!("NEW {} ({basis})", strength.as_str())
+            }
+            identity::Resolution::Ambiguous { candidates, basis } => {
+                format!("AMBIGUOUS {} ({basis})", candidates.join(" "))
+            }
+            identity::Resolution::Unidentified { basis } => format!("NO IDENTITY ({basis})"),
+        };
+        println!("{:<22}{}", p.port, who);
+    }
+    println!();
     for p in ports {
         let usb = match (&p.vid, &p.pid) {
             (Some(v), Some(i)) => format!("USB {v}:{i} {}", p.product.clone().unwrap_or_default()),
@@ -207,6 +306,41 @@ async fn devices(args: &[String]) -> i32 {
         println!("{:<22}{:<34}{}", p.port, usb.trim(), identity);
     }
     0
+}
+
+/// dogd alias HW-ID NAME: name a device once, for good. --clear removes it.
+fn alias(args: &[String]) -> i32 {
+    let Some(id) = args.first() else {
+        return fail("usage: dogd alias HW-ID NAME | dogd alias HW-ID --clear");
+    };
+    let name: Vec<&str> = args[1..]
+        .iter()
+        .map(String::as_str)
+        .take_while(|a| *a != "--data")
+        .collect();
+    if name.is_empty() {
+        return fail("usage: dogd alias HW-ID NAME | dogd alias HW-ID --clear");
+    }
+    let name = if name == ["--clear"] {
+        String::new()
+    } else {
+        name.join(" ")
+    };
+    let store = match storage::Store::open(&data_dir(args)) {
+        Ok(s) => s,
+        Err(e) => return fail(&e),
+    };
+    match store.set_alias(id, &name) {
+        Ok(()) if name.is_empty() => {
+            println!("{id}: alias removed");
+            0
+        }
+        Ok(()) => {
+            println!("{id}: '{name}'");
+            0
+        }
+        Err(e) => fail(&e),
+    }
 }
 
 fn sessions(args: &[String]) -> i32 {
@@ -236,4 +370,35 @@ fn sessions(args: &[String]) -> i32 {
         );
     }
     0
+}
+
+#[cfg(test)]
+mod laws {
+    /// LAWS 3: discovery and identification never need the Internet. dogd
+    /// has no HTTP client, no DNS lookup of its own, no remote registry.
+    #[test]
+    fn dogd_has_no_network_client_dependency() {
+        let manifest = include_str!("../Cargo.toml");
+        for client in [
+            "reqwest",
+            "ureq",
+            "surf",
+            "isahc",
+            "hyper-util",
+            "attohttpc",
+            "curl",
+            "trust-dns",
+            "hickory",
+        ] {
+            assert!(!manifest.contains(client), "{client} in Cargo.toml");
+        }
+        for file in [
+            include_str!("identity/mod.rs"),
+            include_str!("discovery.rs"),
+        ] {
+            for call in ["TcpStream", "UdpSocket", "ToSocketAddrs", "lookup_host"] {
+                assert!(!file.contains(call), "{call} in the identity code");
+            }
+        }
+    }
 }
