@@ -94,9 +94,12 @@ describe('execute', () => {
     expect(execute('trace pause', c).ok).toBe(true);
     expect(sys.trace.paused).toBe(true);
     expect(execute('report export', c).ok).toBe(true);
+    expect(execute('report export pdf', c).ok).toBe(true);
+    expect(execute('report export HTML', c).ok).toBe(true);
+    expect(execute('report export docx', c).ok).toBe(false);
     expect(execute('session mark "device reboot"', c).ok).toBe(true);
     expect(nav).toEqual(['USB', 'POWER', 'PROBE']);
-    expect(exports).toEqual(['txt']);
+    expect(exports).toEqual(['txt', 'pdf', 'html']);
     expect(transport.sent.map((s) => s.cmd)).toEqual(['probe', 'uart.config']);
     expect(sys.trace.all().some((e) => e.message === 'mark: device reboot')).toBe(true);
   });
