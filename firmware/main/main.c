@@ -1,33 +1,34 @@
 /*
- * HARDWARE DOG / FIRMWARE, ESP32-S3 reference device (LVL 60)
+ * HARDWARE DOG / FIRMWARE, ESP32-S3 reference device (LVL 60 to 80)
  *
  * Thin glue between the ESP-IDF drivers and the portable core
  * (components/hdp), which owns every HDP decision and is tested on a PC.
  *
  *   native USB (USB-Serial-JTAG)   HDP v1 to the host: Web Serial or dogd
  *   I2C0  GPIO 8 / 9               INA226, power of the target
- *   I2C1  GPIO 4 / 5               target I2C bus (scan on request)
+ *   I2C1  GPIO 4 / 5               target I2C bus (scan on request or watch)
  *   UART1 GPIO 18 RX / 17 TX       target UART
- *   Wi-Fi station (optional)       net.status: link, address, DHCP
+ *   W5500 SPI2 (optional)          wired network port (net.c)
+ *   Wi-Fi station (optional)       net.status, net.watch, probes (net.c)
  *   UART0                          ESP-IDF logs only, never HDP
  *
- * One task runs the core: no locking inside the core is needed.
+ * One task runs the core: no locking inside the core is needed. The network
+ * tasks of net.c hand their results to this task, never to the core.
  */
 #include <stdio.h>
 #include <string.h>
 
+#include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/uart.h"
 #include "driver/usb_serial_jtag.h"
-#include "esp_event.h"
 #include "esp_mac.h"
-#include "esp_netif.h"
 #include "esp_timer.h"
-#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "hdp/hdp.h"
+#include "net.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
@@ -73,7 +74,20 @@ static int ina_write(void *ctx, uint8_t addr, uint8_t reg, uint16_t value) {
 
 static int target_probe(void *ctx, uint8_t addr) {
     (void)ctx;
-    return i2c_master_probe(target_bus, addr, 10) == ESP_OK ? 0 : -1;
+    switch (i2c_master_probe(target_bus, addr, 10)) {
+    case ESP_OK: return HDP_I2C_ACK;
+    case ESP_ERR_NOT_FOUND: return HDP_I2C_NACK;
+    default: return HDP_I2C_TIMEOUT; /* the bus itself failed */
+    }
+}
+
+/* Idle levels of the target bus. Without pull-ups a line can also float
+   high: a stuck-low line is certain, a floating one is not seen here. */
+static int target_lines(void *ctx, bool *sda, bool *scl) {
+    (void)ctx;
+    *sda = gpio_get_level(CONFIG_HWDOG_TGT_SDA) != 0;
+    *scl = gpio_get_level(CONFIG_HWDOG_TGT_SCL) != 0;
+    return 0;
 }
 
 static int uart_baud(void *ctx, uint32_t baud) {
@@ -86,49 +100,6 @@ static void uart_tx(void *ctx, const char *data, size_t len) {
     uart_write_bytes(TARGET_UART, data, len);
 }
 
-/* ------------------------------------------------------------ Wi-Fi */
-
-static portMUX_TYPE net_lock = portMUX_INITIALIZER_UNLOCKED;
-static hdp_net_t net_state;
-static esp_netif_t *sta;
-
-static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data) {
-    (void)arg;
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
-        portENTER_CRITICAL(&net_lock);
-        net_state.link_up = false;
-        net_state.dhcp = HDP_CHECK_PENDING;
-        net_state.address[0] = net_state.gateway[0] = net_state.dns[0] = '\0';
-        portEXIT_CRITICAL(&net_lock);
-        esp_wifi_connect();
-    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED) {
-        portENTER_CRITICAL(&net_lock);
-        net_state.link_up = true;
-        net_state.dhcp = HDP_CHECK_PENDING;
-        portEXIT_CRITICAL(&net_lock);
-    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
-        const ip_event_got_ip_t *e = data;
-        esp_netif_dns_info_t dns = {0};
-        esp_netif_get_dns_info(sta, ESP_NETIF_DNS_MAIN, &dns);
-        hdp_net_t n = {.link_present = true, .link_up = true, .dhcp = HDP_CHECK_PASS};
-        snprintf(n.address, sizeof n.address, IPSTR, IP2STR(&e->ip_info.ip));
-        snprintf(n.gateway, sizeof n.gateway, IPSTR, IP2STR(&e->ip_info.gw));
-        snprintf(n.dns, sizeof n.dns, IPSTR, IP2STR(&dns.ip.u_addr.ip4));
-        portENTER_CRITICAL(&net_lock);
-        net_state = n;
-        portEXIT_CRITICAL(&net_lock);
-    }
-}
-
-static void net_status(void *ctx, hdp_net_t *out) {
-    (void)ctx;
-    portENTER_CRITICAL(&net_lock);
-    *out = net_state;
-    portEXIT_CRITICAL(&net_lock);
-}
-
 /* NVS holds the calibration (and the Wi-Fi driver's data): always started,
    network or not. */
 static void nvs_start(void) {
@@ -137,24 +108,6 @@ static void nvs_start(void) {
         nvs_flash_erase();
         nvs_flash_init();
     }
-}
-
-static bool wifi_start(void) {
-    if (strlen(CONFIG_HWDOG_WIFI_SSID) == 0) return false; /* no network: link null */
-    esp_netif_init();
-    esp_event_loop_create_default();
-    sta = esp_netif_create_default_wifi_sta();
-    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-    if (esp_wifi_init(&init) != ESP_OK) return false;
-    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi, NULL);
-    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi, NULL);
-    wifi_config_t cfg = {0};
-    strncpy((char *)cfg.sta.ssid, CONFIG_HWDOG_WIFI_SSID, sizeof cfg.sta.ssid - 1);
-    strncpy((char *)cfg.sta.password, CONFIG_HWDOG_WIFI_PASSWORD, sizeof cfg.sta.password - 1);
-    net_state = (hdp_net_t){.link_present = true, .link_up = false, .dhcp = HDP_CHECK_PENDING};
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_config(WIFI_IF_STA, &cfg);
-    return esp_wifi_start() == ESP_OK;
 }
 
 /* ------------------------------------------------------------ setup */
@@ -259,7 +212,7 @@ static int cal_save(void *ctx, const hdp_cal_t *cal) {
 void app_main(void) {
     nvs_start();
     buses_start();
-    bool wifi = wifi_start();
+    bool net = hwnet_start();
 
     uint8_t mac[6] = {0};
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
@@ -275,8 +228,9 @@ void app_main(void) {
         .max_current_a = (float)CONFIG_HWDOG_MAX_CURRENT_MA / 1000.0f,
         .sample_ms = 20,
         .net_ms = 2000,
-        .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C | (wifi ? HDP_CAP_NET : 0),
+        .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C | (net ? HDP_CAP_NET | HDP_CAP_PROBE : 0),
         .shunt_tol_pct = (float)CONFIG_HWDOG_SHUNT_TOL_PERMILLE / 10.0f,
+        .i2c_watch_ms = CONFIG_HWDOG_I2C_WATCH_MS,
     };
     hdp_hal_t hal = {
         .now_ms = now_ms,
@@ -284,10 +238,13 @@ void app_main(void) {
         .ina_read = ina_read,
         .ina_write = ina_write,
         .target_i2c_probe = target_probe,
+        .target_i2c_lines = target_lines,
         .target_i2c_hz = TARGET_I2C_HZ,
         .uart_set_baud = uart_baud,
         .uart_write = uart_tx,
-        .net_status = wifi ? net_status : NULL,
+        .net_status = net ? hwnet_status : NULL,
+        .net_watch = net ? hwnet_watch : NULL,
+        .probe_start = net ? hwnet_probe_start : NULL,
         .cal_load = cal_load,
         .cal_save = cal_save,
     };
@@ -301,6 +258,8 @@ void app_main(void) {
         int n = usb_serial_jtag_read_bytes(rx, sizeof rx, pdMS_TO_TICKS(2));
         if (n > 0) hdp_host_input(&dev, rx, (size_t)n);
         drain_uart(&dev);
+        if (hwnet_take_changed()) hdp_net_changed(&dev);
+        hwnet_drain_probes(&dev);
         hdp_poll(&dev);
     }
 }

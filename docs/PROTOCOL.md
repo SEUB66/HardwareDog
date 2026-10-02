@@ -132,6 +132,25 @@ One `uart.rx` per received line, without the line terminator.
 `addr` is the 7-bit address (0x00 to 0x7F). `ident` is set only when the
 firmware confirmed it, and `method` says how.
 
+`every_ms` (optional) says the scan belongs to a periodic watch (`i2c.watch`,
+or a watch configured at boot). Absent: a one-off scan.
+
+### i2c.error
+
+The target bus failed (LVL 80). The scan that hit the fault is **not** sent:
+an empty list would read as every device gone.
+
+```json
+{"type":"i2c.error","t":6000,"kind":"SDA_LOW","detail":"SDA low while the bus is idle","every_ms":3000}
+```
+
+```text
+kind   SDA_LOW / SCL_LOW   the line sits low while idle: missing pull-up,
+                           a device holding it, a short
+       TIMEOUT             a transfer did not complete
+       ARB_LOST            the master lost arbitration
+```
+
 ### net.status
 
 ```json
@@ -172,6 +191,8 @@ measured, never "probably fine".
 {"cmd":"uart.tx","data":"AT+RST"}
 {"cmd":"i2c.scan"}
 {"cmd":"net.refresh"}
+{"cmd":"i2c.watch","every_ms":5000}
+{"cmd":"net.watch","every_ms":10000,"dns":"example.com","upstream":"example.org"}
 {"cmd":"probe","id":"p1","target":"192.168.1.1","tests":["PING","DNS","TCP"]}
 {"cmd":"meter.cal","date":"2026-10-02","ref":"Fluke 87V","v_gain":1.0012,"i_gain":0.991,"i_offset":0.0003,"v_err":0.002,"i_err":0.0004}
 {"cmd":"meter.clear"}
@@ -183,8 +204,14 @@ measured, never "probably fine".
 The device answers with `power.meter`. `meter.clear` returns to datasheet
 accuracy.
 
-`i2c.scan`, `usb.enumerate`, `uart.tx`, `probe`, `meter.cal` and
-`meter.clear` are ACTIVE operations:
+`i2c.watch` scans the target bus every `every_ms` (0 stops; devices refuse
+less than 1000). `net.watch` (0 stops; at least 2000) pings the gateway,
+resolves `dns` and opens TCP 443 to `upstream`, and reports the results in
+`net.status` (gateway, dns, internet, latency, loss). Without `dns` or
+`upstream`, those stay UNKNOWN: nothing is checked that was not asked.
+
+`i2c.scan`, `i2c.watch`, `net.watch`, `usb.enumerate`, `uart.tx`, `probe`,
+`meter.cal` and `meter.clear` are ACTIVE operations:
 the interface always states what they will do before sending them.
 
 ---

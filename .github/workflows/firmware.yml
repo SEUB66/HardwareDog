@@ -56,3 +56,10 @@ jobs:
           esp_idf_version: v5.4.1
           target: esp32s3
           path: firmware
+      - name: ESP-IDF build, wired port (W5500) and I2C watch
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.1
+          target: esp32s3
+          path: firmware
+          command: idf.py -B build-w5500 -D SDKCONFIG=build-w5500/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci.w5500" build

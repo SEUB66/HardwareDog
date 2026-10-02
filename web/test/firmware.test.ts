@@ -126,7 +126,7 @@ function contract(lines: string[]) {
 }
 
 describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
-  for (const scenario of ['healthy', 'sag', 'serial', 'noina', 'wrongchip']) {
+  for (const scenario of ['healthy', 'sag', 'serial', 'noina', 'wrongchip', 'i2cflaky', 'nopullup', 'router']) {
     it(`${scenario}: every frame validates against HDP v1`, async () => {
       const lines = await firmware(scenario, 30);
       expect(lines.length).toBeGreaterThan(scenario.startsWith('no') || scenario === 'wrongchip' ? 5 : 1000);
@@ -154,7 +154,8 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     const scan = frames.find((f) => f.type === 'i2c.scan');
     expect(scan).toMatchObject({ speed: 100000, devices: [{ addr: 0x3c }, { addr: 0x76 }] });
     expect(frames.some((f) => f.type === 'uart.config' && f.baud === 9600)).toBe(true);
-    expect(frames.filter((f) => f.type === 'probe.result').map((f) => (f.type === 'probe.result' ? f.status : ''))).toEqual(['UNKNOWN', 'UNKNOWN']);
+    // The host build has probes (a simulated LAN): results come back in the background.
+    expect(frames.filter((f) => f.type === 'probe.result').map((f) => (f.type === 'probe.result' ? `${f.test} ${f.status}` : ''))).toEqual(['PING PASS', 'DNS PASS']);
     expect(frames.some((f) => f.type === 'probe.done')).toBe(true);
     const rejected = frames.filter((f) => f.type === 'log' && f.message.startsWith('command rejected'));
     expect(rejected).toHaveLength(3);
@@ -184,6 +185,32 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     expect(cal.meter).toMatchObject({ basis: 'CALIBRATION', cal: { date: '2026-10-02', ref: 'Fluke 87V', v_gain: 1.02 } });
     // The rail is 5.05 V: after the command, the samples carry the gain.
     expect(cal.power.voltage).toBeGreaterThan(5.1);
+  });
+
+  it('LVL 80: a sensor on a loose wire is an I2C device that disappears', async () => {
+    const sys = await engine(await firmware('i2cflaky', 40));
+    expect(sys.bus.watchMs).toBe(3000);
+    const d = sys.diagnoses.find((x) => x.id === 'I2C_DEVICE_DISAPPEARED');
+    expect(d?.confidence).toBe('HIGH');
+    expect(d?.basis).toMatch(/0x76/);
+    expect(sys.diagnoses.map((x) => x.id)).toEqual(['I2C_DEVICE_DISAPPEARED']);
+  });
+
+  it('LVL 80: missing pull-ups are a bus fault, never an empty scan', async () => {
+    const lines = await firmware('nopullup', 12);
+    expect(lines.some((l) => l.includes('"type":"i2c.scan"'))).toBe(false);
+    const sys = await engine(lines);
+    expect(sys.diagnoses.map((x) => `${x.id}:${x.confidence}`)).toEqual(['I2C_BUS_INSTABILITY:HIGH']);
+    expect(sys.diagnoses[0]!.next).toMatch(/pull-ups/);
+  });
+
+  it('LVL 80: the router reboots with the rail, the chain is on the timeline', async () => {
+    const sys = await engine(await firmware('router', 30));
+    expect(sys.diagnoses.map((x) => x.id).sort()).toEqual(['NETWORK_POWER_LOSS', 'SUPPLY_SAG']);
+    const d = sys.diagnoses.find((x) => x.id === 'NETWORK_POWER_LOSS')!;
+    expect(d.confidence).toBe('HIGH');
+    expect(d.correlation).toMatch(/voltage drop .* > link down \+\d+ ms > up \+\d+ ms > DHCP \+\d+ ms > DNS \+\d+ ms/);
+    expect(sys.trace.all().some((e) => e.message === 'network back')).toBe(true);
   });
 
   it('a healthy board gives no finding', async () => {
