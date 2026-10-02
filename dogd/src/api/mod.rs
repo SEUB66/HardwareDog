@@ -3,7 +3,9 @@
 //!
 //!   GET  /v1/health                  alive, versions
 //!   GET  /v1/link                    the device link: state, source, origin, device
-//!   GET  /v1/devices                 serial ports + Hardware Dogs seen
+//!   GET  /v1/devices                 attached devices and who they are, known identities
+//!   GET  /v1/devices/events?since=N  plug / unplug / identified, in order
+//!   PUT  /v1/devices/{id}/alias      name a device once (text body, empty clears)
 //!   GET  /v1/sessions                stored sessions (the index)
 //!   GET  /v1/sessions/{id}           one session
 //!   GET  /v1/sessions/{id}/hdlog     the file, byte for byte
@@ -29,6 +31,7 @@ use serde_json::json;
 
 use crate::config::Config;
 use crate::device;
+use crate::discovery::Discovery;
 use crate::protocol::{HDP_VERSION, MAX_LINE};
 use crate::sessions::MAX_BYTES;
 use crate::storage::{PutError, Store};
@@ -45,6 +48,7 @@ pub const CLOSE_TOO_SLOW: u16 = 4008;
 pub struct AppState {
     pub link: Arc<Link>,
     pub store: Arc<Store>,
+    pub discovery: Arc<Discovery>,
     pub cfg: Arc<Config>,
 }
 
@@ -53,6 +57,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/health", get(health))
         .route("/v1/link", get(link))
         .route("/v1/devices", get(devices))
+        .route("/v1/devices/events", get(device_events))
+        .route("/v1/devices/{id}/alias", axum::routing::put(put_alias))
         .route("/v1/sessions", get(sessions))
         .route("/v1/sessions/{id}", get(session))
         .route(
@@ -173,7 +179,36 @@ async fn devices(State(s): State<AppState>) -> Json<serde_json::Value> {
     let ports = tokio::task::spawn_blocking(device::list_ports)
         .await
         .unwrap_or_default();
-    Json(json!({ "link": s.link.status(), "ports": ports, "seen": s.store.devices() }))
+    Json(json!({
+        "link": s.link.status(),
+        "ports": ports,
+        "attached": s.discovery.present(),
+        "known": s.store.hw_devices(),
+        "seen": s.store.devices(),
+    }))
+}
+
+#[derive(serde::Deserialize)]
+struct Since {
+    since: Option<i64>,
+}
+
+async fn device_events(
+    State(s): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<Since>,
+) -> Json<serde_json::Value> {
+    Json(json!({ "events": s.store.hw_events(q.since.unwrap_or(0), 500) }))
+}
+
+async fn put_alias(State(s): State<AppState>, Path(id): Path<String>, body: Bytes) -> Response {
+    let Ok(name) = std::str::from_utf8(&body) else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, "an alias is text").into_response();
+    };
+    match s.store.set_alias(&id, name) {
+        Ok(()) => Json(s.store.hw_device(&id)).into_response(),
+        Err(e) if e.starts_with("no device") => (StatusCode::NOT_FOUND, e).into_response(),
+        Err(e) => (StatusCode::UNPROCESSABLE_ENTITY, e).into_response(),
+    }
 }
 
 async fn sessions(State(s): State<AppState>) -> Json<serde_json::Value> {
@@ -338,6 +373,7 @@ mod http_tests {
         router(AppState {
             link,
             store,
+            discovery: Arc::new(crate::discovery::Discovery::default()),
             cfg: Arc::new(cfg),
         })
     }
@@ -474,5 +510,29 @@ mod http_tests {
         let body = axum::body::to_bytes(res.into_body(), 1024).await.unwrap();
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(v, json!({ "status": "ok", "dogd": VERSION, "hdp": 1 }));
+    }
+
+    #[tokio::test]
+    async fn device_identity_endpoints_answer_and_stay_guarded() {
+        let host = [("host", "127.0.0.1:4782")];
+        let (s, _) = call(app(&[]), "GET", "/v1/devices", &host).await;
+        assert_eq!(s, StatusCode::OK);
+        let (s, _) = call(app(&[]), "GET", "/v1/devices/events?since=0", &host).await;
+        assert_eq!(s, StatusCode::OK);
+        // Naming a device that does not exist: not found, nothing created.
+        let (s, _) = call(app(&[]), "PUT", "/v1/devices/HW-NOPE/alias", &host).await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+        // A page from elsewhere cannot rename devices on this desk.
+        let (s, _) = call(
+            app(&[]),
+            "PUT",
+            "/v1/devices/HW-NOPE/alias",
+            &[
+                ("host", "127.0.0.1:4782"),
+                ("origin", "https://evil.example"),
+            ],
+        )
+        .await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
     }
 }
