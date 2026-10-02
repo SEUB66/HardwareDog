@@ -1,2 +1,4 @@
-# Sealed recordings must retain their exact bytes on Windows too.
-*.hdlog text eol=lf
+# Sealed recordings are evidence: their seals and sha256 cover every byte.
+# Never converted, whatever core.autocrlf / core.eol says (Windows): a
+# checkout with CRLF is a MODIFIED recording.
+*.hdlog -text
