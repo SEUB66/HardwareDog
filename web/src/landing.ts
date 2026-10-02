@@ -31,6 +31,7 @@ if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: re
   document.querySelectorAll('.reveal').forEach(el => { el.classList.add('animate'); observer.observe(el); });
 }
 const translations: Record<string, string> = {
+'Offrir un café à Seub':'Buy Seub a coffee',
 'Gratuit pour usage personnel · Code public':'Free for personal use · Public source',
 'Du code.':'Code.', 'Des circuits.':'Circuits.', 'Du concret.':'Real things.',
 'Créateur de Hardware Dog. Une idée simple : comprendre les machines avec des outils qui restent entre vos mains.':'Creator of Hardware Dog. One simple idea: understand machines with tools that stay in your hands.',
