@@ -41,6 +41,7 @@ FUTURE PROBES ───┘
 ENFORCED BY   web/test/protocol-contract.test.ts   every simulator frame
                                                     validates against
                                                     protocol/hdp_v1.json
+              web/test/firmware.test.ts            every firmware frame too
               web/test/session.test.ts             replay == live: same
                                                     timeline, facts,
                                                     diagnoses

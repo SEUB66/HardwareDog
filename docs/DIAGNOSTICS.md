@@ -6,7 +6,7 @@ SCENARIOS    11 physical fault scenarios    web/src/core/scenarios.ts
 PROOF        reliability matrix             web/test/scenarios.test.ts
 RULE TESTS   threshold / precedence tests   web/test/diagnostics.test.ts
 CASES        recorded incidents             cases/, web/test/cases.test.ts
-RULESET      version 1                      RULESET_VERSION, diagnostics.ts
+RULESET      version 2                      RULESET_VERSION, diagnostics.ts
 ```
 
 Hardware Dog does not guess. Every diagnosis comes from a written rule,
@@ -14,7 +14,14 @@ every confidence level has a written definition, and every rule is
 exercised against simulated faults on every commit.
 
 The ruleset has a version. It is bumped whenever a rule, a default
-threshold or a confidence definition changes. Every recording carries the
+threshold or a confidence definition changes.
+
+```text
+v2   USB rules (USB NOT ENUMERATED) only for a device that watches USB
+     (hello.caps); silence from a device without USB is not evidence
+v1   first ruleset
+```
+ Every recording carries the
 version it was made with, and a replay on other rules says so in the
 report ("recorded v1, diagnosed v2"). Cases pin the expected outcome: a
 rule change that alters one fails the test until the case is updated on

@@ -2,7 +2,7 @@
 
 ```text
 DOCUMENT      ENGINEERING PLAN
-VERSION       0.6 / IMPLEMENTATION-ALIGNED
+VERSION       0.7 / IMPLEMENTATION-ALIGNED
 STATUS        ACTIVE IMPLEMENTATION
 COMPANION TO  LAWS.md              the laws of the project
               DESIGN_SPEC.md       interface and industrial design (locked)
@@ -202,7 +202,7 @@ diagnostic rules   OK        web/src/core/diagnostics.ts
 session store      OK        web/src/core/session.ts, archive.ts (.hdlog, IndexedDB)
 UI / reports       OK        web/src/ui, web/src/core/report.ts
 dogd               OK        dogd/, section 10, DOGD.md
-firmware           PLANNED   ESP32-S3, section 11
+firmware           PARTIAL   firmware/, section 11, FIRMWARE.md (board bring-up pending)
 ```
 
 Invariants of the codebase (details in `ARCHITECTURE.md`):
@@ -408,36 +408,24 @@ shared rule representation, not from a manual port to Rust.
 
 ---
 
-## 11 — FIRMWARE (PLANNED)
+## 11 — FIRMWARE
 
-ESP32-S3. Each subsystem emits HDP v1 frames; nothing else leaves the
-device.
+ESP32-S3, ESP-IDF, C11: `firmware/`, documented in [`FIRMWARE.md`](FIRMWARE.md).
 
 ```text
-firmware/
-├── src/
-│   ├── main
-│   ├── power       INA226 sampling -> power
-│   ├── usb         host port enumeration -> usb.attach / usb.detach
-│   ├── uart        target UART -> uart.config / uart.rx / uart.error
-│   ├── i2c         bus scan + verified identities -> i2c.scan
-│   ├── net         Wi-Fi / Ethernet layer checks -> net.status, probes
-│   ├── display
-│   ├── events      clock, queue, back-pressure
-│   └── protocol    HDP v1 encoder + contract self-test
+firmware/components/hdp   THE CORE: portable C, no ESP-IDF. HDP writer,
+                          command parser, INA226 driver. Built and tested
+                          on a PC too (firmware/host).
+firmware/main             ESP-IDF glue: I2C, UART, native USB, Wi-Fi
 ```
 
-Examples are the real frames (full list in `PROTOCOL.md`):
+Each subsystem emits HDP v1 frames; nothing else leaves the device (logs
+go to UART0). The device declares what it observes in `hello.caps`.
 
-```json
-{"type":"power","t":1200,"v":5.041,"i":0.312}
-{"type":"usb.attach","t":1214,"speed":"FULL","vid":12346,"pid":4097,"cls":"CDC","power":"BUS","manufacturer":"Espressif","product":"USB JTAG/Serial","serial":"48:27:E2:5C:1A:90"}
-{"type":"uart.rx","t":1320,"data":"bootloader 0.9"}
-```
-
-Acceptance: the firmware's output, captured on real hardware, validates
-against `protocol/hdp_v1.json` and runs through the same reliability tests
-as the simulator (physical scenarios HD-P0xx, section 14).
+Acceptance: the firmware's output validates against `protocol/hdp_v1.json`
+and runs through the same engine as the simulator: on a PC and in CI today
+(`web/test/firmware.test.ts`), captured on the board at bring-up
+(FIRMWARE.md), then through the physical scenarios HD-P0xx (section 14).
 
 ---
 
@@ -592,7 +580,7 @@ LVL   NAME                                  STATUS
 45    diagnostic engine v1                   PARTIAL   13 rules, scenarios
 50    .hdlog becomes a CASE                  PARTIAL   format + test suite
 55    dogd, the local backbone               DONE      gate passed, real ESP32 at 60
-60    first physical Hardware Dog            NEXT
+60    first physical Hardware Dog            PARTIAL   core PASS on PC + CI, board bring-up pending
 65    calibration + truthfulness             PLANNED
 70    real fault lab                         PLANNED
 75    professional reports                   PARTIAL   TXT + JSON
@@ -692,7 +680,22 @@ number in its session; every diagnosis cites the frames it rests on. The
 numbers are the same live, replayed and through dogd, so dogd can index
 sessions without a migration later.
 
-### LVL 60 — FIRST PHYSICAL HARDWARE DOG
+### LVL 60 — FIRST PHYSICAL HARDWARE DOG     PARTIAL
+
+```text
+SIMULATOR                 PASS
+FIRMWARE CORE (PC + CI)   PASS   every frame validates hdp_v1.json; the engine
+                                 reads it like the simulator; through dogd ==
+                                 direct (web/test/firmware.test.ts)
+FIRMWARE BUILD esp32s3    CI     ESP-IDF v5.4
+FIRMWARE ON SILICON       PENDING  bring-up checklist, FIRMWARE.md
+REPLAY                    PASS
+```
+
+Found on the way, fixed for good: a device that does not watch USB was
+diagnosed USB NOT ENUMERATED from silence. Devices now declare what they
+observe (`hello.caps`), and the USB rules only run when USB is watched
+(ruleset v2).
 
 No custom PCB. ESP32-S3 dev board, INA226, UART, Wi-Fi.
 `REAL HARDWARE -> HDP v1 -> existing software`, the frontend barely
@@ -858,6 +861,8 @@ and are not granted for unrestricted third-party branding or resale.
 ## CHANGELOG
 
 ```text
+0.7   LVL 60 partial: firmware core verified on a PC and in CI, ESP32-S3
+      build, bring-up checklist; hello.caps and ruleset v2
 0.6   LVL 55 done: dogd (DOGD.md), evidence references locked before it
 0.5   laws of the project (LAWS.md); roadmap by level, LVL 40 to MAX LVL;
       LVL 40 closed: hostile-file limits, compatibility rule, v1 fixture

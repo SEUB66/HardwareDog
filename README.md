@@ -74,7 +74,8 @@ I want one instrument that can help answer a very simple question:
 [ OK ] SESSIONS          recorded locally, sealed (SHA-256), replayed exactly
 [ OK ] CASES             recorded incidents as regression tests, cases/
 [ OK ] DOGD              local daemon: device link, session store (docs/DOGD.md)
-[ -- ] FIRMWARE          NOT STARTED
+[ .. ] FIRMWARE          ESP32-S3 + INA226: core verified on PC + CI,
+                         board bring-up pending (docs/FIRMWARE.md)
 [ -- ] HARDWARE          NOT STARTED
 ```
 
@@ -135,6 +136,7 @@ F1 HELP   F2 TRACE   F3 PROBE   F4 REPORT   1-7 SCREENS   CTRL+K COMMAND
 ```text
 LAWS               docs/LAWS.md
 DOGD               docs/DOGD.md
+FIRMWARE           docs/FIRMWARE.md
 POSITIONING        docs/MARKET_POSITIONING.md
 ENGINEERING PLAN   docs/ENGINEERING_PLAN.md
 ARCHITECTURE       docs/ARCHITECTURE.md
@@ -198,7 +200,7 @@ POSSIBLE CAUSE  Power instability.
 ```text
 HARDWARE   ESP32-S3 or RP2040, small display, USB-C, optional Ethernet,
            protected UART / I2C inputs, INA226 power sense
-FIRMWARE   C/C++ or Rust, real-time acquisition, local diagnostic storage
+FIRMWARE   C (ESP-IDF), a portable core tested on a PC, real-time acquisition
 WEB        local dashboard served by the device, WebUSB / WebSerial
 ENCLOSURE  3D-printable, ~120 x 75 x 25 mm, matte dark with pink accents
 ```
