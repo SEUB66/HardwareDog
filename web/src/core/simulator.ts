@@ -2,7 +2,7 @@ import type { DeviceFrame, HostCommand } from './protocol';
 import type { Transport, TransportSink } from './transport';
 import { createLineDecoder } from './transport';
 import type { CheckStatus, ProbeTest } from './types';
-import { PROTOCOL_VERSION } from './protocol';
+import { CAPABILITIES, PROTOCOL_VERSION } from './protocol';
 import type { Range, Scenario, ScenarioId } from './scenarios';
 import { DEFAULT_SCENARIO, SCENARIOS } from './scenarios';
 
@@ -113,7 +113,7 @@ export class SimulatedDevice implements Transport {
 
   private start(): void {
     this.t = 0;
-    this.emit({ type: 'hello', t: 0, proto: PROTOCOL_VERSION, device: 'HD-001', rev: 'A', fw: '0.1.0' });
+    this.emit({ type: 'hello', t: 0, proto: PROTOCOL_VERSION, device: 'HD-001', rev: 'A', fw: '0.1.0', caps: [...CAPABILITIES] });
     this.emit({ type: 'uart.config', t: 0, port: 'UART0', baud: this.baud, bits: 8, parity: 'NONE', stop: 1 });
     this.emitNet();
     this.nextNetAt = 2000;

@@ -165,7 +165,7 @@ export class System {
   link: LinkState = 'OFFLINE';
   transportKind: TransportKind | null = null;
   transportLabel = '';
-  device: DeviceInfo = { id: '--', rev: '--', firmware: '--', bootedAt: null };
+  device: DeviceInfo = { id: '--', rev: '--', firmware: '--', bootedAt: null, caps: null };
   power: PowerState = emptyPower();
   usb: UsbState = emptyUsb();
   serial: SerialState = emptySerial();
@@ -415,6 +415,11 @@ export class System {
     }
   }
 
+  /** Whether the device declared this capability (no caps declared = everything). */
+  observes(cap: string): boolean {
+    return this.device.caps === null || this.device.caps.includes(cap);
+  }
+
   /** Sequence of the frame being handled (facts cite it). */
   private get seq(): number {
     return this.frameSeq ?? this.framesReceived;
@@ -423,7 +428,7 @@ export class System {
   private handleFrame(f: DeviceFrame): void {
     this.seenFrames.add(f.type);
     if (f.type === 'hello') {
-      this.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: this.now() - f.t };
+      this.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: this.now() - f.t, caps: f.caps ?? null };
       this.log(this.hostTime(f.t), 'SYS', 'INFO', `device ${f.device} rev ${f.rev}`, `fw ${f.fw} / proto ${f.proto}`);
       this.changed();
       return;
@@ -607,8 +612,9 @@ export class System {
     p.condition = this.dropStartedAt !== null ? 'UNDERVOLTAGE' : this.overcurrent ? 'OVERCURRENT' : 'STABLE';
 
     // Facts: target running without USB, and whether it kept running after a disconnect.
+    // Only a device that watches USB can say "no USB device": silence is not an observation.
     const un = this.facts.unenumerated;
-    if (!this.usb.connected && i >= RUNNING_CURRENT) {
+    if (this.observes('usb') && !this.usb.connected && i >= RUNNING_CURRENT) {
       if (un.since === null) un.since = t;
       if (un.firstAt === null) {
         un.firstAt = t;

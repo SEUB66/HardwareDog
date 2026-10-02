@@ -117,8 +117,9 @@ export function buildReport(sys: System, now = sys.now()): Report {
   });
 
   // USB
-  const usbResult: SectionResult = u.connections === 0 ? 'NO DATA' : u.disconnects > 0 ? 'WARNING' : 'PASS';
-  const usbNotes: string[] = [];
+  const usbWatched = sys.observes('usb');
+  const usbResult: SectionResult = !usbWatched || u.connections === 0 ? 'NO DATA' : u.disconnects > 0 ? 'WARNING' : 'PASS';
+  const usbNotes: string[] = usbWatched ? [] : ['This device does not monitor USB (no USB host port): no USB observation is made.'];
   if (u.correlatedDisconnects > 0) {
     usbNotes.push(`${u.correlatedDisconnects} / ${u.disconnects} disconnects within ${cfg.correlationWindowMs} ms of a voltage drop.`);
   }
@@ -128,7 +129,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
     result: usbResult,
     notes: usbNotes,
     rows: [
-      ['STATE', u.connected ? 'CONNECTED' : 'DISCONNECTED'],
+      ['STATE', !usbWatched ? 'NOT MONITORED' : u.connected ? 'CONNECTED' : 'DISCONNECTED'],
       ['DEVICE', d ? `${hex(d.vid)}:${hex(d.pid)} ${d.deviceClass}` : NO_VALUE],
       ['PRODUCT', d?.product ?? NO_VALUE],
       ['CONNECTIONS', String(u.connections)],

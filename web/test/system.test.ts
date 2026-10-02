@@ -148,3 +148,32 @@ describe('actions', () => {
     expect(new System(store).settings.sound).toBe(true);
   });
 });
+
+describe('capabilities (hello.caps)', () => {
+  /** A target drawing current for 12 s with no USB device in view. */
+  async function poweredNoUsb(caps: string[] | undefined) {
+    let now = 1_000_000;
+    const sys = new System(memoryStore(), () => now);
+    const t = new FakeTransport();
+    await sys.connect(t);
+    t.push({ type: 'hello', t: 0, proto: 1, device: 'HD-X', rev: 'A', fw: '1', ...(caps ? { caps: caps as never } : {}) });
+    for (let ms = 0; ms <= 12_000; ms += 100) {
+      now = 1_000_000 + ms;
+      t.push({ type: 'power', t: ms, v: 5.05, i: 0.11 });
+    }
+    sys.evaluate(now);
+    return sys;
+  }
+
+  it('a device that does not watch USB never gets a USB diagnosis from silence', async () => {
+    const sys = await poweredNoUsb(['power', 'uart']);
+    expect(sys.diagnoses.map((d) => d.id)).not.toContain('USB_NOT_ENUMERATED');
+    expect(sys.observes('usb')).toBe(false);
+    expect(reportToText(buildReport(sys))).toContain('NOT MONITORED');
+  });
+
+  it('a device that watches USB, or declares nothing (older devices), still does', async () => {
+    expect((await poweredNoUsb(['power', 'usb'])).diagnoses.map((d) => d.id)).toContain('USB_NOT_ENUMERATED');
+    expect((await poweredNoUsb(undefined)).diagnoses.map((d) => d.id)).toContain('USB_NOT_ENUMERATED');
+  });
+});
