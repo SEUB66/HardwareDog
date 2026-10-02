@@ -1,6 +1,7 @@
 import type { SessionMeta } from './archive';
 import type { System } from './system';
 import { bytes, clockShort, duration } from './format';
+import { METROLOGY, measurementLines } from './report';
 import { SCENARIOS, SCENARIO_IDS, isScenarioId, type ScenarioId } from './scenarios';
 import type { ProbeTest } from './types';
 import { PROBE_TESTS } from './types';
@@ -41,6 +42,10 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'probe i2c', summary: 'ACTIVE: scan the I2C bus' },
   { usage: 'usb enumerate', summary: 'ACTIVE: re-read USB descriptors' },
   { usage: 'serial <baud>', summary: 'set UART baud rate' },
+  { usage: 'meter', summary: 'what the power numbers are worth: sensor, range, accuracy' },
+  { usage: 'meter point <V> <mA>', summary: 'calibration: what the reference instrument reads now' },
+  { usage: 'meter cal "<reference>"', summary: 'ACTIVE: fit the points, store the calibration on the device' },
+  { usage: 'meter clear', summary: 'ACTIVE: remove the calibration (datasheet accuracy)' },
   { usage: 'serial send "<text>"', summary: 'ACTIVE: write a line to the target UART' },
   { usage: 'trace <pause|resume|clear>', summary: 'control the trace view' },
   { usage: 'report export [txt|json]', summary: 'save the diagnostic report locally' },
@@ -98,6 +103,16 @@ export function describeSession(m: SessionMeta): string {
   const source = `${h.source}${h.scenario ? ` ${h.scenario}` : ''}`;
   const found = m.diagnoses.length ? m.diagnoses.join(' ') : 'no findings';
   return `${h.id}  ${clockShort(h.startedAt)}  ${source.padEnd(18)}${duration(m.lastAt - h.startedAt).padStart(8)}  ${bytes(m.bytes).padStart(8)}  ${found}`;
+}
+
+/** YYYY-MM-DD in the operator's time zone: the day the calibration was done. */
+const localDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** What the power numbers are worth, in plain lines (same wording as the report). */
+function describeMeter(sys: System): CommandOutput {
+  const lines = measurementLines(sys.meter).map(([k, v]) => `${k.padEnd(14)}${v}`);
+  if (sys.calPoints.length) lines.push(`${'POINTS'.padEnd(14)}${sys.calPoints.length} waiting: meter cal "<reference>"`);
+  return ok(...lines, METROLOGY);
 }
 
 /**
@@ -168,6 +183,24 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
       const baud = Number(args[0]);
       if (!args[0] || !Number.isFinite(baud)) return fail('usage: serial <baud> | serial send "<text>"');
       return result(sys.setBaud(baud), `baud -> ${baud}`);
+    }
+
+    case 'meter': {
+      if (!a0) return describeMeter(sys);
+      if (a0 === 'point') {
+        const v = Number(args[1]);
+        const ma = Number(args[2]);
+        if (!args[2] || !Number.isFinite(v) || !Number.isFinite(ma)) return fail('usage: meter point <V> <mA>   (what the reference reads now)');
+        return result(sys.addCalPoint(v, ma / 1000), `point ${sys.calPoints.length + 1}: reference ${v} V ${ma} mA`);
+      }
+      if (a0 === 'cal') {
+        const ref = args.slice(1).join(' ');
+        if (!ref) return fail('usage: meter cal "<reference instrument>"');
+        const n = sys.calPoints.length;
+        return result(sys.applyCalibration(ref, localDate(new Date())), `calibration from ${n} points against ${ref} sent to the device`);
+      }
+      if (a0 === 'clear') return result(sys.clearCalibration(), 'calibration removed: datasheet accuracy');
+      return fail('usage: meter | meter point <V> <mA> | meter cal "<reference>" | meter clear');
     }
 
     case 'trace':

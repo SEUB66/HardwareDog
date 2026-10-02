@@ -1,4 +1,5 @@
-import type { DeviceFrame } from './protocol';
+import type { DeviceFrame, Meter } from './protocol';
+import { fitCalibration, rawOf, type CalPoint } from './calibration';
 import type { Transport } from './transport';
 import { Trace } from './trace';
 import type {
@@ -174,6 +175,10 @@ export class System {
   transportKind: TransportKind | null = null;
   transportLabel = '';
   device: DeviceInfo = { id: '--', rev: '--', firmware: '--', bootedAt: null, caps: null };
+  /** What the power numbers are worth, as the device declared it (power.meter). Null: not declared. */
+  meter: Meter | null = null;
+  /** Comparisons with a reference instrument, waiting to be fitted. */
+  calPoints: CalPoint[] = [];
   power: PowerState = emptyPower();
   usb: UsbState = emptyUsb();
   serial: SerialState = emptySerial();
@@ -437,6 +442,8 @@ export class System {
     this.seenFrames.add(f.type);
     if (f.type === 'hello') {
       this.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: this.now() - f.t, caps: f.caps ?? null };
+      // A (re)booted device declares its meter again; until then it is unknown.
+      this.meter = null;
       this.log(this.hostTime(f.t), 'SYS', 'INFO', `device ${f.device} rev ${f.rev}`, `fw ${f.fw} / proto ${f.proto}`);
       this.changed();
       return;
@@ -446,6 +453,20 @@ export class System {
       case 'power':
         this.onPower(t, f.v, f.i);
         break;
+      case 'power.meter': {
+        const { type: _type, t: _t, ...meter } = f;
+        this.meter = meter;
+        const v = meter.v_err;
+        const i = meter.i_err;
+        this.log(
+          t,
+          'POWER',
+          'INFO',
+          `meter: ${meter.sensor}, ${meter.basis === 'CALIBRATION' ? `calibrated ${meter.cal?.date ?? ''}` : 'datasheet accuracy'}`,
+          `V ±${v.pct}% +${(v.abs * 1000).toFixed(1)} mV / I ±${i.pct}% +${(i.abs * 1000).toFixed(2)} mA`,
+        );
+        break;
+      }
       case 'usb.attach':
         this.onUsbAttach(t, f);
         break;
@@ -843,6 +864,53 @@ export class System {
     this.serial.txBytes += utf8Length(text) + 1;
     this.pushSerial({ t, dir: 'TX', text });
     this.log(t, 'USER', 'INFO', `uart tx: ${text}`);
+    this.changed();
+    return null;
+  }
+
+  /**
+   * One calibration point: the mean of the last second of power samples,
+   * as the device measured them before its current calibration, against
+   * what the reference instrument reads now.
+   */
+  addCalPoint(refV: number, refI: number): string | null {
+    const err = this.requireLink('meter point');
+    if (err) return err;
+    if (!this.meter) return 'the device has not declared its meter (power.meter): nothing to calibrate';
+    if (!(refV > 0) || !Number.isFinite(refI)) return 'give the reference reading: volts above 0, current in mA';
+    const samples = this.power.samples;
+    const end = samples.at(-1)?.t ?? 0;
+    const last = samples.filter((x) => x.t > end - 1000);
+    if (last.length < 10) return `only ${last.length} power samples in the last second: wait for a steady reading`;
+    const mean = (f: (x: (typeof last)[number]) => number) => last.reduce((a, x) => a + f(x), 0) / last.length;
+    const raw = rawOf(mean((x) => x.voltage), mean((x) => x.current), this.meter.cal);
+    this.calPoints.push({ rawV: raw.v, rawI: raw.i, refV, refI });
+    this.log(this.now(), 'USER', 'INFO', `calibration point ${this.calPoints.length}`, `device ${raw.v.toFixed(4)} V ${(raw.i * 1000).toFixed(2)} mA / reference ${refV} V ${(refI * 1000).toFixed(2)} mA`);
+    this.changed();
+    return null;
+  }
+
+  /** Fit the points and store the calibration on the device. */
+  applyCalibration(reference: string, date: string): string | null {
+    const err = this.requireLink('meter cal');
+    if (err) return err;
+    const ref = reference.trim();
+    if (!ref || ref.length > 64) return 'name the reference instrument (1 to 64 characters)';
+    const r = fitCalibration(this.calPoints);
+    if (!r.ok) return r.error;
+    this.send({ cmd: 'meter.cal', date, ref, ...r.fit });
+    this.log(this.now(), 'USER', 'INFO', `calibration sent: ${this.calPoints.length} points against ${ref}`, `V gain ${r.fit.v_gain} / I gain ${r.fit.i_gain} offset ${(r.fit.i_offset * 1000).toFixed(2)} mA`);
+    this.calPoints = [];
+    this.changed();
+    return null;
+  }
+
+  clearCalibration(): string | null {
+    const err = this.requireLink('meter clear');
+    if (err) return err;
+    this.calPoints = [];
+    this.send({ cmd: 'meter.clear' });
+    this.log(this.now(), 'USER', 'INFO', 'calibration cleared: datasheet accuracy');
     this.changed();
     return null;
   }

@@ -43,6 +43,8 @@ typedef struct {
     float shunt_ohm;
     /* target UART */
     uint32_t baud;
+    /* calibration storage (the NVS of the device) */
+    hdp_cal_t stored_cal;
 } sim_t;
 
 static uint32_t rnd(sim_t *s) {
@@ -170,6 +172,18 @@ static void net_status(void *ctx, hdp_net_t *n) {
     strcpy(n->dns, "192.168.1.1");
 }
 
+static int cal_load(void *ctx, hdp_cal_t *out) {
+    sim_t *s = ctx;
+    if (!s->stored_cal.valid) return -1;
+    *out = s->stored_cal;
+    return 0;
+}
+
+static int cal_save(void *ctx, const hdp_cal_t *cal) {
+    ((sim_t *)ctx)->stored_cal = *cal;
+    return 0;
+}
+
 static int listen_once(int port) {
     int srv = socket(AF_INET, SOCK_STREAM, 0);
     int one = 1;
@@ -234,9 +248,9 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &s.t0);
 
     hdp_config_t cfg = {.device = "HD-HOST01", .rev = "HOST", .fw = "0.1.0", .ina_addr = 0x40, .shunt_ohm = 0.1f, .max_current_a = 0.8f, .sample_ms = 20, .net_ms = 2000,
-                       .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C | HDP_CAP_NET};
+                       .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C | HDP_CAP_NET, .shunt_tol_pct = 1.0f};
     hdp_hal_t hal = {.ctx = &s, .now_ms = now_ms, .write = out, .ina_read = ina_read, .ina_write = ina_write, .target_i2c_probe = i2c_probe,
-                     .target_i2c_hz = 100000, .uart_set_baud = uart_set_baud, .uart_write = uart_write, .net_status = net_status};
+                     .target_i2c_hz = 100000, .uart_set_baud = uart_set_baud, .uart_write = uart_write, .net_status = net_status, .cal_load = cal_load, .cal_save = cal_save};
     hdp_device_t d;
     hdp_init(&d, &cfg, &hal);
 

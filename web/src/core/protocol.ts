@@ -26,6 +26,7 @@ export type Capability = (typeof CAPABILITIES)[number];
 export type DeviceFrame =
   | { type: 'hello'; t: number; proto: number; device: string; rev: string; fw: string; caps?: Capability[] }
   | { type: 'power'; t: number; v: number; i: number }
+  | ({ type: 'power.meter'; t: number } & Meter)
   | {
       type: 'usb.attach';
       t: number;
@@ -71,7 +72,45 @@ export type HostCommand =
   | { cmd: 'uart.tx'; data: string }
   | { cmd: 'i2c.scan' }
   | { cmd: 'net.refresh' }
+  | ({ cmd: 'meter.cal' } & MeterCalCommand)
+  | { cmd: 'meter.clear' }
   | { cmd: 'probe'; id: string; target: string; tests: ProbeTest[] };
+
+/** |error| <= pct % of the reading + abs (unit of the quantity). */
+export interface ErrorBound {
+  pct: number;
+  abs: number;
+}
+
+export interface MeterCalibration {
+  date: string;
+  /** Reference instrument the device was compared against. */
+  ref: string;
+  v_gain: number;
+  i_gain: number;
+  i_offset: number;
+}
+
+/** What the power numbers are worth (power.meter). */
+export interface Meter {
+  sensor: string;
+  shunt_ohm: number;
+  v_max: number;
+  i_max: number;
+  v_res: number;
+  i_res: number;
+  rate_hz: number;
+  v_err: ErrorBound;
+  i_err: ErrorBound;
+  basis: 'DATASHEET' | 'CALIBRATION';
+  cal: MeterCalibration | null;
+}
+
+export interface MeterCalCommand extends MeterCalibration {
+  /** Largest residual seen against the reference (V, A). */
+  v_err: number;
+  i_err: number;
+}
 
 export type DecodeResult = { ok: true; frame: DeviceFrame } | { ok: false; error: string; raw: string };
 
@@ -130,6 +169,26 @@ function hop(o: Obj, k: string): { address: string | null; status: CheckStatus }
   return { address: strOrNull(h, 'address'), status: status(h, 'status') };
 }
 
+function positive(o: Obj, k: string): number {
+  const v = num(o, k);
+  if (v <= 0) throw new FrameError(`field "${k}" must be positive`);
+  return v;
+}
+
+function errorBound(o: Obj, k: string): ErrorBound {
+  const e = obj(o, k);
+  const pct = num(e, 'pct');
+  const abs = num(e, 'abs');
+  if (pct < 0 || abs < 0) throw new FrameError(`field "${k}" must not be negative`);
+  return { pct, abs };
+}
+
+function calibration(o: Obj): MeterCalibration | null {
+  if (o['cal'] === null || o['cal'] === undefined) return null;
+  const c = obj(o, 'cal');
+  return { date: str(c, 'date'), ref: str(c, 'ref'), v_gain: num(c, 'v_gain'), i_gain: num(c, 'i_gain'), i_offset: num(c, 'i_offset') };
+}
+
 function parseFrame(o: Obj): DeviceFrame {
   const type = str(o, 'type');
   const t = num(o, 't');
@@ -156,6 +215,22 @@ function parseFrame(o: Obj): DeviceFrame {
         manufacturer: strOrNull(o, 'manufacturer'),
         product: strOrNull(o, 'product'),
         serial: strOrNull(o, 'serial'),
+      };
+    case 'power.meter':
+      return {
+        type,
+        t,
+        sensor: str(o, 'sensor'),
+        shunt_ohm: positive(o, 'shunt_ohm'),
+        v_max: positive(o, 'v_max'),
+        i_max: positive(o, 'i_max'),
+        v_res: positive(o, 'v_res'),
+        i_res: positive(o, 'i_res'),
+        rate_hz: positive(o, 'rate_hz'),
+        v_err: errorBound(o, 'v_err'),
+        i_err: errorBound(o, 'i_err'),
+        basis: oneOf(o, 'basis', ['DATASHEET', 'CALIBRATION'] as const),
+        cal: calibration(o),
       };
     case 'usb.detach':
       return { type, t };
