@@ -169,6 +169,11 @@ ctest --test-dir firmware/host/build
 firmware/host/build/hwdog-host --fast --scenario sag --seconds 30
 ```
 
+`--chip 7cdfa13a1f2c` gives the simulated board a factory id for its
+hello (a board knows its own; a simulation is given one or sends none).
+With `--fast` and commands piped on stdin, every command is read at t=0
+before device time runs: a scripted run never races its script.
+
 ---
 
 ## BRING-UP ON THE BOARD (the LVL 60 gate)

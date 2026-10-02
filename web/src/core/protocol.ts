@@ -24,7 +24,7 @@ export const CAPABILITIES = ['power', 'usb', 'uart', 'i2c', 'net', 'probe'] as c
 export type Capability = (typeof CAPABILITIES)[number];
 
 export type DeviceFrame =
-  | { type: 'hello'; t: number; proto: number; device: string; rev: string; fw: string; caps?: Capability[] }
+  | { type: 'hello'; t: number; proto: number; device: string; rev: string; fw: string; chip?: string; caps?: Capability[] }
   | { type: 'power'; t: number; v: number; i: number }
   | ({ type: 'power.meter'; t: number } & Meter)
   | {
@@ -205,6 +205,8 @@ function parseFrame(o: Obj): DeviceFrame {
   switch (type) {
     case 'hello': {
       const hello: DeviceFrame = { type, t, proto: num(o, 'proto'), device: str(o, 'device'), rev: str(o, 'rev'), fw: str(o, 'fw') };
+      // The 48-bit chip id, only well formed: never a guess.
+      if (typeof o['chip'] === 'string' && /^[0-9a-f]{12}$/.test(o['chip'])) hello.chip = o['chip'];
       // Liberal: unknown capabilities from a newer device are ignored, not fatal.
       if (Array.isArray(o['caps'])) hello.caps = CAPABILITIES.filter((c) => (o['caps'] as unknown[]).includes(c));
       return hello;

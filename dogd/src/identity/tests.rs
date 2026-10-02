@@ -73,13 +73,13 @@ fn a_stable_id_survives_a_change_of_usb_port() {
     );
 
     let chip = Fingerprint {
-        chip_id: Some("HD-3A1F2C".into()),
+        chip_id: Some("7CDFA13A1F2C".into()),
         port: Some("COM9".into()),
         ..Default::default()
     };
     let known = [Known {
         id: "HW-9".into(),
-        chip_id: Some("hd-3a1f2c".into()),
+        chip_id: Some("7cdfa13a1f2c".into()),
         ..Default::default()
     }];
     assert_eq!(id_of(&resolve(&chip, &None, &known, &[])), Some("HW-9"));
@@ -199,14 +199,14 @@ fn different_strong_ids_are_never_merged() {
     // Another chip id on the same port: another board.
     let known = [Known {
         id: "HW-9".into(),
-        chip_id: Some("HD-000001".into()),
+        chip_id: Some("7cdfa1000001".into()),
         vid: Some(0x303a),
         pid: Some(0x1001),
         usb_path: Some("1-2".into()),
         ..Default::default()
     }];
     let fp = Fingerprint {
-        chip_id: Some("HD-000002".into()),
+        chip_id: Some("7cdfa1000002".into()),
         vid: Some(0x303a),
         pid: Some(0x1001),
         usb_path: Some("1-2".into()),
@@ -222,7 +222,8 @@ fn different_strong_ids_are_never_merged() {
 }
 
 #[test]
-fn a_device_known_by_its_port_gains_its_chip_id() {
+fn a_strong_key_is_never_folded_into_a_weaker_record() {
+    // Known by its socket only: its past may be another board's.
     let fp0 = Fingerprint {
         vid: Some(0x303a),
         pid: Some(0x1001),
@@ -231,13 +232,97 @@ fn a_device_known_by_its_port_gains_its_chip_id() {
     };
     let known = [known_from("HW-P", &fp0)];
     let with_chip = Fingerprint {
-        chip_id: Some("HD-3A1F2C".into()),
+        chip_id: Some("7cdfa13a1f2c".into()),
         ..fp0.clone()
     };
     assert_eq!(
-        id_of(&resolve(&with_chip, &None, &known, &[])),
-        Some("HW-P")
+        resolve(&with_chip, &None, &known, &[]),
+        Resolution::New {
+            strength: Strength::Excellent,
+            basis: "chip id 7cdfa13a1f2c".into(),
+            hint: Some("HW-P".into())
+        }
     );
+    // Known by its legacy 24-bit HDP id: the same, a hint, not a merge.
+    let legacy = [Known {
+        id: "HW-L".into(),
+        legacy_id: Some("HD-3A1F2C".into()),
+        ..Default::default()
+    }];
+    let hello = Fingerprint {
+        chip_id: Some("7cdfa13a1f2c".into()),
+        legacy_id: Some("HD-3A1F2C".into()),
+        ..Default::default()
+    };
+    assert!(matches!(
+        resolve(&hello, &None, &legacy, &[]),
+        Resolution::New { hint: Some(h), strength: Strength::Excellent, .. } if h == "HW-L"
+    ));
+    // Two excellent keys that agree (trusted serial, then its chip id): one device.
+    let sn = dongle("p", Some("1-2"), Some("A50285BI"));
+    let known = [known_from("HW-S", &sn)];
+    let sn_chip = Fingerprint {
+        chip_id: Some("7cdfa13a1f2c".into()),
+        ..sn.clone()
+    };
+    assert_eq!(
+        id_of(&resolve(
+            &sn_chip,
+            &usable_serial(&sn_chip, &[]),
+            &known,
+            &[]
+        )),
+        Some("HW-S")
+    );
+}
+
+#[test]
+fn a_legacy_24_bit_id_is_only_a_hint() {
+    let old = |id: &str| Known {
+        id: id.into(),
+        legacy_id: Some("HD-3A1F2C".into()),
+        ..Default::default()
+    };
+    let hello = Fingerprint {
+        legacy_id: Some("hd-3a1f2c".into()),
+        port: Some("tcp:10.0.0.7:3333".into()),
+        ..Default::default()
+    };
+    // Never EXCELLENT, even when it matches.
+    assert_eq!(
+        resolve(&hello, &None, &[old("HW-1")], &[]),
+        Resolution::Known {
+            id: "HW-1".into(),
+            strength: Strength::Good,
+            basis: "HDP device id hd-3a1f2c (24 bits, legacy)".into()
+        }
+    );
+    // Two boards whose MACs end alike: not chosen.
+    assert!(matches!(
+        resolve(&hello, &None, &[old("HW-1"), old("HW-2")], &[]),
+        Resolution::Ambiguous { candidates, .. } if candidates.len() == 2
+    ));
+    // Unknown: a new identity, GOOD at best.
+    assert!(matches!(
+        resolve(&hello, &None, &[], &[]),
+        Resolution::New {
+            strength: Strength::Good,
+            ..
+        }
+    ));
+    // Two different 48-bit chip ids with the same 24-bit tail: two devices.
+    let a = Known {
+        chip_id: Some("7cdfa13a1f2c".into()),
+        ..old("HW-A")
+    };
+    let b = Fingerprint {
+        chip_id: Some("0011223a1f2c".into()),
+        ..hello.clone()
+    };
+    assert!(matches!(
+        resolve(&b, &None, &[a], &[]),
+        Resolution::New { hint: None, .. }
+    ));
 }
 
 #[test]
@@ -245,7 +330,8 @@ fn ids_are_deterministic() {
     let a = dongle("COM3", Some("1-2"), Some("A50285BI"));
     let id = identity_id(&identity_key(&a, &usable_serial(&a, &[])));
     assert_eq!(id, identity_id(&identity_key(&a, &usable_serial(&a, &[]))));
-    assert!(id.starts_with("HW-") && id.len() == 13);
+    // 96 bits: 24 hex digits.
+    assert!(id.starts_with("HW-") && id.len() == 27, "{id}");
 }
 
 #[test]

@@ -42,3 +42,20 @@ jobs:
       - name: dogd is transparent
         working-directory: web
         run: DOGD_BIN="$GITHUB_WORKSPACE/dogd/target/debug/dogd" npx vitest run test/dogd.test.ts
+
+  # Identity on the other desks: the USB location comes from the OS there
+  # (Windows location path, macOS location id), not from sysfs.
+  other-os:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: lint
+        working-directory: dogd
+        run: cargo clippy --all-targets -- -D warnings
+      - name: unit tests
+        working-directory: dogd
+        run: cargo test

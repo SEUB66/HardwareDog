@@ -16,6 +16,12 @@ sha2 = "0.10"
 tokio-serial = { version = "5", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
+# USB location (topology) and interface number from the OS: the Windows
+# location path, the macOS location id. Linux reads sysfs itself
+# (identity::usb_topology), so the feature stays off there.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+serialport = { version = "4.10", default-features = false, features = ["usbportinfo-location", "usbportinfo-interface"] }
+
 [profile.release]
 strip = true
 lto = "thin"

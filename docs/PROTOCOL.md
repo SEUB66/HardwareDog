@@ -45,8 +45,15 @@ Sent on boot and in reply to a host `hello`. Anchors the device clock to the
 host clock.
 
 ```json
-{"type":"hello","t":0,"proto":1,"device":"HD-3A1F2C","rev":"DEVKIT-S3","fw":"0.1.0","caps":["power","uart","i2c","net"]}
+{"type":"hello","t":0,"proto":1,"device":"HD-3A1F2C","rev":"DEVKIT-S3","fw":"0.1.0","chip":"7cdfa13a1f2c","caps":["power","uart","i2c","net"]}
 ```
+
+`device` is a short name for people: on the ESP32 it is the last 24 bits
+of the MAC, so two boards can share it. `chip` (optional) is the 48-bit
+factory id, the eFuse MAC as 12 lowercase hex: that is what a host keys a
+device's identity on ([`IDENTITY.md`](IDENTITY.md)). A board that does not
+know its factory id sends no `chip`; it never sends a made-up one. Hosts
+ignore a `chip` that is not 12 lowercase hex.
 
 `caps` (optional) is what the device can observe: `power`, `usb`, `uart`,
 `i2c`, `net`, `probe`. A hello without `caps` (devices made before it)

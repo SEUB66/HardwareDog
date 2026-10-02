@@ -93,7 +93,9 @@ enum {
 };
 
 typedef struct {
-    const char *device;   /* e.g. "HD-3A1F2C" */
+    const char *device;   /* e.g. "HD-3A1F2C": for people, 24 bits, not unique */
+    const char *chip;     /* 48-bit factory id, 12 lowercase hex (the eFuse
+                             MAC), e.g. "7cdfa13a1f2c"; NULL: not sent */
     const char *rev;      /* hardware revision, e.g. "DEVKIT-S3" */
     const char *fw;       /* firmware version */
     uint8_t ina_addr;     /* 0x40 on most INA226 boards */
