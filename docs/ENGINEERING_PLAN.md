@@ -583,7 +583,7 @@ LVL   NAME                                  STATUS
 60    first physical Hardware Dog            PARTIAL   core PASS on PC + CI, board bring-up pending
 65    calibration + truthfulness             PARTIAL   software PASS, reference comparison on boards pending
 70    real fault lab                         PLANNED
-75    professional reports                   PARTIAL   TXT + JSON
+75    professional reports                   DONE      TXT, JSON, HTML, PDF from the same lines
 80    network + I2C on hardware              PLANNED
 85    PCB Rev A                              PLANNED
 90    probe architecture                     PLANNED
@@ -745,13 +745,27 @@ PHYSICAL FAILURE -> HDLOG -> CASE -> REGRESSION TEST
 The simulator gradually stops being made of imagined scenarios and starts
 reproducing traces of real failures.
 
-### LVL 75 — PROFESSIONAL REPORTS
+### LVL 75 — PROFESSIONAL REPORTS     DONE
 
 A document a technician attaches to a ticket: device, session, provenance,
 recording hash, observations, correlations, diagnoses, confidence,
 recommended checks, timeline excerpt, measurement limitations.
 Exports TXT, JSON, HTML, PDF. JSON stays the machine-readable truth.
-TXT and JSON exist today.
+
+```text
+[ OK ] one source: reportLines() (core/report.ts). TXT, HTML and PDF are
+       set from the same styled lines: no format says what another does not
+[ OK ] timeline excerpt: the events the diagnoses cite (>) with two
+       events of context each side, and how many were left out
+[ OK ] measurement limitations (LVL 65) and the metrology line
+[ OK ] HTML: one file, no script, no remote resource (CSP), everything
+       from the device escaped, prints on A4
+[ OK ] PDF: written by Hardware Dog (core/pdf.ts), no library, no server;
+       standard Courier fonts, A4, the SIMULATED / MODIFIED warning on
+       every page, page numbers, same report = same bytes
+[ OK ] GATE: a real PDF reader (pdf.js, test only) opens it and finds
+       every line of the TXT report (web/test/reports.test.ts)
+```
 
 ### LVL 80 — NETWORK + I2C ON HARDWARE
 
