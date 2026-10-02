@@ -5,7 +5,8 @@
 //!   GET  /v1/link                    the device link: state, source, origin, device
 //!   GET  /v1/devices                 attached devices and who they are, known identities
 //!   GET  /v1/devices/events?since=N  plug / unplug / identified, in order
-//!   PUT  /v1/devices/{id}/alias      name a device once (text body, empty clears)
+//!   PUT  /v1/devices/{id}/alias      a label for people (text body, empty clears)
+//!   PUT  /v1/devices/{id}/bind       the device on the port in the body is {id}
 //!   GET  /v1/sessions                stored sessions (the index)
 //!   GET  /v1/sessions/{id}           one session
 //!   GET  /v1/sessions/{id}/hdlog     the file, byte for byte
@@ -59,6 +60,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/devices", get(devices))
         .route("/v1/devices/events", get(device_events))
         .route("/v1/devices/{id}/alias", axum::routing::put(put_alias))
+        .route("/v1/devices/{id}/bind", axum::routing::put(put_bind))
         .route("/v1/sessions", get(sessions))
         .route("/v1/sessions/{id}", get(session))
         .route(
@@ -206,9 +208,35 @@ async fn put_alias(State(s): State<AppState>, Path(id): Path<String>, body: Byte
     };
     match s.store.set_alias(&id, name) {
         Ok(()) => Json(s.store.hw_device(&id)).into_response(),
-        Err(e) if e.starts_with("no device") => (StatusCode::NOT_FOUND, e).into_response(),
-        Err(e) => (StatusCode::UNPROCESSABLE_ENTITY, e).into_response(),
+        Err(e) => identity_error(e),
     }
+}
+
+async fn put_bind(State(s): State<AppState>, Path(id): Path<String>, body: Bytes) -> Response {
+    let Ok(port) = std::str::from_utf8(&body) else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, "the body is a port name").into_response();
+    };
+    match s.discovery.bind(&s.store, port.trim(), &id) {
+        Ok(o) => Json(o).into_response(),
+        Err(e) => identity_error(e),
+    }
+}
+
+/// Not found, not stored (the index failed: said, never hidden), or refused.
+fn identity_error(e: String) -> Response {
+    let code = if e.starts_with("no device") || e.starts_with("nothing attached") {
+        StatusCode::NOT_FOUND
+    } else if e.starts_with("index:") {
+        StatusCode::INTERNAL_SERVER_ERROR
+    } else if e.starts_with("refused")
+        || e.contains("attached on another port")
+        || e.contains("was bound to")
+    {
+        StatusCode::CONFLICT
+    } else {
+        StatusCode::UNPROCESSABLE_ENTITY
+    };
+    (code, e).into_response()
 }
 
 async fn sessions(State(s): State<AppState>) -> Json<serde_json::Value> {
@@ -527,6 +555,20 @@ mod http_tests {
             app(&[]),
             "PUT",
             "/v1/devices/HW-NOPE/alias",
+            &[
+                ("host", "127.0.0.1:4782"),
+                ("origin", "https://evil.example"),
+            ],
+        )
+        .await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        // Binding a port where nothing is attached: not found, nothing written.
+        let (s, _) = call(app(&[]), "PUT", "/v1/devices/HW-NOPE/bind", &host).await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+        let (s, _) = call(
+            app(&[]),
+            "PUT",
+            "/v1/devices/HW-NOPE/bind",
             &[
                 ("host", "127.0.0.1:4782"),
                 ("origin", "https://evil.example"),

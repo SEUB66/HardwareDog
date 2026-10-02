@@ -152,6 +152,22 @@ static void test_boot_and_power(void) {
     CHECK(lines_well_formed());
 }
 
+/* The 48-bit chip id: sent when the board knows it, only well formed. */
+static void test_hello_chip_id(void) {
+    setup();
+    D.cfg.chip = "7cdfa13a1f2c";
+    hdp_start(&D);
+    CHECK(has("\"fw\":\"0.1.0\",\"chip\":\"7cdfa13a1f2c\",\"caps\":"));
+    const char *bad[] = {"3a1f2c", "7CDFA13A1F2C", "7cdfa13a1f2g", ""};
+    for (int k = 0; k < 4; k++) {
+        setup();
+        D.cfg.chip = bad[k];
+        hdp_start(&D);
+        CHECK(has("\"type\":\"hello\"") && !has("\"chip\""));
+    }
+    CHECK(lines_well_formed());
+}
+
 static void test_calibration(void) {
     float lsb;
     uint16_t cal = hdp_ina226_calibration(0.1f, 0.8f, &lsb);
@@ -471,6 +487,7 @@ static void test_json_string(void) {
 int main(void) {
     test_calibration();
     test_boot_and_power();
+    test_hello_chip_id();
     test_current_accuracy_through_the_chip_math();
     test_ina_missing_or_wrong();
     test_meter_and_calibration();

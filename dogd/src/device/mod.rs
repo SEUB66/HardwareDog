@@ -18,6 +18,12 @@ pub struct Port {
     pub manufacturer: Option<String>,
     pub product: Option<String>,
     pub serial: Option<String>,
+    /// USB topology reported by the OS (Windows location path, macOS
+    /// location id), e.g. "PCIROOT(0)#PCI(1400)#USBROOT(0)-2.3". None on
+    /// Linux, where discovery reads sysfs.
+    pub location: Option<String>,
+    /// USB interface number reported by the OS, e.g. "if 0".
+    pub interface: Option<String>,
 }
 
 pub fn list_ports() -> Vec<Port> {
@@ -34,6 +40,14 @@ pub fn list_ports() -> Vec<Port> {
                 manufacturer: u.manufacturer,
                 product: u.product,
                 serial: u.serial_number,
+                #[cfg(not(target_os = "linux"))]
+                location: u.location.map(|l| l.to_string()),
+                #[cfg(not(target_os = "linux"))]
+                interface: u.interface.map(|i| format!("if {i}")),
+                #[cfg(target_os = "linux")]
+                location: None,
+                #[cfg(target_os = "linux")]
+                interface: None,
             },
             other => Port {
                 port: p.port_name,
@@ -47,6 +61,8 @@ pub fn list_ports() -> Vec<Port> {
                 manufacturer: None,
                 product: None,
                 serial: None,
+                location: None,
+                interface: None,
             },
         })
         .collect()

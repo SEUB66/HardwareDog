@@ -22,9 +22,8 @@ use config::{Config, DEFAULT_PORT, USAGE};
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (cmd, rest) = match args.first().map(String::as_str) {
-        Some("serve") | Some("status") | Some("devices") | Some("sessions") | Some("alias") => {
-            (args[0].as_str(), &args[1..])
-        }
+        Some("serve") | Some("status") | Some("devices") | Some("sessions") | Some("alias")
+        | Some("bind") => (args[0].as_str(), &args[1..]),
         Some("--help") | Some("-h") | Some("help") => {
             println!("{USAGE}");
             return;
@@ -46,6 +45,7 @@ fn main() {
             "devices" => devices(rest).await,
             "sessions" => sessions(rest),
             "alias" => alias(rest),
+            "bind" => bind(rest).await,
             _ => unreachable!(),
         }
     });
@@ -78,8 +78,8 @@ async fn serve(cfg: Config) -> i32 {
     let (seen, found) = (store.clone(), discovery.clone());
     let link = transport::Link::new(&cfg.source, cfg.origin, move |hello, port| {
         seen.saw_device(hello, port);
-        // The HDP device id comes from the chip: the strongest identity there is.
-        if let Some(line) = found.identified(&seen, port, &hello.device) {
+        // The 48-bit chip id (or, from older firmware, the 24-bit HDP id).
+        if let Some(line) = found.identified(&seen, port, hello) {
             println!("{line}");
         }
     });
@@ -133,6 +133,16 @@ async fn serve(cfg: Config) -> i32 {
 
 /// Minimal HTTP/1.1 GET to a local dogd: no HTTP client dependency.
 async fn local_get(port: u16, path: &str) -> Result<serde_json::Value, String> {
+    local_request(port, "GET", path, "").await.map(|(_, v)| v)
+}
+
+/// One request to a local dogd: (status, JSON body, or the text as a string).
+async fn local_request(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: &str,
+) -> Result<(u16, serde_json::Value), String> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut s = tokio::time::timeout(
         Duration::from_secs(2),
@@ -141,15 +151,25 @@ async fn local_get(port: u16, path: &str) -> Result<serde_json::Value, String> {
     .await
     .map_err(|_| "timeout".to_string())?
     .map_err(|e| format!("no dogd on 127.0.0.1:{port} ({e})"))?;
-    let req = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    let req = format!(
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
     s.write_all(req.as_bytes())
         .await
         .map_err(|e| e.to_string())?;
     let mut buf = Vec::new();
     s.read_to_end(&mut buf).await.map_err(|e| e.to_string())?;
     let text = String::from_utf8_lossy(&buf);
-    let body = text.split_once("\r\n\r\n").map(|(_, b)| b).unwrap_or("");
-    serde_json::from_str(body).map_err(|e| format!("bad answer: {e}"))
+    let (head, body) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    let value = serde_json::from_str(body)
+        .unwrap_or_else(|_| serde_json::Value::String(body.trim().to_string()));
+    Ok((status, value))
 }
 
 fn port_arg(args: &[String]) -> u16 {
@@ -228,10 +248,24 @@ fn known_devices(store: &storage::Store) -> i32 {
             "{:<15}{:<22}{:<11}{:<11}{}",
             d.id, name, usb, d.strength, d.basis
         );
-        if let Some(a) = d.ambiguous_with {
+        if let Some(by) = d.superseded_by {
+            println!("{:<15}bound by the user to {by}", "");
+        } else if let Some(a) = d.ambiguous_with {
             println!(
-                "{:<15}looks like {a}: give it an alias (dogd alias {} NAME)",
-                "", d.id
+                "{:<15}looks like {a}: if it is one of them, dogd bind PORT HW-ID",
+                ""
+            );
+        } else if let Some(h) = d.hint {
+            println!(
+                "{:<15}{h} matched by a weaker key only: dogd bind PORT {h} if they are the same",
+                ""
+            );
+        }
+        if d.serial.is_some() && !d.serial_trusted {
+            println!(
+                "{:<15}serial {} is shared by other units: not an identity",
+                "",
+                d.serial.as_deref().unwrap_or("")
             );
         }
     }
@@ -260,8 +294,11 @@ async fn devices(args: &[String]) -> i32 {
     for (p, fp) in ports.iter().zip(&fps) {
         let others: Vec<identity::Fingerprint> =
             fps.iter().filter(|f| f.port != fp.port).cloned().collect();
-        let serial = identity::usable_serial(fp, &others);
-        let who = match identity::resolve(fp, &serial, &known, &[]) {
+        let resolution = match &store {
+            Some(s) => s.preview(fp, &others, &[]),
+            None => identity::resolve(fp, &identity::usable_serial(fp, &others), &[], &[]),
+        };
+        let who = match resolution {
             identity::Resolution::Known {
                 id,
                 strength,
@@ -275,9 +312,17 @@ async fn devices(args: &[String]) -> i32 {
                     .unwrap_or_default();
                 format!("{id}{alias} {} ({basis})", strength.as_str())
             }
-            identity::Resolution::New { strength, basis } => {
-                format!("NEW {} ({basis})", strength.as_str())
-            }
+            identity::Resolution::New {
+                strength,
+                basis,
+                hint,
+            } => match hint {
+                Some(h) => format!(
+                    "NEW {} ({basis}; {h} matches by a weaker key only: not merged)",
+                    strength.as_str()
+                ),
+                None => format!("NEW {} ({basis})", strength.as_str()),
+            },
             identity::Resolution::Ambiguous { candidates, basis } => {
                 format!("AMBIGUOUS {} ({basis})", candidates.join(" "))
             }
@@ -337,6 +382,57 @@ fn alias(args: &[String]) -> i32 {
         }
         Ok(()) => {
             println!("{id}: '{name}'");
+            0
+        }
+        Err(e) => fail(&e),
+    }
+}
+
+/// dogd bind PORT HW-ID: the device attached on PORT is HW-ID. Through
+/// the running dogd when there is one, else on the index directly.
+async fn bind(args: &[String]) -> i32 {
+    let usage = "usage: dogd bind PORT HW-ID";
+    let (Some(port), Some(target)) = (args.first(), args.get(1)) else {
+        return fail(usage);
+    };
+    if port.starts_with("--") || target.starts_with("--") {
+        return fail(usage);
+    }
+    let path = format!("/v1/devices/{target}/bind");
+    if let Ok((status, answer)) = local_request(port_arg(args), "PUT", &path, port).await {
+        if status == 200 {
+            println!(
+                "{port}: {target} ({})",
+                answer.get("basis").and_then(|b| b.as_str()).unwrap_or("")
+            );
+            return 0;
+        }
+        return fail(answer.as_str().unwrap_or("refused"));
+    }
+    // No dogd running: bind against a fresh listing.
+    let store = match storage::Store::open(&data_dir(args)) {
+        Ok(s) => s,
+        Err(e) => return fail(&e),
+    };
+    let ports = tokio::task::spawn_blocking(device::list_ports)
+        .await
+        .unwrap_or_default();
+    let fps: Vec<identity::Fingerprint> = ports.iter().map(discovery::fingerprint).collect();
+    let Some(fp) = fps
+        .iter()
+        .find(|f| f.port.as_deref() == Some(port.as_str()))
+    else {
+        return fail(&format!("nothing attached on {port}"));
+    };
+    let others: Vec<identity::Fingerprint> =
+        fps.iter().filter(|f| f.port != fp.port).cloned().collect();
+    let current = match store.preview(fp, &others, &[]) {
+        identity::Resolution::Known { id, .. } => Some(id),
+        _ => None,
+    };
+    match store.bind(fp, &others, &[], current.as_deref(), target) {
+        Ok(o) => {
+            println!("{port}: {target} ({})", o.basis);
             0
         }
         Err(e) => fail(&e),

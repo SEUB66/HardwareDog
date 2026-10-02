@@ -40,9 +40,10 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 ";
 
-/// Index v2: hardware identities (identity/mod.rs) and plug events. Added
-/// next to v1, which is kept as is: an older index opens, and its devices
-/// become identities by their HDP device id.
+/// Index v2: hardware identities (identity/mod.rs), plug events, and the
+/// serials proven shared. Added next to v1, which is kept as is: an older
+/// index opens, and its Hardware Dogs become identities by their legacy
+/// (24-bit) HDP device id.
 const SCHEMA_V2: &str = "
 CREATE TABLE IF NOT EXISTS hw_devices (
   id             TEXT PRIMARY KEY,
@@ -53,13 +54,17 @@ CREATE TABLE IF NOT EXISTS hw_devices (
   manufacturer   TEXT,
   product        TEXT,
   serial         TEXT,
+  serial_trusted INTEGER NOT NULL DEFAULT 1,
   usb_path       TEXT,
   interface      TEXT,
   mac            TEXT,
   chip_id        TEXT,
+  legacy_id      TEXT,
   strength       TEXT    NOT NULL,
   basis          TEXT    NOT NULL,
   ambiguous_with TEXT,
+  hint           TEXT,
+  superseded_by  TEXT,
   first_seen     INTEGER NOT NULL,
   last_seen      INTEGER NOT NULL,
   last_port      TEXT
@@ -72,6 +77,14 @@ CREATE TABLE IF NOT EXISTS hw_events (
   port      TEXT    NOT NULL,
   strength  TEXT,
   basis     TEXT    NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hw_shared_serials (
+  vid    INTEGER NOT NULL,
+  pid    INTEGER NOT NULL,
+  serial TEXT    NOT NULL,
+  t      INTEGER NOT NULL,
+  reason TEXT    NOT NULL,
+  PRIMARY KEY (vid, pid, serial)
 );
 ";
 
@@ -276,19 +289,27 @@ fn migrate(db: &Connection) -> rusqlite::Result<()> {
     }
     if v < 2 {
         db.execute_batch(SCHEMA_V2)?;
-        // The Hardware Dogs seen by v1 are known by their HDP device id,
-        // derived from the chip: an excellent identity, carried over.
+        // The Hardware Dogs seen by v1 are known by their HDP device id: 24
+        // bits of the MAC, not unique. Carried over as a legacy key (GOOD),
+        // never as a chip id.
         let old: Vec<(String, Option<String>, i64, i64)> = {
             let mut q = db.prepare("SELECT device_id, port, first_seen, last_seen FROM devices")?;
             let rows = q.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
-            rows.filter_map(Result::ok).collect()
+            rows.collect::<rusqlite::Result<_>>()?
         };
         for (device, port, first, last) in old {
-            let id = identity::identity_id(&format!("chip:{}", device.to_ascii_lowercase()));
+            let l = device.trim().to_ascii_lowercase();
             db.execute(
-                "INSERT OR IGNORE INTO hw_devices (id, chip_id, strength, basis, first_seen, last_seen, last_port)
-                 VALUES (?1, ?2, 'EXCELLENT', ?3, ?4, ?5, ?6)",
-                params![id, device, format!("chip id {} (HDP device id, from index v1)", device.to_ascii_lowercase()), first, last, port],
+                "INSERT OR IGNORE INTO hw_devices (id, legacy_id, strength, basis, first_seen, last_seen, last_port)
+                 VALUES (?1, ?2, 'GOOD', ?3, ?4, ?5, ?6)",
+                params![
+                    identity::identity_id(&format!("hdp24:{l}")),
+                    device,
+                    format!("HDP device id {l} (24 bits of the MAC, not unique: legacy, from index v1)"),
+                    first,
+                    last,
+                    port
+                ],
             )?;
         }
         db.execute_batch("PRAGMA user_version = 2;")?;
@@ -305,14 +326,23 @@ pub struct HwDevice {
     pub pid: Option<u16>,
     pub manufacturer: Option<String>,
     pub product: Option<String>,
+    /// Kept for display even when it is not trusted.
     pub serial: Option<String>,
+    /// False once the serial is proven shared: it is no longer a key.
+    pub serial_trusted: bool,
     pub usb_path: Option<String>,
     pub interface: Option<String>,
     pub mac: Option<String>,
     pub chip_id: Option<String>,
+    pub legacy_id: Option<String>,
     pub strength: String,
     pub basis: String,
+    /// Look-alikes it could not be told from, until the user binds it.
     pub ambiguous_with: Option<String>,
+    /// A known identity a weaker key pointed to, not merged.
+    pub hint: Option<String>,
+    /// Bound by the user to another identity: kept, no longer resolved.
+    pub superseded_by: Option<String>,
     pub first_seen: i64,
     pub last_seen: i64,
     pub last_port: Option<String>,
@@ -337,14 +367,16 @@ pub struct Observation {
     pub alias: Option<String>,
     pub strength: Option<String>,
     pub basis: String,
+    /// Created by this attachment.
     pub new: bool,
     pub ambiguous_with: Vec<String>,
+    pub hint: Option<String>,
     pub fingerprint: Fingerprint,
 }
 
 const HW_COLUMNS: &str =
-    "id, alias, vid, pid, manufacturer, product, serial, usb_path, interface, mac, chip_id,
-    strength, basis, ambiguous_with, first_seen, last_seen, last_port";
+    "id, alias, vid, pid, manufacturer, product, serial, serial_trusted, usb_path, interface, mac, chip_id,
+    legacy_id, strength, basis, ambiguous_with, hint, superseded_by, first_seen, last_seen, last_port";
 
 fn hw_row(r: &rusqlite::Row) -> rusqlite::Result<HwDevice> {
     Ok(HwDevice {
@@ -355,28 +387,36 @@ fn hw_row(r: &rusqlite::Row) -> rusqlite::Result<HwDevice> {
         manufacturer: r.get(4)?,
         product: r.get(5)?,
         serial: r.get(6)?,
-        usb_path: r.get(7)?,
-        interface: r.get(8)?,
-        mac: r.get(9)?,
-        chip_id: r.get(10)?,
-        strength: r.get(11)?,
-        basis: r.get(12)?,
-        ambiguous_with: r.get(13)?,
-        first_seen: r.get(14)?,
-        last_seen: r.get(15)?,
-        last_port: r.get(16)?,
+        serial_trusted: r.get::<_, i64>(7)? != 0,
+        usb_path: r.get(8)?,
+        interface: r.get(9)?,
+        mac: r.get(10)?,
+        chip_id: r.get(11)?,
+        legacy_id: r.get(12)?,
+        strength: r.get(13)?,
+        basis: r.get(14)?,
+        ambiguous_with: r.get(15)?,
+        hint: r.get(16)?,
+        superseded_by: r.get(17)?,
+        first_seen: r.get(18)?,
+        last_seen: r.get(19)?,
+        last_port: r.get(20)?,
     })
 }
 
 /// The strength a stored identity has, from the keys it holds.
 fn record_strength(d: &HwDevice) -> Strength {
-    if d.chip_id.is_some() || d.mac.is_some() || d.serial.is_some() {
+    if d.chip_id.is_some() || d.mac.is_some() || (d.serial.is_some() && d.serial_trusted) {
         Strength::Excellent
-    } else if d.usb_path.is_some() {
+    } else if d.legacy_id.is_some() || d.usb_path.is_some() {
         Strength::Good
     } else {
         Strength::Medium
     }
+}
+
+fn db_err(e: rusqlite::Error) -> String {
+    format!("index: {e}")
 }
 
 impl Store {
@@ -384,7 +424,7 @@ impl Store {
         let db = self.db.lock().unwrap();
         let mut q = db
             .prepare(&format!(
-                "SELECT {HW_COLUMNS} FROM hw_devices ORDER BY last_seen DESC"
+                "SELECT {HW_COLUMNS} FROM hw_devices ORDER BY last_seen DESC, id"
             ))
             .unwrap();
         q.query_map([], hw_row)
@@ -405,10 +445,12 @@ impl Store {
         .flatten()
     }
 
-    /// Known identities, for the resolver.
+    /// Identities the resolver may answer with: not superseded, and with a
+    /// serial only while it is trusted.
     pub fn known(&self) -> Vec<Known> {
         self.hw_devices()
             .into_iter()
+            .filter(|d| d.superseded_by.is_none())
             .map(|d| Known {
                 id: d.id,
                 alias: d.alias,
@@ -416,56 +458,190 @@ impl Store {
                 pid: d.pid,
                 manufacturer: d.manufacturer,
                 product: d.product,
-                serial: d.serial,
+                serial: d.serial.filter(|_| d.serial_trusted),
                 usb_path: d.usb_path,
                 interface: d.interface,
                 mac: d.mac,
                 chip_id: d.chip_id,
+                legacy_id: d.legacy_id,
             })
             .collect()
     }
 
+    fn serial_distrusted(&self, vid: Option<u16>, pid: Option<u16>, serial: &str) -> bool {
+        let db = self.db.lock().unwrap();
+        db.query_row(
+            "SELECT 1 FROM hw_shared_serials WHERE vid = ?1 AND pid = ?2 AND serial = ?3",
+            params![vid.map(i64::from), pid.map(i64::from), serial],
+            |_| Ok(()),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .is_some()
+    }
+
+    /// The serial this fingerprint can be recognised by: plausible, not
+    /// shared right now, and never proven shared before. Read only.
+    pub fn trusted_serial(&self, fp: &Fingerprint, others: &[Fingerprint]) -> Option<String> {
+        identity::usable_serial(fp, others).filter(|s| !self.serial_distrusted(fp.vid, fp.pid, s))
+    }
+
+    /// Read-only resolution, as `observe` would answer without recording.
+    pub fn preview(
+        &self,
+        fp: &Fingerprint,
+        others: &[Fingerprint],
+        present: &[String],
+    ) -> Resolution {
+        let serial = self.trusted_serial(fp, others);
+        identity::resolve(fp, &serial, &self.known(), present)
+    }
+
+    /// Proof that a serial is not unique: remember it, and take it away
+    /// from every identity that was relying on it. Once is for good.
+    fn distrust_serial(
+        &self,
+        fp: &Fingerprint,
+        serial: &str,
+        reason: &str,
+        t: i64,
+    ) -> Result<(), String> {
+        let (Some(vid), Some(pid)) = (fp.vid, fp.pid) else {
+            return Ok(());
+        };
+        let port = fp.port.clone().unwrap_or_default();
+        let affected: Vec<HwDevice> = {
+            let db = self.db.lock().unwrap();
+            let n = db
+                .execute(
+                    "INSERT OR IGNORE INTO hw_shared_serials (vid, pid, serial, t, reason) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![i64::from(vid), i64::from(pid), serial, t, reason],
+                )
+                .map_err(db_err)?;
+            if n == 0 {
+                return Ok(()); // already known to be shared
+            }
+            let mut q = db
+                .prepare(&format!(
+                    "SELECT {HW_COLUMNS} FROM hw_devices
+                     WHERE vid = ?1 AND pid = ?2 AND lower(serial) = ?3 AND serial_trusted = 1"
+                ))
+                .map_err(db_err)?;
+            let rows = q
+                .query_map(params![i64::from(vid), i64::from(pid), serial], hw_row)
+                .map_err(db_err)?;
+            rows.collect::<rusqlite::Result<_>>().map_err(db_err)?
+        };
+        let basis = format!(
+            "serial {serial} on {vid:04X}:{pid:04X} is not unique ({reason}): no longer an identity"
+        );
+        for mut d in affected {
+            d.serial_trusted = false;
+            let strength = record_strength(&d).as_str();
+            self.db
+                .lock()
+                .unwrap()
+                .execute(
+                    "UPDATE hw_devices SET serial_trusted = 0, strength = ?2 WHERE id = ?1",
+                    params![d.id, strength],
+                )
+                .map_err(db_err)?;
+            self.event(
+                t,
+                "SERIAL_DOWNGRADED",
+                Some(&d.id),
+                &port,
+                Some(strength),
+                &basis,
+            )?;
+        }
+        Ok(())
+    }
+
     /// A device was attached (or said who it is): resolve it, remember it,
-    /// log the event. `others`: what else is plugged in; `present`: their ids.
+    /// log the event. `others`: what else is plugged in; `present`: their
+    /// ids. `adopt`: the identity this same attachment created, which may
+    /// take a stronger key the device declares (it has no other past).
+    /// Nothing is claimed stored unless it was: an index error is returned.
     pub fn observe(
         &self,
         kind: &str,
         fp: &Fingerprint,
         others: &[Fingerprint],
         present: &[String],
-    ) -> Observation {
-        let serial = identity::usable_serial(fp, others);
+        adopt: Option<&str>,
+    ) -> Result<Observation, String> {
+        let t = now_ms();
+        // Proofs that a serial is shared, kept for good.
+        if let Some(s) = identity::plausible_serial(fp) {
+            if identity::serial_shared_now(fp, others) {
+                self.distrust_serial(fp, &s, "two devices plugged in at the same time", t)?;
+            } else if let Some(chip) = fp.chip_id.as_deref() {
+                let other_chip = self.known().into_iter().any(|k| {
+                    k.vid == fp.vid
+                        && k.pid == fp.pid
+                        && k.serial.as_deref().map(str::to_ascii_lowercase).as_deref()
+                            == Some(s.as_str())
+                        && k.chip_id
+                            .as_deref()
+                            .is_some_and(|c| !c.eq_ignore_ascii_case(chip))
+                });
+                if other_chip {
+                    self.distrust_serial(fp, &s, "the same serial on two chip ids", t)?;
+                }
+            }
+        }
+        let serial = self.trusted_serial(fp, others);
         let r = identity::resolve(fp, &serial, &self.known(), present);
         let port = fp.port.clone().unwrap_or_default();
-        let t = now_ms();
-        let (id, new, ambiguous, basis) = match &r {
-            Resolution::Unidentified { basis } => (None, false, vec![], basis.clone()),
-            Resolution::Known { id, basis, .. } => (Some(id.clone()), false, vec![], basis.clone()),
-            Resolution::New { basis, .. } => (
-                Some(self.fresh_id(&identity::identity_key(fp, &serial))),
+        let (id, new, ambiguous, hint, basis) = match r {
+            Resolution::Unidentified { basis } => (None, false, vec![], None, basis),
+            Resolution::Known { id, basis, .. } => (Some(id), false, vec![], None, basis),
+            // The record this attachment created a moment ago: its whole
+            // past is this attachment, it takes the stronger key.
+            Resolution::New {
+                basis,
+                hint: Some(h),
+                ..
+            } if adopt == Some(h.as_str()) => (
+                Some(h),
                 true,
                 vec![],
-                basis.clone(),
+                None,
+                format!("{basis}, declared on its first attachment"),
             ),
-            Resolution::Ambiguous { candidates, basis } => {
-                // Not one of them: a provisional identity of its own, with the
-                // look-alikes named, until the user gives it an alias.
-                let key = format!("{}:ambiguous", identity::identity_key(fp, &serial));
+            Resolution::New { basis, hint, .. } => {
+                let basis = match &hint {
+                    Some(h) => format!(
+                        "{basis}; {h} was matched by a weaker key only: not merged (dogd bind PORT {h} if they are the same device)"
+                    ),
+                    None => basis,
+                };
                 (
-                    Some(self.fresh_id(&key)),
+                    Some(self.fresh_id(&identity::identity_key(fp, &serial))),
                     true,
-                    candidates.clone(),
-                    basis.clone(),
+                    vec![],
+                    hint,
+                    basis,
                 )
             }
+            Resolution::Ambiguous { candidates, basis } => {
+                // Not one of them: a provisional identity of its own, with
+                // the look-alikes named, until the user binds it.
+                let key = format!("{}:ambiguous", identity::identity_key(fp, &serial));
+                (Some(self.fresh_id(&key)), true, candidates, None, basis)
+            }
         };
-        if let Some(id) = &id {
-            self.upsert(id, fp, &serial, &basis, &ambiguous, t);
-        }
-        let record = id.as_deref().and_then(|i| self.hw_device(i));
+        let record = match &id {
+            Some(id) => {
+                Some(self.upsert(id, fp, &serial, &basis, &ambiguous, hint.as_deref(), t)?)
+            }
+            None => None,
+        };
         let strength = record.as_ref().map(|d| d.strength.clone());
-        self.event(t, kind, id.as_deref(), &port, strength.as_deref(), &basis);
-        Observation {
+        self.event(t, kind, id.as_deref(), &port, strength.as_deref(), &basis)?;
+        Ok(Observation {
             port,
             id,
             alias: record.and_then(|d| d.alias),
@@ -473,12 +649,90 @@ impl Store {
             basis,
             new,
             ambiguous_with: ambiguous,
+            hint,
             fingerprint: fp.clone(),
-        }
+        })
     }
 
-    pub fn detached(&self, port: &str, id: Option<&str>) {
-        self.event(now_ms(), "DETACHED", id, port, None, "unplugged");
+    /// The user says what is attached here is `target`: the one operation
+    /// that settles an ambiguity or confirms a hint. Refused when the two
+    /// cannot be the same device (different chip id, MAC, HDP id or trusted
+    /// serial) or when `target` is attached elsewhere right now. `current`:
+    /// the identity the attachment has now; it is kept, marked superseded.
+    pub fn bind(
+        &self,
+        fp: &Fingerprint,
+        others: &[Fingerprint],
+        present: &[String],
+        current: Option<&str>,
+        target: &str,
+    ) -> Result<Observation, String> {
+        let Some(d) = self.hw_device(target) else {
+            return Err(format!("no device {target}"));
+        };
+        if let Some(by) = &d.superseded_by {
+            return Err(format!("{target} was bound to {by}: bind to {by}"));
+        }
+        if present.iter().any(|p| p == target) {
+            return Err(format!(
+                "{target} is attached on another port right now: it cannot be this device"
+            ));
+        }
+        let serial = self.trusted_serial(fp, others);
+        let k = self
+            .known()
+            .into_iter()
+            .find(|k| k.id == target)
+            .expect("not superseded, so known");
+        if let Some(why) = identity::conflict(fp, &serial, &k) {
+            return Err(format!("refused: {why}, never the same device"));
+        }
+        let port = fp.port.clone().unwrap_or_default();
+        let t = now_ms();
+        let was = current.filter(|c| *c != target);
+        let basis = match was {
+            Some(c) => format!("bound by the user on {port} (was {c})"),
+            None => format!("bound by the user on {port}"),
+        };
+        let record = self.upsert(target, fp, &serial, &basis, &[], None, t)?;
+        {
+            let db = self.db.lock().unwrap();
+            db.execute(
+                "UPDATE hw_devices SET ambiguous_with = NULL, hint = NULL WHERE id = ?1",
+                [target],
+            )
+            .map_err(db_err)?;
+            if let Some(c) = was {
+                db.execute(
+                    "UPDATE hw_devices SET superseded_by = ?2 WHERE id = ?1",
+                    params![c, target],
+                )
+                .map_err(db_err)?;
+            }
+        }
+        self.event(
+            t,
+            "BOUND",
+            Some(target),
+            &port,
+            Some(&record.strength),
+            &basis,
+        )?;
+        Ok(Observation {
+            port,
+            id: Some(target.to_string()),
+            alias: record.alias,
+            strength: Some(record.strength),
+            basis,
+            new: false,
+            ambiguous_with: vec![],
+            hint: None,
+            fingerprint: fp.clone(),
+        })
+    }
+
+    pub fn detached(&self, port: &str, id: Option<&str>) -> Result<(), String> {
+        self.event(now_ms(), "DETACHED", id, port, None, "unplugged")
     }
 
     /// An id derived from the key, made unique if the key is shared.
@@ -493,6 +747,7 @@ impl Store {
         id
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn upsert(
         &self,
         id: &str,
@@ -500,13 +755,28 @@ impl Store {
         serial: &Option<String>,
         basis: &str,
         ambiguous: &[String],
+        hint: Option<&str>,
         t: i64,
-    ) {
+    ) -> Result<HwDevice, String> {
         let old = self.hw_device(id);
         let keep = |new: &Option<String>, old: Option<&Option<String>>| {
             new.clone().or_else(|| old.cloned().flatten())
         };
         let o = old.as_ref();
+        // The serial: a trusted one is a key; otherwise what was stored is
+        // kept, and a new record keeps the reported value, untrusted, for
+        // display only.
+        let (serial, serial_trusted) = match (serial, o) {
+            (Some(s), _) => (Some(s.clone()), true),
+            (None, Some(d)) if d.serial.is_some() => (d.serial.clone(), d.serial_trusted),
+            (None, _) => (
+                fp.serial
+                    .as_ref()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+                false,
+            ),
+        };
         let mut d = HwDevice {
             id: id.to_string(),
             alias: o.and_then(|d| d.alias.clone()),
@@ -514,12 +784,13 @@ impl Store {
             pid: fp.pid.or(o.and_then(|d| d.pid)),
             manufacturer: keep(&fp.manufacturer, o.map(|d| &d.manufacturer)),
             product: keep(&fp.product, o.map(|d| &d.product)),
-            // Only a usable serial is kept: a fake one is not an identity.
-            serial: keep(serial, o.map(|d| &d.serial)),
+            serial,
+            serial_trusted,
             usb_path: keep(&fp.usb_path, o.map(|d| &d.usb_path)),
             interface: keep(&fp.interface, o.map(|d| &d.interface)),
             mac: keep(&fp.mac, o.map(|d| &d.mac)),
             chip_id: keep(&fp.chip_id, o.map(|d| &d.chip_id)),
+            legacy_id: keep(&fp.legacy_id, o.map(|d| &d.legacy_id)),
             strength: String::new(),
             basis: basis.to_string(),
             ambiguous_with: if ambiguous.is_empty() {
@@ -527,6 +798,10 @@ impl Store {
             } else {
                 Some(ambiguous.join(" "))
             },
+            hint: hint
+                .map(String::from)
+                .or_else(|| o.and_then(|d| d.hint.clone())),
+            superseded_by: o.and_then(|d| d.superseded_by.clone()),
             first_seen: o.map_or(t, |d| d.first_seen),
             last_seen: t,
             last_port: fp.port.clone().or(o.and_then(|d| d.last_port.clone())),
@@ -534,19 +809,24 @@ impl Store {
         d.strength = record_strength(&d).as_str().to_string();
         let transport = fp.transport.map(|t| format!("{t:?}").to_ascii_uppercase());
         let db = self.db.lock().unwrap();
-        let _ = db.execute(
-            "INSERT INTO hw_devices (id, alias, transport, vid, pid, manufacturer, product, serial, usb_path, interface, mac, chip_id,
-               strength, basis, ambiguous_with, first_seen, last_seen, last_port)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+        db.execute(
+            "INSERT INTO hw_devices (id, alias, transport, vid, pid, manufacturer, product, serial, serial_trusted, usb_path,
+               interface, mac, chip_id, legacy_id, strength, basis, ambiguous_with, hint, superseded_by, first_seen, last_seen, last_port)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)
              ON CONFLICT(id) DO UPDATE SET transport = COALESCE(excluded.transport, transport), vid = excluded.vid, pid = excluded.pid,
-               manufacturer = excluded.manufacturer, product = excluded.product, serial = excluded.serial, usb_path = excluded.usb_path,
-               interface = excluded.interface, mac = excluded.mac, chip_id = excluded.chip_id, strength = excluded.strength,
-               basis = excluded.basis, ambiguous_with = excluded.ambiguous_with, last_seen = excluded.last_seen, last_port = excluded.last_port",
+               manufacturer = excluded.manufacturer, product = excluded.product, serial = excluded.serial,
+               serial_trusted = excluded.serial_trusted, usb_path = excluded.usb_path, interface = excluded.interface,
+               mac = excluded.mac, chip_id = excluded.chip_id, legacy_id = excluded.legacy_id, strength = excluded.strength,
+               basis = excluded.basis, ambiguous_with = excluded.ambiguous_with, hint = excluded.hint,
+               last_seen = excluded.last_seen, last_port = excluded.last_port",
             params![
-                d.id, d.alias, transport, d.vid.map(i64::from), d.pid.map(i64::from), d.manufacturer, d.product, d.serial, d.usb_path,
-                d.interface, d.mac, d.chip_id, d.strength, d.basis, d.ambiguous_with, d.first_seen, d.last_seen, d.last_port
+                d.id, d.alias, transport, d.vid.map(i64::from), d.pid.map(i64::from), d.manufacturer, d.product, d.serial,
+                d.serial_trusted as i64, d.usb_path, d.interface, d.mac, d.chip_id, d.legacy_id, d.strength, d.basis,
+                d.ambiguous_with, d.hint, d.superseded_by, d.first_seen, d.last_seen, d.last_port
             ],
-        );
+        )
+        .map_err(db_err)?;
+        Ok(d)
     }
 
     fn event(
@@ -557,12 +837,14 @@ impl Store {
         port: &str,
         strength: Option<&str>,
         basis: &str,
-    ) {
+    ) -> Result<(), String> {
         let db = self.db.lock().unwrap();
-        let _ = db.execute(
+        db.execute(
             "INSERT INTO hw_events (t, kind, device_id, port, strength, basis) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![t, kind, id, port, strength, basis],
-        );
+        )
+        .map(|_| ())
+        .map_err(db_err)
     }
 
     pub fn hw_events(&self, since: i64, limit: i64) -> Vec<HwEvent> {
@@ -586,7 +868,9 @@ impl Store {
         .collect()
     }
 
-    /// Name a device once; the name stays with its identity. Empty clears it.
+    /// A label for people. It does not tell look-alikes apart and settles
+    /// nothing: an ambiguous identity stays ambiguous (that is `bind`).
+    /// Empty clears it.
     pub fn set_alias(&self, id: &str, alias: &str) -> Result<(), String> {
         let alias = alias.trim();
         if alias.chars().count() > 64 || alias.chars().any(char::is_control) {
@@ -595,10 +879,10 @@ impl Store {
         let db = self.db.lock().unwrap();
         let n = db
             .execute(
-                "UPDATE hw_devices SET alias = ?2, ambiguous_with = NULL WHERE id = ?1",
+                "UPDATE hw_devices SET alias = ?2 WHERE id = ?1",
                 params![id, if alias.is_empty() { None } else { Some(alias) }],
             )
-            .map_err(|e| e.to_string())?;
+            .map_err(db_err)?;
         if n == 0 {
             return Err(format!("no device {id}"));
         }
@@ -720,6 +1004,7 @@ mod tests {
                 rev: "A".into(),
                 fw: "0.1.0".into(),
                 proto: 1,
+                chip: None,
             },
             "serial:/dev/ttyACM0",
         );
@@ -754,11 +1039,13 @@ INSERT INTO devices VALUES ('HD-3A1F2C', 'DEVKIT-S3', '0.1.0', 1, 'serial:/dev/t
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].recording_id, "f5db768b4dfb92c6a433abbdb061a370");
         assert_eq!(s.devices()[0].device_id, "HD-3A1F2C");
-        // The Hardware Dog it knew is now an identity, by its chip.
+        // The Hardware Dog it knew is now an identity by its legacy 24-bit
+        // HDP id: GOOD, never a chip id.
         let hw = s.hw_devices();
         assert_eq!(hw.len(), 1);
-        assert_eq!(hw[0].chip_id.as_deref(), Some("HD-3A1F2C"));
-        assert_eq!(hw[0].strength, "EXCELLENT");
+        assert_eq!(hw[0].legacy_id.as_deref(), Some("HD-3A1F2C"));
+        assert_eq!(hw[0].chip_id, None);
+        assert_eq!(hw[0].strength, "GOOD");
         let v: i64 =
             s.db.lock()
                 .unwrap()
@@ -785,18 +1072,22 @@ INSERT INTO devices VALUES ('HD-3A1F2C', 'DEVKIT-S3', '0.1.0', 1, 'serial:/dev/t
         }
     }
 
+    fn obs(s: &Store, fp: &Fingerprint, others: &[Fingerprint], present: &[String]) -> Observation {
+        s.observe("ATTACHED", fp, others, present, None).unwrap()
+    }
+
     #[test]
     fn unplug_replug_and_restart_keep_one_identity_and_its_alias() {
         let dir = tmp();
         let s = Store::open(&dir).unwrap();
-        let a = s.observe("ATTACHED", &ch340("/dev/ttyUSB0", "1-2"), &[], &[]);
+        let a = obs(&s, &ch340("/dev/ttyUSB0", "1-2"), &[], &[]);
         assert!(a.new);
         let id = a.id.clone().unwrap();
         s.set_alias(&id, "bench probe A").unwrap();
-        s.detached("/dev/ttyUSB0", Some(&id));
+        s.detached("/dev/ttyUSB0", Some(&id)).unwrap();
         drop(s);
         let s = Store::open(&dir).unwrap(); // dogd restarted
-        let again = s.observe("ATTACHED", &ch340("/dev/ttyUSB4", "1-2"), &[], &[]);
+        let again = obs(&s, &ch340("/dev/ttyUSB4", "1-2"), &[], &[]);
         assert_eq!(again.id.as_deref(), Some(id.as_str()));
         assert!(!again.new);
         assert_eq!(again.alias.as_deref(), Some("bench probe A"));
@@ -810,21 +1101,15 @@ INSERT INTO devices VALUES ('HD-3A1F2C', 'DEVKIT-S3', '0.1.0', 1, 'serial:/dev/t
         let s = Store::open(&tmp()).unwrap();
         let a = ch340("/dev/ttyUSB0", "1-2");
         let b = ch340("/dev/ttyUSB1", "1-3");
-        let oa = s.observe("ATTACHED", &a, std::slice::from_ref(&b), &[]);
-        let ob = s.observe(
-            "ATTACHED",
-            &b,
-            std::slice::from_ref(&a),
-            &[oa.id.clone().unwrap()],
-        );
+        let oa = obs(&s, &a, std::slice::from_ref(&b), &[]);
+        let ob = obs(&s, &b, std::slice::from_ref(&a), &[oa.id.clone().unwrap()]);
         assert_ne!(oa.id, ob.id);
         assert_eq!(s.hw_devices().len(), 2);
         let bare = Fingerprint {
             port: Some("COM3".into()),
             ..Default::default()
         };
-        let o = s.observe("ATTACHED", &bare, &[], &[]);
-        assert_eq!(o.id, None);
+        assert_eq!(obs(&s, &bare, &[], &[]).id, None);
         assert_eq!(
             s.hw_devices().len(),
             2,
@@ -837,30 +1122,180 @@ INSERT INTO devices VALUES ('HD-3A1F2C', 'DEVKIT-S3', '0.1.0', 1, 'serial:/dev/t
     }
 
     #[test]
-    fn a_dongle_moved_while_its_twin_is_away_is_ambiguous_until_named() {
+    fn an_alias_is_a_label_and_only_bind_settles_an_ambiguity() {
         let s = Store::open(&tmp()).unwrap();
-        let ida = s
-            .observe("ATTACHED", &ch340("/dev/ttyUSB0", "1-2"), &[], &[])
-            .id
-            .unwrap();
-        let idb = s
-            .observe(
-                "ATTACHED",
-                &ch340("/dev/ttyUSB1", "1-3"),
-                &[],
-                std::slice::from_ref(&ida),
-            )
-            .id
-            .unwrap();
-        let moved = s.observe("ATTACHED", &ch340("/dev/ttyUSB2", "1-4"), &[], &[]);
-        let mut both = vec![ida.clone(), idb.clone()];
-        both.sort();
+        let ida = obs(&s, &ch340("/dev/ttyUSB0", "1-2"), &[], &[]).id.unwrap();
+        let idb = obs(
+            &s,
+            &ch340("/dev/ttyUSB1", "1-3"),
+            &[],
+            std::slice::from_ref(&ida),
+        )
+        .id
+        .unwrap();
+        // A moves to a third socket while B is away: not guessed.
+        let moved_fp = ch340("/dev/ttyUSB2", "1-4");
+        let moved = obs(&s, &moved_fp, &[], &[]);
         let mut named = moved.ambiguous_with.clone();
         named.sort();
+        let mut both = vec![ida.clone(), idb.clone()];
+        both.sort();
         assert_eq!(named, both);
-        let id = moved.id.unwrap();
+        let id = moved.id.clone().unwrap();
         assert!(id != ida && id != idb);
+        // An alias names it, and settles nothing.
         s.set_alias(&id, "probe C").unwrap();
-        assert_eq!(s.hw_device(&id).unwrap().ambiguous_with, None);
+        assert!(s.hw_device(&id).unwrap().ambiguous_with.is_some());
+        // Bind: this attachment is A. The provisional identity is kept,
+        // marked, and no longer answers.
+        let bound = s.bind(&moved_fp, &[], &[], Some(&id), &ida).unwrap();
+        assert_eq!(bound.id.as_deref(), Some(ida.as_str()));
+        let p = s.hw_device(&id).unwrap();
+        assert_eq!(p.superseded_by.as_deref(), Some(ida.as_str()));
+        assert!(s.known().iter().all(|k| k.id != id));
+        assert_eq!(s.hw_device(&ida).unwrap().usb_path.as_deref(), Some("1-4"));
+        assert_eq!(s.hw_device(&ida).unwrap().ambiguous_with, None);
+        // Next time on that socket: A, by the socket.
+        let back = obs(&s, &ch340("/dev/ttyUSB7", "1-4"), &[], &[]);
+        assert_eq!(back.id.as_deref(), Some(ida.as_str()));
+        let kinds: Vec<String> = s.hw_events(0, 10).into_iter().map(|e| e.kind).collect();
+        assert!(kinds.contains(&"BOUND".to_string()));
+        // A superseded identity is not a bind target.
+        assert!(s.bind(&moved_fp, &[], &[], None, &id).is_err());
+    }
+
+    #[test]
+    fn bind_refuses_what_cannot_be_the_same_device() {
+        let s = Store::open(&tmp()).unwrap();
+        let board = |chip: &str, path: &str| Fingerprint {
+            chip_id: Some(chip.into()),
+            ..ch340("/dev/ttyACM0", path)
+        };
+        let a = obs(&s, &board("7cdfa1000001", "1-2"), &[], &[]).id.unwrap();
+        let other = board("7cdfa1000002", "1-3");
+        let b = obs(&s, &other, &[], &[]).id.unwrap();
+        let e = s.bind(&other, &[], &[], Some(&b), &a).unwrap_err();
+        assert!(e.contains("different chip ids"), "{e}");
+        // Attached elsewhere right now: cannot be this one.
+        let dongle = ch340("/dev/ttyUSB3", "1-5");
+        let e = s
+            .bind(&dongle, &[], std::slice::from_ref(&a), None, &a)
+            .unwrap_err();
+        assert!(e.contains("attached on another port"), "{e}");
+        assert!(s.bind(&dongle, &[], &[], None, "HW-NOPE").is_err());
+    }
+
+    #[test]
+    fn a_serial_proven_shared_is_downgraded_for_good() {
+        let s = Store::open(&tmp()).unwrap();
+        let with_sn = |port: &str, path: &str| Fingerprint {
+            serial: Some("A50285BI".into()),
+            ..ch340(port, path)
+        };
+        let a = with_sn("/dev/ttyUSB0", "1-2");
+        let first = obs(&s, &a, &[], &[]);
+        let ida = first.id.unwrap();
+        assert_eq!(first.strength.as_deref(), Some("EXCELLENT"));
+        // A twin with the same serial, plugged in at the same time.
+        let b = with_sn("/dev/ttyUSB1", "1-3");
+        let twin = obs(&s, &b, std::slice::from_ref(&a), std::slice::from_ref(&ida));
+        assert_ne!(twin.id.as_deref(), Some(ida.as_str()));
+        let d = s.hw_device(&ida).unwrap();
+        assert!(!d.serial_trusted);
+        assert_eq!(d.serial.as_deref(), Some("a50285bi"), "kept for display");
+        assert_eq!(d.strength, "GOOD", "down to its USB path");
+        assert!(
+            s.hw_events(0, 20)
+                .iter()
+                .any(|e| e.kind == "SERIAL_DOWNGRADED"
+                    && e.device_id.as_deref() == Some(ida.as_str()))
+        );
+        // Alone later, on another socket: the serial is no longer a key.
+        assert_eq!(s.trusted_serial(&with_sn("/dev/ttyUSB0", "2-1"), &[]), None);
+        let restart = obs(&s, &with_sn("/dev/ttyUSB0", "1-2"), &[], &[]);
+        assert_eq!(
+            restart.id.as_deref(),
+            Some(ida.as_str()),
+            "found by its socket"
+        );
+        assert_eq!(restart.strength.as_deref(), Some("GOOD"));
+    }
+
+    #[test]
+    fn the_same_serial_on_two_chip_ids_is_not_trusted() {
+        let s = Store::open(&tmp()).unwrap();
+        let board = |chip: &str, path: &str| Fingerprint {
+            chip_id: Some(chip.into()),
+            serial: Some("12345678ABCD".into()),
+            ..ch340("/dev/ttyACM0", path)
+        };
+        let a = obs(&s, &board("7cdfa1000001", "1-2"), &[], &[]).id.unwrap();
+        let b = obs(&s, &board("7cdfa1000002", "1-2"), &[], &[]).id.unwrap();
+        assert_ne!(a, b);
+        assert!(!s.hw_device(&a).unwrap().serial_trusted);
+        assert_eq!(
+            s.hw_device(&a).unwrap().strength,
+            "EXCELLENT",
+            "still its chip id"
+        );
+    }
+
+    #[test]
+    fn a_chip_id_joins_only_the_identity_its_own_attachment_created() {
+        let s = Store::open(&tmp()).unwrap();
+        let usb = Fingerprint {
+            vid: Some(0x303a),
+            pid: Some(0x1001),
+            usb_path: Some("1-2".into()),
+            port: Some("/dev/ttyACM0".into()),
+            ..Default::default()
+        };
+        let hello = |chip: &str| Fingerprint {
+            chip_id: Some(chip.into()),
+            legacy_id: Some(format!("HD-{}", chip[6..].to_ascii_uppercase())),
+            ..usb.clone()
+        };
+        // First attachment: created by the socket, the hello completes it.
+        let r = obs(&s, &usb, &[], &[]);
+        assert!(r.new);
+        let id = r.id.unwrap();
+        let o = s
+            .observe("IDENTIFIED", &hello("7cdfa1000001"), &[], &[], Some(&id))
+            .unwrap();
+        assert_eq!(o.id.as_deref(), Some(id.as_str()));
+        assert_eq!(
+            s.hw_device(&id).unwrap().chip_id.as_deref(),
+            Some("7cdfa1000001")
+        );
+        // Another board in the same socket, later: the socket matches, the
+        // chip does not. Never folded in.
+        let o = s
+            .observe("IDENTIFIED", &hello("7cdfa1000002"), &[], &[], None)
+            .unwrap();
+        assert_ne!(o.id.as_deref(), Some(id.as_str()));
+        // A record known only by its socket, from an earlier attachment:
+        // a new identity with a hint, not a merge.
+        let s2 = Store::open(&tmp()).unwrap();
+        let old = obs(&s2, &usb, &[], &[]).id.unwrap();
+        let o = s2
+            .observe("IDENTIFIED", &hello("7cdfa1000003"), &[], &[], None)
+            .unwrap();
+        assert_ne!(o.id.as_deref(), Some(old.as_str()));
+        assert_eq!(o.hint.as_deref(), Some(old.as_str()));
+        assert_eq!(s2.hw_device(&old).unwrap().chip_id, None);
+    }
+
+    #[test]
+    fn an_index_error_is_returned_never_claimed_stored() {
+        let s = Store::open(&tmp()).unwrap();
+        s.db.lock()
+            .unwrap()
+            .execute_batch("DROP TABLE hw_events")
+            .unwrap();
+        let e = s
+            .observe("ATTACHED", &ch340("/dev/ttyUSB0", "1-2"), &[], &[], None)
+            .unwrap_err();
+        assert!(e.starts_with("index:"), "{e}");
+        assert!(s.detached("/dev/ttyUSB0", None).is_err());
     }
 }

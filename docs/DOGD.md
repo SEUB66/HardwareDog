@@ -97,7 +97,10 @@ dogd status              ask a running dogd how it is
 dogd devices             what is plugged in, and who it is (never writes to a port)
 dogd devices --identify  send one HDP hello per port: HARDWARE DOG or UNKNOWN DEVICE
 dogd devices --known     every device identity dogd remembers
-dogd alias HW-ID NAME    name a device once
+dogd alias HW-ID NAME    a label for people; tells no look-alikes apart
+dogd bind PORT HW-ID     the device on PORT is HW-ID (settles an ambiguity,
+                         confirms a hint; refused if chip id, MAC or
+                         serial differ)
 dogd sessions            list stored sessions (works with dogd stopped)
 ```
 
@@ -129,7 +132,8 @@ GET  /v1/health                {"status":"ok","dogd":"0.1.0","hdp":1}
 GET  /v1/link                  state, source, origin, label, device, epoch
 GET  /v1/devices               attached devices and who they are, known identities
 GET  /v1/devices/events        ATTACHED / DETACHED / IDENTIFIED (?since=N)
-PUT  /v1/devices/{id}/alias    name a device once
+PUT  /v1/devices/{id}/alias    a label for people (text body)
+PUT  /v1/devices/{id}/bind     the device on the port in the body is {id}
 GET  /v1/sessions              the session index
 GET  /v1/sessions/{id}         one session
 GET  /v1/sessions/{id}/hdlog   the file, byte for byte
@@ -167,7 +171,8 @@ sessions   id, recording_id, session_label, origin, source, device_id,
            hdlog_path, stored_at
 devices    device_id, hardware_revision, firmware_version, hdp_version,
            port, first_seen, last_seen
-hw_devices / hw_events   hardware identities and plug events (index v2):
+hw_devices / hw_events / hw_shared_serials   identities, plug events,
+           serials proven shared (index v2):
            IDENTITY.md
 ```
 

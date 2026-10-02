@@ -218,9 +218,16 @@ void app_main(void) {
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
     static char device_id[16];
     snprintf(device_id, sizeof device_id, "HD-%02X%02X%02X", mac[3], mac[4], mac[5]);
+    /* The identity dogd keys on: the 48-bit factory MAC burnt in eFuse. The
+     * short device id above is for people (24 bits, not unique). */
+    static char chip_id[13];
+    uint8_t efuse[6] = {0};
+    if (esp_efuse_mac_get_default(efuse) == ESP_OK)
+        snprintf(chip_id, sizeof chip_id, "%02x%02x%02x%02x%02x%02x", efuse[0], efuse[1], efuse[2], efuse[3], efuse[4], efuse[5]);
 
     hdp_config_t cfg = {
         .device = device_id,
+        .chip = chip_id[0] ? chip_id : NULL,
         .rev = "DEVKIT-S3", /* a dev board, not Rev A: said as it is */
         .fw = FW_VERSION,
         .ina_addr = CONFIG_HWDOG_INA226_ADDR,

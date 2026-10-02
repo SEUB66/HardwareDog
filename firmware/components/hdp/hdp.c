@@ -202,6 +202,14 @@ static const char *check_name(hdp_check_t c) {
     }
 }
 
+/* The chip id goes out only well formed: 12 lowercase hex, never a guess. */
+static bool chip_ok(const char *c) {
+    if (!c || strlen(c) != 12) return false;
+    for (int k = 0; k < 12; k++)
+        if (!((c[k] >= '0' && c[k] <= '9') || (c[k] >= 'a' && c[k] <= 'f'))) return false;
+    return true;
+}
+
 static void send_hello(hdp_device_t *d) {
     line_t l;
     begin(d, &l, "hello");
@@ -211,6 +219,10 @@ static void send_hello(hdp_device_t *d) {
     put_cstr(&l, d->cfg.rev);
     puts_(&l, ",\"fw\":");
     put_cstr(&l, d->cfg.fw);
+    if (chip_ok(d->cfg.chip)) {
+        puts_(&l, ",\"chip\":");
+        put_cstr(&l, d->cfg.chip);
+    }
     /* Declare what is observed: silence about the rest is not an observation. */
     static const char *const names[] = {"power", "usb", "uart", "i2c", "net", "probe"};
     puts_(&l, ",\"caps\":[");

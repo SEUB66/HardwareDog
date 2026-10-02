@@ -29,6 +29,11 @@
         "device": { "type": "string", "minLength": 1 },
         "rev": { "type": "string", "minLength": 1 },
         "fw": { "type": "string", "minLength": 1 },
+        "chip": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$",
+          "description": "48-bit factory id: the eFuse MAC, 12 lowercase hex. The identity a host keys on. Optional: devices made before it send only 'device', which is 24 bits of the MAC and not unique."
+        },
         "caps": {
           "type": "array",
           "uniqueItems": true,
