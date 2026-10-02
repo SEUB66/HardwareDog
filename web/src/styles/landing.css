@@ -56,3 +56,10 @@ body,:root[data-theme=light] body{background:var(--bg)}
 .steps article:first-child{padding-top:0}.steps article{padding-block:22px}.steps>.text-link{margin-bottom:0}
 .hero-visual .terminal{width:100%;max-width:none}
 @media(max-width:760px){.how>div{padding:24px}.how{gap:18px}.official-dog{width:min(270px,100%)}.how h2{font-size:48px}}
+/* Stronger, faster signals, still locked to the artwork traces. */
+.signal-flow{opacity:1}
+.signal-flow path{stroke:#e8ffff;stroke-width:3.6;stroke-dasharray:90 160;animation:trace-energy 1.45s linear infinite;filter:drop-shadow(0 0 4px #00e5ff) drop-shadow(0 0 9px #00e5ff)}
+.signal-flow path:nth-child(2){animation:trace-energy 1.7s linear infinite;animation-delay:-.6s}
+.signal-flow path.pink-trace{stroke:#ffe5f4;stroke-width:3.6;stroke-dasharray:90 160;animation:trace-energy 1.3s linear infinite;animation-delay:-.4s;filter:drop-shadow(0 0 4px #ff4fa3) drop-shadow(0 0 9px #ff4fa3)}
+@keyframes trace-energy{from{stroke-dashoffset:250}to{stroke-dashoffset:0}}
+@media(prefers-reduced-motion:reduce){.signal-flow{display:none}}
