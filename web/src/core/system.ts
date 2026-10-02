@@ -26,7 +26,7 @@ import type { Confidence, Diagnosis, DiagnosisId, SessionFacts } from './diagnos
 import type { HostCommand } from './protocol';
 import type { Integrity, SessionHeader, SessionRecorder } from './session';
 import { ReplayTransport } from './session';
-import { FACT_LIMIT, NET_HISTORY, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
+import { FACT_LIMIT, NET_HISTORY, NET_POWER_WINDOW_MS, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
 
 const describeThresholds = (t: Thresholds) =>
   `UV ${volts(t.undervoltageThreshold)}  OC ${t.overcurrentThreshold.toFixed(2)} A  WINDOW ${t.correlationWindowMs} ms`;
@@ -134,7 +134,7 @@ const emptySerial = (): SerialState => ({
   lines: [],
 });
 
-const emptyBus = (): BusState => ({ protocol: 'I2C', speedHz: null, state: 'IDLE', devices: [], lastScanAt: null });
+const emptyBus = (): BusState => ({ protocol: 'I2C', speedHz: null, state: 'IDLE', devices: [], lastScanAt: null, watchMs: 0, faults: 0, lastFault: null });
 
 const emptyNet = (): NetState => ({
   link: null,
@@ -169,6 +169,8 @@ export class System {
   device: DeviceInfo = { id: '--', rev: '--', firmware: '--', bootedAt: null, caps: null };
   /** What the power numbers are worth, as the device declared it (power.meter). Null: not declared. */
   meter: Meter | null = null;
+  /** Network checks requested by net.watch (ACTIVE). Null: off. */
+  netWatch: { everyMs: number; dns: string | null; upstream: string | null } | null = null;
   /** Comparisons with a reference instrument, waiting to be fitted. */
   calPoints: CalPoint[] = [];
   power: PowerState = emptyPower();
@@ -496,17 +498,18 @@ export class System {
         this.onUartError(t, f.kind);
         break;
       case 'i2c.scan':
+        this.onI2cScan(t, f);
+        break;
+      case 'i2c.error':
         this.bus = {
-          protocol: 'I2C',
-          speedHz: f.speed,
-          state: 'ACTIVE',
-          lastScanAt: t,
-          devices: f.devices.map((d) => ({ address: d.addr, confirmed: d.ident, method: d.method })),
+          ...this.bus,
+          ...(f.every_ms !== undefined ? { watchMs: f.every_ms } : {}),
+          state: 'FAULT',
+          faults: this.bus.faults + 1,
+          lastFault: { t, kind: f.kind },
         };
-        this.log(t, 'I2C', 'PASS', `scan complete`, `${f.devices.length} device(s)`);
-        for (const d of f.devices) {
-          this.log(t, 'I2C', 'INFO', `${i2cAddress(d.addr)} ${d.ident ?? 'UNKNOWN'}`, d.ident ? 'confirmed' : 'no identity');
-        }
+        this.remember(this.facts.i2c.errors, { seq: this.seq, t, kind: f.kind });
+        this.log(t, 'I2C', 'FAIL', `bus fault ${f.kind}`, f.detail ?? undefined);
         break;
       case 'net.status':
         this.onNet(t, f);
@@ -727,6 +730,71 @@ export class System {
     }
   }
 
+  /**
+   * A scan of the target bus. Periodic scans (i2c.watch) only put changes
+   * on the timeline: an address that stops answering, or comes back.
+   */
+  private onI2cScan(t: number, f: Extract<DeviceFrame, { type: 'i2c.scan' }>): void {
+    const previous = this.facts.i2c.scans.at(-1);
+    const addresses = f.devices.map((d) => d.addr);
+    this.bus = {
+      ...this.bus,
+      // The device says when a scan is part of a periodic watch (set at boot or by i2c.watch).
+      ...(f.every_ms !== undefined ? { watchMs: f.every_ms } : {}),
+      protocol: 'I2C',
+      speedHz: f.speed,
+      state: 'ACTIVE',
+      lastScanAt: t,
+      devices: f.devices.map((d) => ({ address: d.addr, confirmed: d.ident, method: d.method })),
+    };
+    this.remember(this.facts.i2c.scans, { seq: this.seq, t, addresses });
+    if (!previous || this.bus.watchMs === 0) {
+      this.log(t, 'I2C', 'PASS', `scan complete`, `${f.devices.length} device(s)`);
+      for (const d of f.devices) {
+        this.log(t, 'I2C', 'INFO', `${i2cAddress(d.addr)} ${d.ident ?? 'UNKNOWN'}`, d.ident ? 'confirmed' : 'no identity');
+      }
+      if (!previous) return;
+    }
+    for (const a of previous.addresses) if (!addresses.includes(a)) this.log(t, 'I2C', 'WARN', `${i2cAddress(a)} no longer answers`);
+    for (const a of addresses) if (!previous.addresses.includes(a)) this.log(t, 'I2C', 'INFO', `${i2cAddress(a)} answers`);
+  }
+
+  /**
+   * The link went down: was it the supply? A drop or a target reset just
+   * before is the cause candidate. Then follow the way back: link, DHCP, DNS.
+   */
+  private trackOutage(t: number, prevUp: boolean, next: NetState): void {
+    const up = !!next.link?.up;
+    if (prevUp && !up) {
+      const drop = this.facts.drops.at(-1);
+      const reset = this.facts.uart.resets.at(-1);
+      const near = (x: number | undefined) => x !== undefined && t >= x && t - x <= NET_POWER_WINDOW_MS;
+      const cause = near(drop?.start)
+        ? { kind: 'DROP' as const, t: drop!.start, seq: drop!.seq, text: `voltage drop ${volts(drop!.min)}` }
+        : near(reset?.t)
+          ? { kind: 'RESET' as const, t: reset!.t, seq: reset!.seq, text: `target reset ${reset!.reason}` }
+          : null;
+      this.remember(this.facts.outages, { seq: this.seq, t, cause, upAt: null, upSeq: null, dhcpAt: null, dhcpSeq: null, dnsAt: null, dnsSeq: null });
+      if (cause) this.log(t, 'RULE', 'WARN', `link down ${ms(t - cause.t)} after ${cause.text}`);
+      return;
+    }
+    const o = this.facts.outages.at(-1);
+    if (!o || o.dnsAt !== null) return;
+    if (up && o.upAt === null) {
+      o.upAt = t;
+      o.upSeq = this.seq;
+    }
+    if (o.upAt !== null && o.dhcpAt === null && next.dhcp === 'PASS') {
+      o.dhcpAt = t;
+      o.dhcpSeq = this.seq;
+    }
+    if (o.dhcpAt !== null && next.dns.status === 'PASS') {
+      o.dnsAt = t;
+      o.dnsSeq = this.seq;
+      this.log(t, 'NET', 'PASS', 'network back', `link +${ms(o.upAt! - o.t)} / DHCP +${ms(o.dhcpAt - o.t)} / DNS +${ms(t - o.t)} after the link loss`);
+    }
+  }
+
   private onNet(t: number, f: Extract<DeviceFrame, { type: 'net.status' }>): void {
     const prev = this.net;
     const next: NetState = {
@@ -754,6 +822,7 @@ export class System {
     for (const [name, a, b] of checks) {
       if (first || a !== b) this.log(t, 'NET', statusSeverity(b), `${name.toLowerCase()} ${b}`);
     }
+    if (!first) this.trackOutage(t, !!prev.link?.up, next);
     this.net = next;
     this.remember(
       this.facts.net,
@@ -902,6 +971,35 @@ export class System {
     this.calPoints = [];
     this.send({ cmd: 'meter.clear' });
     this.log(this.now(), 'USER', 'INFO', 'calibration cleared: datasheet accuracy');
+    this.changed();
+    return null;
+  }
+
+  /** ACTIVE: scan the target bus every `seconds` (0 stops). */
+  watchI2c(seconds: number): string | null {
+    if (!Number.isFinite(seconds) || seconds < 0 || (seconds > 0 && seconds < 1) || seconds > 600) return 'i2c watch: 1 to 600 seconds, or off';
+    const err = this.requireLink('i2c watch');
+    if (err) return err;
+    const every = Math.round(seconds * 1000);
+    this.bus = { ...this.bus, watchMs: every };
+    this.send({ cmd: 'i2c.watch', every_ms: every });
+    this.log(this.now(), 'USER', 'INFO', every ? `i2c watch every ${seconds} s` : 'i2c watch off', every ? 'ACTIVE: address probe 0x08-0x77 on each scan' : undefined);
+    this.changed();
+    return null;
+  }
+
+  /** ACTIVE: check gateway, DNS and upstream every `seconds` (0 stops). */
+  watchNet(seconds: number, dns?: string, upstream?: string): string | null {
+    if (!Number.isFinite(seconds) || seconds < 0 || (seconds > 0 && seconds < 2) || seconds > 600) return 'net watch: 2 to 600 seconds, or off';
+    const host = /^[A-Za-z0-9.-]{1,253}$/;
+    if ((dns && !host.test(dns)) || (upstream && !host.test(upstream))) return 'net watch: host names only (letters, digits, dots, dashes)';
+    const err = this.requireLink('net watch');
+    if (err) return err;
+    const every = Math.round(seconds * 1000);
+    this.netWatch = every ? { everyMs: every, dns: dns ?? null, upstream: upstream ?? null } : null;
+    this.send({ cmd: 'net.watch', every_ms: every, ...(dns ? { dns } : {}), ...(upstream ? { upstream } : {}) });
+    const what = ['ping gateway', dns ? `resolve ${dns}` : null, upstream ? `TCP ${upstream}:443` : null].filter(Boolean).join(', ');
+    this.log(this.now(), 'USER', 'INFO', every ? `net watch every ${seconds} s` : 'net watch off', every ? `ACTIVE: ${what}` : undefined);
     this.changed();
     return null;
   }

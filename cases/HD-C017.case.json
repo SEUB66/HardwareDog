@@ -1,0 +1,70 @@
+{
+  "case": 1,
+  "id": "HD-C017",
+  "title": "ROUTER LOSES POWER (simulator HD-T016)",
+  "recording": {
+    "file": "HD-C017.hdlog",
+    "sha256": "75a2ae64a065c15269914c58ecb368b59a25a5dedb935fd7650ecc383c3af059",
+    "recording": "86167fed05c4d3ddcdbdf8cd4d52f46f",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "A USB-powered travel router on a thin cable: load bursts brown it out, it reboots, the network drops and comes back.",
+    "hardware": "None: built-in simulator, scenario HD-T016, seed 1, 45 s. Origin SIMULATED."
+  },
+  "ruleset": 3,
+  "expect": {
+    "facts": {
+      "undervoltage": 4,
+      "overcurrent": 0,
+      "usbAttaches": 5,
+      "usbDisconnects": 4,
+      "disconnectsAfterDrop": 4,
+      "targetResets": 5,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "POWER_INSTABILITY",
+        "confidence": "HIGH",
+        "evidence": [
+          474,
+          479,
+          1011,
+          1016,
+          1501,
+          1505,
+          2007,
+          2010
+        ]
+      },
+      {
+        "id": "NETWORK_POWER_LOSS",
+        "confidence": "HIGH",
+        "evidence": [
+          474,
+          492,
+          658,
+          722,
+          753,
+          1011,
+          1026,
+          1189,
+          1264,
+          1290,
+          1501,
+          1512,
+          1722,
+          1806,
+          1830,
+          2007,
+          2023,
+          2195,
+          2282,
+          2308
+        ]
+      }
+    ]
+  }
+}

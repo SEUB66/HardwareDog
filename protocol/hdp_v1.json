@@ -160,6 +160,7 @@
         "type": { "const": "i2c.scan" },
         "t": { "$ref": "#/definitions/t" },
         "speed": { "type": "number", "description": "Bus clock in Hz." },
+        "every_ms": { "type": "integer", "minimum": 0, "description": "Optional. The periodic scan this one belongs to (i2c.watch, or set at boot); absent or 0: a one-off scan." },
         "devices": {
           "type": "array",
           "items": {
@@ -175,6 +176,22 @@
         }
       },
       "additionalProperties": false
+    },
+    "i2c.error": {
+      "type": "object",
+      "required": ["type", "t", "kind"],
+      "properties": {
+        "type": { "const": "i2c.error" },
+        "t": { "$ref": "#/definitions/t" },
+        "kind": {
+          "enum": ["SDA_LOW", "SCL_LOW", "TIMEOUT", "ARB_LOST"],
+          "description": "SDA_LOW / SCL_LOW: the line sits low while the bus is idle (missing pull-up, a device holding it, a short). TIMEOUT: a transfer did not complete. ARB_LOST: the master lost arbitration (noise, another master)."
+        },
+        "detail": { "$ref": "#/definitions/optString" },
+        "every_ms": { "type": "integer", "minimum": 0, "description": "Optional. The periodic scan that hit the fault; absent: a one-off scan." }
+      },
+      "additionalProperties": false,
+      "description": "The target I2C bus failed. A scan that hits a bus fault is not sent: an empty scan would read as devices gone."
     },
     "net.status": {
       "type": "object",
@@ -249,6 +266,7 @@
         { "$ref": "#/definitions/uart.rx" },
         { "$ref": "#/definitions/uart.error" },
         { "$ref": "#/definitions/i2c.scan" },
+        { "$ref": "#/definitions/i2c.error" },
         { "$ref": "#/definitions/net.status" },
         { "$ref": "#/definitions/probe.result" },
         { "$ref": "#/definitions/probe.done" },
@@ -278,7 +296,27 @@
           "additionalProperties": false
         },
         { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "i2c.scan" } }, "additionalProperties": false },
+        {
+          "type": "object",
+          "required": ["cmd", "every_ms"],
+          "properties": {
+            "cmd": { "const": "i2c.watch" },
+            "every_ms": { "type": "integer", "minimum": 0, "maximum": 600000, "description": "Scan the target bus this often (ACTIVE). 0 stops. Below 1000 is refused by devices." }
+          },
+          "additionalProperties": false
+        },
         { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "net.refresh" } }, "additionalProperties": false },
+        {
+          "type": "object",
+          "required": ["cmd", "every_ms"],
+          "properties": {
+            "cmd": { "const": "net.watch" },
+            "every_ms": { "type": "integer", "minimum": 0, "maximum": 600000, "description": "Check gateway (ping), DNS (resolve dns) and upstream (TCP 443) this often (ACTIVE), and report it in net.status. 0 stops." },
+            "dns": { "type": "string", "pattern": "^[A-Za-z0-9.-]{1,253}$", "description": "Name to resolve. Absent: DNS stays UNKNOWN." },
+            "upstream": { "type": "string", "pattern": "^[A-Za-z0-9.-]{1,253}$", "description": "Host beyond the gateway to reach. Absent: INTERNET stays UNKNOWN." }
+          },
+          "additionalProperties": false
+        },
         {
           "type": "object",
           "required": ["cmd", "date", "ref", "v_gain", "i_gain", "i_offset", "v_err", "i_err"],
