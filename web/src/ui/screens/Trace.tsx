@@ -4,7 +4,9 @@ import type { System } from '../../core/system';
 import type { Source } from '../../core/types';
 import { SOURCES } from '../../core/types';
 import { Empty } from '../components/Empty';
+import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
+import { explain, explainSource } from '../../core/glossary';
 
 const MAX_ROWS = 800;
 
@@ -47,7 +49,9 @@ export function Trace({ system, only }: { system: System; only?: Source[] | null
           <label class="check" key={s}>
             <input type="checkbox" checked={!hidden.has(s)} onChange={() => toggle(s)} />
             <span class="box">[{hidden.has(s) ? ' ' : 'X'}]</span>
-            {s}
+            <Hint text={explainSource(s)} focusable={false}>
+              {s}
+            </Hint>
           </label>
         ))}
         <span class="trace-state">
@@ -74,17 +78,29 @@ export function Trace({ system, only }: { system: System; only?: Source[] | null
           <table>
             <thead>
               <tr>
-                <th scope="col">TIME</th>
-                <th scope="col">SOURCE</th>
-                <th scope="col" class="col-sev">LEVEL</th>
-                <th scope="col">MESSAGE</th>
+                <th scope="col">
+                  <Hint text={explain('TIME', 'TRACE')}>TIME</Hint>
+                </th>
+                <th scope="col">
+                  <Hint text={explain('SOURCE', 'TRACE')}>SOURCE</Hint>
+                </th>
+                <th scope="col" class="col-sev">
+                  <Hint text={explain('LEVEL', 'TRACE')}>LEVEL</Hint>
+                </th>
+                <th scope="col">
+                  <Hint text={explain('MESSAGE', 'TRACE')}>MESSAGE</Hint>
+                </th>
               </tr>
             </thead>
             <tbody>
               {events.map((e) => (
                 <tr key={e.id} class={`${e.severity} src-${e.source}${e.id > freshFrom && freshFrom > 0 ? ' fresh' : ''}`}>
                   <td class="time">{clock(e.t)}</td>
-                  <td class="src">{e.source}</td>
+                  <td class="src">
+                    <Hint text={explainSource(e.source)} focusable={false}>
+                      {e.source}
+                    </Hint>
+                  </td>
                   <td class="col-sev">
                     <Tag status={e.severity} />
                   </td>

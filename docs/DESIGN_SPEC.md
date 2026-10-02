@@ -1148,6 +1148,15 @@ The goal is not minimal information. The goal is:
 
 > **maximum relevant information with minimum confusion.**
 
+Density only works if every number can be read. **No stat on screen without
+its meaning:** every label, panel title and status word has an entry in the
+glossary (`web/src/core/glossary.ts`): what it is, its unit, why it matters.
+A label that explains itself is drawn with a dotted underline; its bubble
+opens on hover, on keyboard focus (Tab) and on tap, so it works on a phone.
+One bubble, flat panel, cyan edge, monospace text: a margin note in a
+manual, not a floating card. `web/test/glossary.test.ts` fails when a new
+label appears without its explanation.
+
 ---
 
 ## 40 — FINAL VISUAL TARGET
