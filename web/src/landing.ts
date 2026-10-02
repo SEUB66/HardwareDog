@@ -12,7 +12,7 @@ function applyTheme() {
   document.documentElement.dataset.theme = light ? 'light' : 'dark';
   themeButton.textContent = light ? (language === 'fr' ? '☾ Sombre' : '☾ Dark') : (language === 'fr' ? '☀ Clair' : '☀ Light');
   themeButton.setAttribute('aria-label', language === 'fr' ? (light ? 'Activer le mode sombre' : 'Activer le mode clair') : (light ? 'Switch to dark mode' : 'Switch to light mode'));
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f3f4f0' : '#0b0d0f');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f6f3ee' : '#171619');
 }
 applyTheme();
 themeButton.addEventListener('click', () => {
@@ -105,12 +105,19 @@ Object.assign(translations, {
 'Plus de cas réels, de tests et de règles fiables. Une éventuelle IA locale explique les faits; elle ne remplace pas les preuves.':'More real cases, tests and reliable rules. Any future local AI explains facts; it does not replace evidence.',
 'Lire le plan complet ↗':'Read the full plan ↗'
 });
+Object.assign(translations, {
+  'Architecture.': 'Architecture.',
+  'Plans & contrats.': 'Plans & contracts.',
+  'Les documents du dépôt, directement. Schémas texte, couches du système, câblage et conditions de validation.': 'Straight from the repository: text diagrams, system layers, wiring and validation gates.',
+  'Prototype : câblage par défaut. Bring-up et calibration sur carte encore à valider. GPIO 3.3 V; UART 5 V avec adaptation de niveau.': 'Prototype: default wiring. Board bring-up and calibration still pending. GPIO 3.3 V; 5 V UART requires a level shifter.',
+});
 if (language === 'en') {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
     const node = walker.currentNode;
     const original = node.textContent || '';
     const key = original.trim();
+    if (node.parentElement?.closest('pre')) continue;
     if (translations[key]) node.textContent = original.replace(key, translations[key]);
   }
   document.querySelectorAll('[alt],[aria-label]').forEach(el => {
