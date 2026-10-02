@@ -15,8 +15,16 @@ import { PROBE_TESTS } from './types';
 
 export const PROTOCOL_VERSION = 1;
 
+/**
+ * What a device can observe (hello.caps). A hello without caps means every
+ * capability: devices made before caps. Silence about a capability the
+ * device does not have is never read as an observation.
+ */
+export const CAPABILITIES = ['power', 'usb', 'uart', 'i2c', 'net', 'probe'] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+
 export type DeviceFrame =
-  | { type: 'hello'; t: number; proto: number; device: string; rev: string; fw: string }
+  | { type: 'hello'; t: number; proto: number; device: string; rev: string; fw: string; caps?: Capability[] }
   | { type: 'power'; t: number; v: number; i: number }
   | {
       type: 'usb.attach';
@@ -128,8 +136,12 @@ function parseFrame(o: Obj): DeviceFrame {
   if (t < 0) throw new FrameError('field "t" must not be negative');
 
   switch (type) {
-    case 'hello':
-      return { type, t, proto: num(o, 'proto'), device: str(o, 'device'), rev: str(o, 'rev'), fw: str(o, 'fw') };
+    case 'hello': {
+      const hello: DeviceFrame = { type, t, proto: num(o, 'proto'), device: str(o, 'device'), rev: str(o, 'rev'), fw: str(o, 'fw') };
+      // Liberal: unknown capabilities from a newer device are ignored, not fatal.
+      if (Array.isArray(o['caps'])) hello.caps = CAPABILITIES.filter((c) => (o['caps'] as unknown[]).includes(c));
+      return hello;
+    }
     case 'power':
       return { type, t, v: num(o, 'v'), i: num(o, 'i') };
     case 'usb.attach':

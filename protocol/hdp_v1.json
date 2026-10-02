@@ -28,7 +28,13 @@
         "proto": { "const": 1 },
         "device": { "type": "string", "minLength": 1 },
         "rev": { "type": "string", "minLength": 1 },
-        "fw": { "type": "string", "minLength": 1 }
+        "fw": { "type": "string", "minLength": 1 },
+        "caps": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["power", "usb", "uart", "i2c", "net", "probe"] },
+          "description": "What this device can observe. Optional: a hello without caps (devices made before caps) means every capability. Silence about a capability the device does not have is never an observation: no 'usb' means USB is not monitored, not that no USB device is present."
+        }
       },
       "additionalProperties": false
     },

@@ -56,7 +56,14 @@ export function Status({ system }: { system: System }) {
         <Panel title="USB">
           <KV
             rows={[
-              ['DEVICE', <Tag status={usb.connected ? 'PASS' : usb.connections ? 'WARN' : 'UNKNOWN'} label={usb.connected ? 'CONNECTED' : 'DISCONNECTED'} />],
+              [
+                'DEVICE',
+                system.observes('usb') ? (
+                  <Tag status={usb.connected ? 'PASS' : usb.connections ? 'WARN' : 'UNKNOWN'} label={usb.connected ? 'CONNECTED' : 'DISCONNECTED'} />
+                ) : (
+                  <Tag status="UNKNOWN" label="NOT MONITORED" />
+                ),
+              ],
               ['SPEED', usb.descriptor ? `${usb.descriptor.speed} SPEED` : '--'],
               ['VID', hex(usb.descriptor?.vid ?? null)],
               ['PID', hex(usb.descriptor?.pid ?? null)],
