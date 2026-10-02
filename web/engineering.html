@@ -1,16 +1,1363 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><meta name="theme-color" content="#171619"><meta name="description" content="Architecture, plan de développement et roadmap Hardware Dog : TypeScript, Rust, firmware ESP32-S3 et preuves vérifiables."><link rel="icon" href="./favicon.ico"><title>Hardware Dog — Architecture & roadmap</title></head><body data-page="engineering"><a class="skip" href="#main">Aller au contenu</a><header class="wrap nav"><a class="brand" href="./index.html"><img class="official-lockup" src="./brand/hd-lockup-horizontal-1200.webp" width="1200" height="400" alt="Hardware Dog — hardware companion"></a><nav aria-label="Navigation principale"><a href="./index.html#laws">Les lois</a><a href="./index.html#how">Le principe</a><a href="./engineering.html">Technique</a><a href="./index.html#who">WHO</a><button id="theme" aria-label="Activer le mode clair">☀ Clair</button><a class="nav-open" href="./diagnostic.html">Ouvrir l’outil ↗</a></nav></header><main id="main"><section id="engineering" class="technical wrap reveal" aria-labelledby="engineering-title">
-<div class="technical-heading"><div><p class="eyebrow">ENGINEERING / UNDER THE HOOD</p><h1 id="engineering-title">Pensé comme un système.<br><em>Construit pour être vérifié.</em></h1></div><p>Du navigateur au firmware : des couches séparées, un contrat commun et des preuves reproductibles. Voici le plan, l’état réel et la suite.</p></div>
-<div class="architecture glass"><div class="technical-label"><h3>Une architecture. Plusieurs sources.</h3><span>HDP v1 / NDJSON</span></div><ol class="architecture-flow"><li><code>01 / SOURCES</code><strong>Matériel · Simulateur · Replay</strong><small>ESP32-S3 / .hdlog</small></li><li><code>02 / TRANSPORT</code><strong>Web Serial · dogd</strong><small>Rust / 127.0.0.1</small></li><li><code>03 / CONTRACT</code><strong>HDP v1</strong><small>JSON Schema / événements</small></li><li><code>04 / ENGINE</code><strong>Trace · Règles</strong><small>Chronologie / diagnostic déterministe</small></li><li><code>05 / EVIDENCE</code><strong>Archive · Rapports</strong><small>SHA-256 / TXT · JSON · HTML · PDF</small></li></ol></div>
-<div class="stack-grid"><article class="glass stack-card"><p class="eyebrow">FRONTEND</p><h3>TypeScript + Preact</h3><p>Interface Vite, transports séparés du rendu, archive IndexedDB et replay local. Les polices et les images sont embarquées.</p><code>web/src/core → web/src/ui</code></article><article class="glass stack-card"><p class="eyebrow">LOCAL BACKBONE</p><h3>Rust / dogd</h3><p>Daemon local pour le lien matériel et les sessions. Adresse loopback par défaut, contrôle des hôtes et des origines autorisées.</p><code>device → dogd → HDP</code></article><article class="glass stack-card"><p class="eyebrow">FIRMWARE</p><h3>C11 + ESP-IDF</h3><p>ESP32-S3, INA226, UART et réseau. Le cœur est testé sur PC et en CI; les mesures et les liaisons réelles restent à valider sur carte.</p><code>ESP32-S3 / INA226 / W5500</code></article></div>
-<details class="development-plan glass"><summary><span>Le plan de développement</span><span class="detail-plus" aria-hidden="true">+</span></summary><div class="plan-grid"><article><p class="eyebrow">01 / SOFTWARE FIRST</p><h3>Stabiliser le contrat.</h3><p>Valider HDP, les transports, les diagnostics, les sessions scellées et les exports contre les mêmes tests. Chaque incident enregistré peut devenir un cas de régression.</p></article><article><p class="eyebrow">02 / REAL HARDWARE</p><h3>Confronter le code au réel.</h3><p>Démarrer la carte ESP32-S3, comparer les INA226 à un instrument de référence et enregistrer des pannes physiques. Le simulateur suit ensuite ces traces.</p></article><article><p class="eyebrow">03 / PRODUCT</p><h3>Passer du prototype à l’outil.</h3><p>Concevoir le PCB après les essais sur banc. Livrer schémas, BOM, Gerbers, protections, procédure de test et documentation avant la version 1.0.</p></article></div></details>
-<div class="roadmap glass"><div class="technical-label"><h3>Roadmap / par niveau</h3><span>VALIDATION > CALENDRIER</span></div><p class="roadmap-note">Un niveau est terminé quand sa condition de validation passe. Le code seul ne suffit pas; aucune date de livraison n’est promise ici.</p><div class="roadmap-scroll" role="region" aria-label="Roadmap technique" tabindex="0"><table><thead><tr><th scope="col">Niveau</th><th scope="col">Jalon</th><th scope="col">État</th><th scope="col">Condition de validation</th></tr></thead><tbody>
-<tr><td>40–55 / 75</td><th scope="row">Socle logiciel & preuves</th><td><span class="road-status done">Implémenté</span></td><td>Enregistrements scellés, diagnostics, cas de régression, dogd et rapports TXT / JSON / HTML / PDF.</td></tr>
-<tr><td>60 / 65 / 70 / 80</td><th scope="row">Prototype & banc de test</th><td><span class="road-status active">Partiel</span></td><td>Logiciel et cœur firmware vérifiés. Bring-up, calibration, pannes physiques, Ethernet et I2C à valider sur carte.</td></tr>
-<tr><td>85</td><th scope="row">PCB Rev A</th><td><span class="road-status planned">Planifié</span></td><td>Prototype éprouvé avant KiCad, schéma, BOM, Gerbers, assemblage et procédure de test.</td></tr>
-<tr><td>90</td><th scope="row">Architecture de sondes</th><td><span class="road-status planned">Planifié</span></td><td>Étendre le système avec des sondes qui produisent le même HDP, sans complexifier le cœur.</td></tr>
-<tr><td>95</td><th scope="row">Bibliothèque d’incidents</th><td><span class="road-status planned">Planifié</span></td><td>Cas anonymisés et reproductibles, proposés par pull request et validés automatiquement avant revue.</td></tr>
-<tr><td>100</td><th scope="row">Hardware Dog 1.0</th><td><span class="road-status planned">Planifié</span></td><td>Matériel, logiciel, limites de mesure, récupération, sécurité et documentation validés ensemble.</td></tr>
-<tr><td>MAX</td><th scope="row">Apprendre des incidents</th><td><span class="road-status planned">Planifié</span></td><td>Plus de cas réels, de tests et de règles fiables. Une éventuelle IA locale explique les faits; elle ne remplace pas les preuves.</td></tr>
-</tbody></table></div></div>
-<div class="technical-docs"><a class="button secondary" href="https://github.com/SEUB66/HardwareDog/blob/main/docs/ENGINEERING_PLAN.md" target="_blank" rel="noopener noreferrer">Lire le plan complet ↗</a><a class="button secondary" href="https://github.com/SEUB66/HardwareDog/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Architecture ↗</a><a class="button secondary" href="https://github.com/SEUB66/HardwareDog/blob/main/docs/FIRMWARE.md" target="_blank" rel="noopener noreferrer">Firmware & bring-up ↗</a></div>
+<div class="technical-heading"><div><p class="eyebrow">ENGINEERING / RAW DOCS</p><h1 id="engineering-title">Architecture.<br><em>Plans & contrats.</em></h1></div><p>Les documents du dépôt, directement. Schémas texte, couches du système, câblage et conditions de validation.</p></div><section class="raw-sheet"><h2>01 / DATA FLOW</h2><pre tabindex="0" aria-label="Architecture data flow">┌──────────────┐   NDJSON    ┌──────────────┐   frames   ┌──────────────┐
+ │ HARDWARE DOG │ ──────────&gt; │  TRANSPORT   │ ─────────&gt; │    SYSTEM    │
+ │   firmware   │ &lt;────────── │ web serial / │ &lt;───────── │ state + rules│
+ └──────────────┘  commands   │  simulator / │  commands  └──────┬───────┘
+                              │  replay      │                   │
+                              └──────▲───────┘                   │ every frame,
+                                     │ .hdlog                    │ reject, cmd,
+                              ┌──────┴───────┐                   │ mark
+                              │   SESSION    │ &lt;─────────────────┤
+                              │   ARCHIVE    │   recorder        │
+                              │  IndexedDB   │                   │
+                              └──────────────┘                   │
+                                                  ┌──────────────┼──────────────┐
+                                                  v              v              v
+                                            ┌──────────┐  ┌─────────────┐ ┌──────────┐
+                                            │  TRACE   │  │   SCREENS   │ │ COMMANDS │
+                                            │ timeline │  │ GUI panels  │ │  CTRL+K  │
+                                            └────┬─────┘  └─────────────┘ └──────────┘
+                                                 v
+                                            ┌──────────┐
+                                            │  REPORT  │  txt / json, local only
+                                            └──────────┘</pre></section><section class="raw-sheet"><h2>02 / WIRING — ESP32-S3 / INA226</h2><p>Prototype : câblage par défaut. Bring-up et calibration sur carte encore à valider. GPIO 3.3 V; UART 5 V avec adaptation de niveau.</p><pre tabindex="0" aria-label="Firmware wiring">ESP32-S3            INA226 breakout
+3V3        ──────── VCC
+GND        ──────── GND
+GPIO 8     ──────── SDA
+GPIO 9     ──────── SCL
+                    VIN+  ── supply side (e.g. 5 V from the charger)
+                    VIN-  ── target side (the device under test)
+
+ESP32-S3            TARGET
+GPIO 18 (RX) ────── target TX      (3.3 V logic only)
+GPIO 17 (TX) ────── target RX
+GPIO 4  (SDA) ───── target I2C SDA (target pull-ups)
+GPIO 5  (SCL) ───── target I2C SCL
+GND        ──────── target GND     (always)</pre></section><div class="raw-documents"><details class="raw-sheet"><summary>ARCHITECTURE.md <span aria-hidden="true">+</span></summary><pre tabindex="0" aria-label="ARCHITECTURE.md raw source"># HARDWARE DOG / ARCHITECTURE
+
+```text
+STATUS
+------
+
+[ OK ] web interface          web/
+[ OK ] wire protocol v1       docs/PROTOCOL.md, protocol/hdp_v1.json (contract)
+[ OK ] device simulator       web/src/core/simulator.ts
+[ OK ] session recording      .hdlog v2 files, browser archive, replay
+[ OK ] evidence integrity     SHA-256 seals, provenance, cases/
+[ OK ] dogd                   local daemon, fourth transport (docs/DOGD.md)
+[ .. ] firmware               firmware/: core verified on PC + CI, board pending
+[ -- ] hardware / PCB         not started
+[ -- ] enclosure              not started
+```
+
+## DATA FLOW
+
+```text
+ ┌──────────────┐   NDJSON    ┌──────────────┐   frames   ┌──────────────┐
+ │ HARDWARE DOG │ ──────────&gt; │  TRANSPORT   │ ─────────&gt; │    SYSTEM    │
+ │   firmware   │ &lt;────────── │ web serial / │ &lt;───────── │ state + rules│
+ └──────────────┘  commands   │  simulator / │  commands  └──────┬───────┘
+                              │  replay      │                   │
+                              └──────▲───────┘                   │ every frame,
+                                     │ .hdlog                    │ reject, cmd,
+                              ┌──────┴───────┐                   │ mark
+                              │   SESSION    │ &lt;─────────────────┤
+                              │   ARCHIVE    │   recorder        │
+                              │  IndexedDB   │                   │
+                              └──────────────┘                   │
+                                                  ┌──────────────┼──────────────┐
+                                                  v              v              v
+                                            ┌──────────┐  ┌─────────────┐ ┌──────────┐
+                                            │  TRACE   │  │   SCREENS   │ │ COMMANDS │
+                                            │ timeline │  │ GUI panels  │ │  CTRL+K  │
+                                            └────┬─────┘  └─────────────┘ └──────────┘
+                                                 v
+                                            ┌──────────┐
+                                            │  REPORT  │  txt / json, local only
+                                            └──────────┘
+```
+
+## LAYERS
+
+```text
+web/src/core/        no UI, no DOM rendering, fully unit tested
+  protocol.ts        frame types, validating decoder, line splitter
+  transport.ts       Transport interface
+  webserial.ts       real device over Web Serial (Chromium)
+  simulator.ts       simulated device + simulated target, same protocol
+  dogd.ts            transport to dogd on 127.0.0.1, local store
+  session.ts         .hdlog writer (seals, footer), reader + verifier, replay
+  sha256.ts          SHA-256, synchronous (works on plain HTTP too)
+  cases.ts           recording -&gt; regression case, case checker
+  archive.ts         sessions streamed to IndexedDB, retention, export
+  system.ts          single source of truth, diagnostic rules
+  trace.ts           chronological timeline, pause without data loss
+  diagnostics.ts     deterministic diagnostic engine, session facts
+  scenarios.ts       physical fault scenarios for the simulator
+  report.ts          observation / correlation / possible cause
+  commands.ts        command layer, calls the same System methods as the GUI
+  format.ts          units and timestamps
+  ascii.ts           ASCII identity
+
+web/src/ui/          Preact components, one file per screen
+web/src/styles/      design tokens (spec 06, 07) and panel styles
+```
+
+## RULES OF THE CODEBASE
+
+```text
+ONE SOURCE OF TRUTH   The GUI and the command layer never keep their own
+                      copy of device state. Both call System.
+
+FRAMES ONLY           Device state changes only when a validated frame
+                      arrives. Buttons send commands; they do not edit state.
+
+NO FAKE CERTAINTY     Rules emit OBSERVED facts, CORRELATION in time, and
+                      POSSIBLE CAUSE. Nothing is promoted to a diagnosis.
+
+SIMULATOR IS LABELED  Simulated sessions say so in the header, the boot
+                      sequence and every exported report. Switching source
+                      starts a new session so data never mixes.
+
+RECORDING IS REALITY  A replay goes through the same decoder and rules as a
+                      live device, on the thresholds it was recorded with.
+                      It is read-only, and a replayed simulator session is
+                      still labeled SIMULATED. Format: PROTOCOL.md.
+
+EVIDENCE STAYS        Every file is sealed (SHA-256 chain + footer). The
+EVIDENCE              header is frozen when recording starts; origin is
+                      never rewritten. A modified file is still shown, and
+                      labeled MODIFIED with line numbers.
+
+LOCAL FIRST           No network requests, no CDN, no account, no
+                      telemetry. Fonts are bundled. Settings and recorded
+                      sessions stay in the browser. Enforced by
+                      web/test/laws.test.ts. Laws: LAWS.md.
+
+SMALL                 The build must fit on the device flash and be served
+                      by the firmware. Check the gzip size on every change.
+```
+
+## DIAGNOSTIC RULES
+
+The deterministic engine (`web/src/core/diagnostics.ts`), its 13 rules,
+confidence definitions, the 11 fault scenarios and the reliability matrix
+are documented in [`DIAGNOSTICS.md`](DIAGNOSTICS.md).
+</pre></details><details class="raw-sheet"><summary>ENGINEERING_PLAN.md <span aria-hidden="true">+</span></summary><pre tabindex="0" aria-label="ENGINEERING_PLAN.md raw source"># HARDWARE DOG / ENGINEERING PLAN
+
+```text
+DOCUMENT      ENGINEERING PLAN
+VERSION       0.7 / IMPLEMENTATION-ALIGNED
+STATUS        ACTIVE IMPLEMENTATION
+COMPANION TO  LAWS.md              the laws of the project
+              DESIGN_SPEC.md       interface and industrial design (locked)
+              BRAND.md             official mascot and assets (locked)
+              VISION.md            product vision
+              PROTOCOL.md          HDP v1, human-readable
+              DIAGNOSTICS.md       rules, confidence, fault scenarios
+              protocol/hdp_v1.json HDP v1, machine-readable contract
+```
+
+Hardware Dog is a **source-available** hardware diagnostic platform.
+
+The repository is public so that individuals can study it, modify it, build
+their own unit and use it for permitted non-commercial purposes. Commercial
+manufacturing, distribution, integration and commercial service use require
+a separate Hardware Dog commercial license (see [LICENSING](#licensing)).
+
+The laws of the project ([`LAWS.md`](LAWS.md)) are architecture
+boundaries, not preferences:
+
+```text
+ONE EVENT MODEL.
+ONE CLOCK.
+ONE TIMELINE.
+
+EVERY REAL FAILURE SHOULD BE ABLE
+TO BECOME A REPRODUCIBLE TEST.
+
+LOCAL IS THE SOURCE OF TRUTH.
+THE CLOUD IS NEVER REQUIRED.
+```
+
+A real Hardware Dog device and the simulator must produce the same HDP
+event stream. The trace engine and the UI must not need to know which one
+produced it.
+
+```text
+LAW OF THE PROJECT
+
+The trace engine must not care whether reality or simulation
+produced the event.
+```
+
+This law is enforced, not just stated: `web/test/protocol-contract.test.ts`
+validates every simulator frame against `protocol/hdp_v1.json`, and the
+firmware will pass the same contract before it ships.
+
+---
+
+## 1 — WHERE THE PROJECT IS
+
+The first version of this plan (0.1, in git history) described a first work
+session: create a skeleton and make a dashboard appear. That is done.
+
+```text
+[ OK ] repository skeleton
+[ OK ] HDP v1 wire protocol + JSON Schema contract
+[ OK ] transport abstraction
+[ OK ] Web Serial link (real device side, awaiting firmware)
+[ OK ] deterministic simulator
+[ OK ] trace engine, one timeline
+[ OK ] responsive diagnostic UI, desktop + mobile
+[ OK ] power telemetry simulation
+[ OK ] brand asset pipeline
+[ OK ] design system (tokens, instrument panels)
+[ OK ] automated tests + CI
+```
+
+### MILESTONE — SOFTWARE REFERENCE IMPLEMENTATION
+
+```text
+[ OK ]   HDP v1                             docs/PROTOCOL.md, protocol/hdp_v1.json
+[ OK ]   simulator transport                web/src/core/simulator.ts
+[ OK ]   Web Serial transport               web/src/core/webserial.ts
+[ OK ]   trace engine                       web/src/core/trace.ts
+[ OK ]   responsive UI                      web/src/ui
+[ OK ]   fault scenarios                    11 scenarios, HD-T000 to HD-T010
+[ OK ]   deterministic diagnostic rules     13 rules, reliability matrix
+[ OK ]   report generation                  TXT + JSON, diagnosis-driven
+[ OK ]   session recording                  .hdlog, browser archive, exact replay
+[ OK ]   dogd integration                   Rust daemon, fourth transport
+[ NEXT ] physical ESP32-S3 reference device firmware on a dev board
+```
+
+### MILESTONE — EVIDENCE INTEGRITY + CASES
+
+A recorded fault must travel from one workshop to another and stay what
+it was. Hardware Dog no longer only captures and diagnoses:
+
+```text
+CAPTURE -&gt; PRESERVE -&gt; SHARE -&gt; REPLAY -&gt; VERIFY -&gt; LEARN
+```
+
+```text
+[ OK ]   stable .hdlog header (v2)          recording id, origin, ruleset, app
+[ OK ]   format / protocol / ruleset versions in every file
+[ OK ]   sealed blocks + finalized hash     SHA-256 chain, footer with counts
+[ OK ]   provenance preserved forever       PHYSICAL | SIMULATED, never rewritten
+[ OK ]   replay cannot execute commands     recorded commands are documentation
+[ OK ]   unclean stops recovered            closed: RECOVERED, sealed lines only
+[ OK ]   live export is verifiable          closed: SNAPSHOT
+[ OK ]   recording -&gt; regression case       REPORT -&gt; SAVE AS CASE, cases/
+[ OK ]   cases run in the test suite        web/test/cases.test.ts
+[ OK ]   report references the recording    id, origin, integrity, file SHA-256
+[ LATER ] recordings signed by the device   key in the firmware
+```
+
+&gt; **DON&#39;T SEND A SCREENSHOT. SEND THE .HDLOG.**
+
+**Not the PCB yet.** The order is deliberate: first a system that can
+receive, record, correlate and explain the data perfectly; then the box
+that produces it. Hardware built before the contract is stable has nothing
+to be tested against.
+
+---
+
+## 2 — PRODUCT
+
+&gt; **Hardware Dog — a pocket diagnostic companion for hardware, USB, serial
+&gt; and network troubleshooting.**
+&gt; You plug it in. It sniffs. It tells you what is really going on.
+
+Local-first. No account, no SaaS, no mandatory cloud. Useful without
+Internet.
+
+It observes several layers of a system:
+
+```text
+PHYSICAL -&gt; ELECTRICAL -&gt; PROTOCOL -&gt; NETWORK -&gt; SOFTWARE
+```
+
+It does not replace an oscilloscope or a Fluke multimeter. It answers:
+
+&gt; **&quot;Why doesn&#39;t this thing work?&quot;**
+
+Diagnostics of hardware you control. No security exploitation, no bypass.
+
+### The four modes
+
+```text
+SNIFF    passive observation: power, USB presence, UART, I2C, network, device state
+PROBE    simple, safe active tests, always announced before running
+TRACE    every event from every source on one clock
+REPORT   exportable diagnosis: TXT + JSON (HTML / PDF later)
+```
+
+---
+
+## 3 — ARCHITECTURE
+
+```text
+                     ┌──────────────────┐
+                     │   REAL DEVICE    │
+                     │ ESP32-S3 / HDP   │
+                     └────────┬─────────┘
+                              │
+                              │ HDP EVENTS
+                              │
+                     ┌────────▼─────────┐
+                     │ TRANSPORT LAYER  │
+                     └────────┬─────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+     ┌────────▼────────┐             ┌────────▼────────┐
+     │ REAL TRANSPORT  │             │   SIMULATOR     │
+     │ Web Serial      │             │ deterministic   │
+     │ (dogd: planned) │             │ scenarios       │
+     └────────┬────────┘             └────────┬────────┘
+              └───────────────┬───────────────┘
+                              │
+                     ┌────────▼─────────┐
+                     │   TRACE ENGINE   │
+                     │ ONE TIMELINE     │
+                     └────────┬─────────┘
+                              │
+                ┌─────────────┴─────────────┐
+                │                           │
+       ┌────────▼────────┐         ┌────────▼────────┐
+       │ DIAGNOSTIC RULES│         │ SESSION STORE   │
+       └────────┬────────┘         └────────┬────────┘
+                │                           │
+                └─────────────┬─────────────┘
+                              │
+                       ┌──────▼───────┐
+                       │ UI / REPORTS │
+                       └──────────────┘
+```
+
+```text
+LAYER              STATUS    WHERE
+transport          OK        web/src/core/transport.ts (Web Serial, simulator, replay, dogd)
+HDP decoder        OK        web/src/core/protocol.ts
+trace engine       OK        web/src/core/trace.ts
+system state       OK        web/src/core/system.ts (single source of truth)
+diagnostic rules   OK        web/src/core/diagnostics.ts
+session store      OK        web/src/core/session.ts, archive.ts (.hdlog, IndexedDB)
+UI / reports       OK        web/src/ui, web/src/core/report.ts
+dogd               OK        dogd/, section 10, DOGD.md
+firmware           PARTIAL   firmware/, section 11, FIRMWARE.md (board bring-up pending)
+```
+
+Invariants of the codebase (details in `ARCHITECTURE.md`):
+
+```text
+ONE SOURCE OF TRUTH   GUI and command layer both call System; no copies of state
+FRAMES ONLY           device state changes only when a validated HDP frame arrives
+SAME PATH             simulator frames are serialized and go through the real decoder
+NO FAKE CERTAINTY     OBSERVED / CORRELATION / POSSIBLE CAUSE / NEXT CHECK kept apart
+LOCAL FIRST           no network requests, no CDN, no account
+```
+
+---
+
+## 4 — HDP, HARDWARE DOG PROTOCOL
+
+```text
+VERSION     1
+FORMAT      NDJSON, UTF-8, one object per line
+CLOCK       &quot;t&quot; = device uptime in ms, anchored to host time by &quot;hello&quot;
+TRANSPORTS  USB CDC serial (now), WebSocket via dogd (planned), local TCP (planned)
+CONTRACT    protocol/hdp_v1.json, enforced by tests
+LATER       CBOR / protobuf only if bandwidth requires it; same event model
+```
+
+Device frames: `hello`, `power`, `usb.attach`, `usb.detach`,
+`uart.config`, `uart.rx`, `uart.error`, `i2c.scan`, `net.status`,
+`probe.result`, `probe.done`, `log`. Host commands: `hello`,
+`usb.enumerate`, `uart.config`, `uart.tx`, `i2c.scan`, `net.refresh`,
+`probe`. Full reference: `PROTOCOL.md`.
+
+A breaking change means HDP v2, a new schema file, and a `proto` bump in
+`hello`. Decoders reject what they do not understand; they never guess.
+
+---
+
+## 5 — SIMULATOR
+
+The simulator is a fundamental component, not a demo feature. It is:
+
+```text
+THE DEMO          anyone can run Hardware Dog without owning one (npm run demo)
+THE TEST RIG      every diagnostic rule is proven against it on each commit
+THE SPEC PARTNER  it defines, in code, what the firmware must emit
+```
+
+Design:
+
+```text
+DETERMINISTIC     seeded PRNG: same seed, same session, bit for bit
+MANUAL TIME       tests drive time with advance(ms); no timers, no flakiness
+PHYSICAL MODEL    supply voltage, cable resistance, load bursts, brownout,
+                  target boot log, UART baud, USB data link, network layers
+HDP ONLY          it serializes frames to text and feeds the real decoder;
+                  it never touches System state directly
+BLIND ENGINE      the diagnostic engine never sees the scenario
+```
+
+Fault scenarios (`web/src/core/scenarios.ts`, details in `DIAGNOSTICS.md`):
+
+```text
+HD-T000 HEALTHY BASELINE           HD-T006 TARGET RESET LOOP
+HD-T001 USB UNDERVOLTAGE           HD-T007 UNSTABLE NETWORK
+HD-T002 DHCP FAILURE               HD-T008 UPSTREAM DOWN
+HD-T003 DNS FAILURE                HD-T009 OVERCURRENT
+HD-T004 SERIAL FRAMING MISMATCH    HD-T010 USB NOT ENUMERATED
+HD-T005 INTERMITTENT USB DISCONNECT
+```
+
+Each scenario has an answer key. The reliability matrix requires the
+engine to produce exactly that key, with no false positive on HD-T000.
+
+Every new fault class starts here: scenario first, rule second, hardware
+last.
+
+---
+
+## 6 — TRACE ENGINE
+
+Probably the killer feature: **ONE TIMELINE.**
+
+Diagnosing today means juggling a multimeter, a serial terminal,
+Wireshark, system logs, ping, Device Manager and a browser console. Hardware
+Dog puts all of it on one clock:
+
+```text
+12:02:01.011  POWER  WARN  voltage drop           4.61 V &lt; 4.75 V
+12:02:01.079  USB    WARN  device disconnected
+12:02:01.079  RULE   WARN  disconnect 68 ms after voltage drop
+12:02:02.310  UART   INFO  rst:0x1 (POWERON),boot:0x8
+```
+
+And suddenly: **cause -&gt; consequence.**
+
+Recording never stops; pausing freezes the view only. Events stay sorted by
+device time even when frames arrive out of order. Capacity: 10 000 events
+in memory, full timeline in the JSON export.
+
+---
+
+## 7 — DIAGNOSTIC ENGINE
+
+Deterministic. **No mandatory AI.** 13 written rules, each with a
+confidence level that has a written definition, all documented in
+`DIAGNOSTICS.md` and proven by `web/test/scenarios.test.ts`:
+
+```text
+11 scenarios x 5 seeds      exact expected diagnoses, 0 false positive
+HD-T000                     silent for 10 minutes
+every fault                 HIGH confidence within 90 s, detected within 30 s
+```
+
+### Optional AI, later
+
+AI may only **explain** diagnoses already produced by the rules, in plain
+language. Detection never depends on it. This is essential for the product&#39;s
+credibility.
+
+---
+
+## 8 — SESSION STORE
+
+```text
+DONE   every live session recorded as it happens (.hdlog, PROTOCOL.md):
+       frames, rejected lines, commands, marks, threshold changes
+DONE   browser archive (IndexedDB, memory fallback): sessions streamed in
+       ordered chunks; the first failed write stops recording, no silent
+       gap; simulator sessions pruned (latest 5), hardware sessions with
+       data never deleted automatically
+DONE   replay through the same decoder: same timeline, same facts, same
+       diagnoses, on the recorded thresholds; read-only; a replayed
+       simulator session stays labeled SIMULATED
+DONE   save / open .hdlog files: a fault recorded by one person can be
+       replayed by anyone, without the device
+DONE   evidence integrity (.hdlog v2): sealed SHA-256 chain, footer,
+       provenance, VERIFIED / RECOVERED / INCOMPLETE / MODIFIED
+DONE   cases: a recording + the facts and diagnosis it must replay to
+LATER  SQLite in dogd, same data model
+LATER  recordings signed with a key held by the device
+```
+
+Everything is local. A session file leaves the machine only when the
+operator saves it and gives it to someone.
+
+Data model (dogd / SQLite, mirrored in IndexedDB):
+
+```text
+devices    id, serial_number, hardware_revision, firmware_version, first_seen, last_seen
+sessions   id, device_id, source (DEVICE | SIMULATOR + scenario), started_at, ended_at, name, notes
+events     id, session_id, timestamp, category, type, severity, payload_json
+metrics    id, session_id, timestamp, metric, value, unit
+reports    id, session_id, created_at, summary, diagnosis_json
+```
+
+A recorded session stores raw HDP frames. Replaying it through the decoder
+must reproduce the same timeline and the same diagnoses: the recording
+becomes a regression test. `cases/` holds such tests: each recording is
+named by its SHA-256 and must replay to the facts and diagnosis its case
+states (`web/test/cases.test.ts`, format in PROTOCOL.md).
+
+---
+
+## 9 — REPORTS
+
+```text
+FORMAT     TXT (readable with no software) + JSON (report + full timeline)
+CONTENT    measurements per section, then one DIAGNOSIS block per finding:
+           CONFIDENCE + basis, OBSERVED, CORRELATION, POSSIBLE CAUSE, NEXT CHECK
+LABELING   simulated sessions say so in every export
+LATER      HTML / PDF
+```
+
+---
+
+## 10 — DOGD, LOCAL DAEMON
+
+Rust, local only: `dogd/`, documented in [`DOGD.md`](DOGD.md).
+
+```text
+Rust, Tokio, Axum, Serde, SQLite
+
+dogd/src/
+├── main.rs        serve, status, devices, sessions
+├── config.rs      local by default, --listen-lan explicit
+├── api/           the local API, host + origin guard, HDP socket
+├── transport/     the device link: bridge, reconnect
+├── device/        port listing, HDP hello identification
+├── sessions/      .hdlog integrity check (same algorithm as the reader)
+├── storage/       SQLite index + files
+└── protocol/      HDP constants, hello watcher
+```
+
+```text
+DISCOVER  CONNECT  BRIDGE  STORE  SERVE
+never: interpret differently, invent events, rewrite HDP, become SaaS
+```
+
+dogd is **the fourth transport**. `WS /v1/hdp` carries the device bytes
+exactly as they arrive; the interface decodes them with the same decoder as
+Web Serial. dogd owns no diagnostic rule: `dogd = transport + storage`,
+`web = trace + diagnosis`. Headless diagnosis, if ever, will come from one
+shared rule representation, not from a manual port to Rust.
+
+---
+
+## 11 — FIRMWARE
+
+ESP32-S3, ESP-IDF, C11: `firmware/`, documented in [`FIRMWARE.md`](FIRMWARE.md).
+
+```text
+firmware/components/hdp   THE CORE: portable C, no ESP-IDF. HDP writer,
+                          command parser, INA226 driver. Built and tested
+                          on a PC too (firmware/host).
+firmware/main             ESP-IDF glue: I2C, UART, native USB, Wi-Fi
+```
+
+Each subsystem emits HDP v1 frames; nothing else leaves the device (logs
+go to UART0). The device declares what it observes in `hello.caps`.
+
+Acceptance: the firmware&#39;s output validates against `protocol/hdp_v1.json`
+and runs through the same engine as the simulator: on a PC and in CI today
+(`web/test/firmware.test.ts`), captured on the board at bring-up
+(FIRMWARE.md), then through the physical scenarios HD-P0xx (section 14).
+
+---
+
+## 12 — HARDWARE, REV A
+
+### MCU
+
+**ESP32-S3**: Wi-Fi, Bluetooth, USB OTG, plenty of GPIO, ADC, I2C, SPI,
+UART, huge ecosystem, cheap, easy to prototype. An STM32 / RP2040 variant can
+come later.
+
+### USB: what Rev A does, precisely
+
+```text
+[X] measures VBUS voltage and current on the passthrough (INA226)
+[X] detects attach / detach and correlates it with power on one clock
+[X] enumerates a device plugged into its own HOST port and reads
+    descriptors (VID, PID, class, strings)
+[X] reports the speed the device enumerated at on that port
+[ ] NOT a USB protocol analyzer: no packet capture, no traffic decoding
+[ ] NOT 480 Mbps: the ESP32-S3 USB OTG controller is full-speed (12 Mbps);
+    a high-speed device enumerates on the host port at full speed
+[ ] the passthrough does not touch D+ / D-; it observes power only
+```
+
+```text
+USB IN ──── INA226 current sense on VBUS ──── USB OUT     (data lines pass through)
+
+USB HOST port (ESP32-S3 OTG, full speed): enumeration + descriptors
+```
+
+### Display
+
+Small IPS display, 2.4–2.8&quot;. Field information only; the full interface
+stays on the phone / laptop. Layout rules: `DESIGN_SPEC.md` sections 26–27.
+
+### Connectors
+
+```text
+USB-C HOST      enumeration port
+USB-C / USB-A   power passthrough (measured)
+USB-C           Hardware Dog power + link to the host computer
+RJ45            Ethernet (0.2)
+UART header     GND TX RX 3V3
+I2C header
+GPIO
+```
+
+Rev A does not need everything to be bidirectional.
+
+### Ethernet
+
+**W5500 over SPI.** Not sexy, extremely well documented and stable. An
+integrated PHY can come with Rev B.
+
+### UART
+
+3.3 V TTL only, with proper protection (series resistors, clamping). No
+RS-232 on the MCU pins.
+
+---
+
+## 13 — PCB (AFTER THE REFERENCE DEVICE)
+
+KiCad, public:
+
+```text
+hardware/
+  rev-a/
+    schematic/
+    pcb/
+    gerbers/
+    bom/
+    assembly/
+```
+
+Silkscreen and color rules: `DESIGN_SPEC.md` sections 28–29.
+
+---
+
+## 14 — TESTS
+
+```text
+UNIT         protocol decoder, trace, rules, commands, report, chart layout
+CONTRACT     every simulator frame validates against protocol/hdp_v1.json
+REPLAY       recording then replaying any scenario gives the same timeline,
+             facts and diagnoses; tampered files are reported MODIFIED
+CASES        every cases/*.hdlog is the file its case names and replays to
+             the facts and diagnosis the case states
+SIMULATION   reliability matrix: HD-T000 .. HD-T010 (DIAGNOSTICS.md)
+PHYSICAL     HD-P001 real undervoltage (resistive cable, loaded target)
+  (planned)  HD-P002 real DHCP failure (isolated switch, no server)
+             HD-P003 real DNS failure (blackholed resolver)
+             HD-P004 real framing mismatch (target at 9600)
+             HD-P005 real intermittent USB (worn connector jig)
+```
+
+A physical scenario passes when the same engine produces the same
+diagnosis as its simulated twin.
+
+---
+
+## 15 — REPOSITORY
+
+```text
+NOW                                   PLANNED
+README.md                             CONTRIBUTING.md
+LICENSE, COMMERCIAL.md                SECURITY.md
+assets/brand/    brand pipeline       dogd/        Rust daemon
+docs/            specs and plans      firmware/    ESP32-S3
+protocol/        HDP v1 schema        hardware/    KiCad Rev A
+web/             UI, core, simulator  enclosure/   3D printable case
+cases/           recorded incidents
+.github/         CI
+```
+
+The simulator lives in `web/src/core` today because the UI and the tests
+use it directly. It moves to a shared package only when dogd needs it.
+
+---
+
+## 16 — CI
+
+```text
+NOW       typecheck, unit + contract + simulation tests, production build
+NEXT      lint + format check, Rust build + tests (dogd), firmware build,
+          contract test on captured firmware output, release artifacts
+```
+
+Badges appear in the README only when the job exists and passes.
+
+---
+
+## 17 — ROADMAP, BY LEVEL
+
+```text
+DESTINATION   Hardware Dog = the local-first incident recorder and
+              diagnostic layer for physical hardware.
+
+              Specialized tools measure one layer deeply.
+              Hardware Dog preserves what happened across the system.
+```
+
+The project climbs one level at a time. A level is done when its **gate**
+passes, not when its code exists. MAX LVL does not mean forty protocols: it
+means a technician can trust Hardware Dog with a fault, share the proof,
+reproduce it, and make a decision on it.
+
+```text
+LVL   NAME                                  STATUS
+40    .hdlog becomes technical evidence      DONE
+45    diagnostic engine v1                   DONE      16 rules, each with a scenario and a case
+50    .hdlog becomes a CASE                  DONE      context in cases, hwdog test cases/ in CI
+55    dogd, the local backbone               DONE      gate passed, real ESP32 at 60
+60    first physical Hardware Dog            PARTIAL   core PASS on PC + CI, board bring-up pending
+65    calibration + truthfulness             PARTIAL   software PASS, reference comparison on boards pending
+70    real fault lab                         PARTIAL   procedures + pipeline PASS, bench recordings pending
+75    professional reports                   DONE      TXT, JSON, HTML, PDF from the same lines
+80    network + I2C on hardware              PARTIAL   rules, simulator, firmware core PASS; ESP32-S3 + W5500 builds in CI; silicon pending
+85    PCB Rev A                              PLANNED
+90    probe architecture                     PLANNED
+95    community incident library             PLANNED
+100   Hardware Dog 1.0                       PLANNED
+MAX   incidents make Hardware Dog better     PLANNED
+```
+
+### LVL 40 — .hdlog BECOMES TECHNICAL EVIDENCE        DONE
+
+```text
+[ OK ] versions in every file: hdlog, HDP, ruleset, app (firmware from the
+       hello frame, in the footer)
+[ OK ] immutable provenance: origin PHYSICAL | SIMULATED, never rewritten;
+       a replay is shown as REPLAY OF PHYSICAL | REPLAY OF SIMULATED
+[ OK ] SHA-256 seal chain + footer hash of the final content
+[ OK ] final counts: frames, rejects, commands, marks, thresholds, lost
+[ OK ] unfinished files explicitly INCOMPLETE; RECOVERED after a crash
+[ OK ] size and line limits, field validation, hostile-file tests
+[ OK ] compatibility: every version is read forever, files are never
+       rewritten; a newer file says it needs a newer Hardware Dog
+[ OK ] report.json references the recording id, origin, integrity, hash
+```
+
+GATE: a file recorded today opens in two years without ambiguity.
+`web/test/fixtures/hdlog-v1.hdlog` (written by an earlier build) and
+`cases/*.hdlog` (v2) must parse and replay to the same diagnosis on every
+commit.
+
+Why there is no REPLAYED_* origin in the file: replaying does not change
+where the evidence came from. Exporting a replay gives back the same bytes,
+so a file can never become &quot;a replay of a replay&quot;. The replay state is
+shown by the interface and the report, never written into the evidence.
+
+### LVL 45 — DIAGNOSTIC ENGINE V1     DONE
+
+Not 150 rules. Ten diagnostics that are extremely solid.
+
+```text
+WANTED                       TODAY (id kept: ids live in case files)
+POWER_INSTABILITY            [ OK ] POWER_INSTABILITY
+USB_RECONNECT_LOOP           [ OK ] USB_INTERMITTENT
+USB_ENUMERATION_FAILURE      [ OK ] USB_NOT_ENUMERATED
+PERIODIC_DEVICE_REBOOT       [ OK ] TARGET_RESET_LOOP
+UART_CONFIGURATION_MISMATCH  [ OK ] SERIAL_CONFIGURATION_MISMATCH
+DHCP_FAILURE                 [ OK ] DHCP_FAILURE
+DNS_FAILURE                  [ OK ] DNS_FAILURE
+UNSTABLE_NETWORK             [ OK ] NETWORK_UNSTABLE
+I2C_DEVICE_DISAPPEARED       [ OK ] I2C_DEVICE_DISAPPEARED (i2c.watch, LVL 80)
+I2C_BUS_INSTABILITY          [ OK ] I2C_BUS_INSTABILITY (i2c.error, LVL 80)
++ NETWORK_POWER_LOSS         [ OK ] the network goes down with the supply
+```
+
+Every diagnosis returns OBSERVED, CORRELATED, POSSIBLE CAUSE, CONFIDENCE,
+RECOMMENDED CHECK and EVIDENCE REFERENCES (`[ OK ]`: the HDP frames it
+rests on, by sequence number). Never &quot;the problem is definitely X&quot;.
+
+GATE: every diagnosis has a scenario, an .hdlog, an expected answer and a
+regression test. **PASS for the 16 rules** (HD-T000 to HD-T016, HD-C001
+to HD-C017, `cases.test.ts` fails if one is missing).
+
+### LVL 50 — .hdlog BECOMES A CASE        DONE
+
+```text
+incident.hdlog -&gt; CREATE CASE -&gt; HD-Cxxx -&gt; hwdog test cases/
+```
+
+```text
+[ OK ] case = recording + SHA-256 + expected facts + diagnosis + confidence
+[ OK ] SAVE AS CASE in the interface; every case runs on each commit
+[ OK ] description, hardware context, notes in the case file
+[ OK ] hwdog test cases/: a command line runner outside the test suite
+       (web/src/cli/hwdog.ts, run in CI), and hwdog report &lt;file.hdlog&gt;
+```
+
+### LVL 55 — dogd, THE LOCAL BACKBONE        DONE
+
+dogd is not a second brain, and not an Internet backend (LAWS.md).
+Everything about it: [`DOGD.md`](DOGD.md), with the gate checklist.
+
+```text
+DEVICE DISCOVERY   SESSION STORAGE   HDP TRANSPORT
+LOCAL API          WEBSOCKET         REPORT GENERATION
+
+WebSerial ─┐
+Simulator ─┼─&gt; HDP v1        no special Rust event, same contract everywhere
+dogd ──────┘
+```
+
+GATE: the interface connected over Web Serial or through dogd receives the
+same frames and reaches the same results. Proven in CI against the real
+binary (`web/test/dogd.test.ts`): simulator direct == simulator through
+dogd, same facts, same diagnosis, same evidence references.
+
+Locked before dogd: **evidence references**. Every HDP frame has a sequence
+number in its session; every diagnosis cites the frames it rests on. The
+numbers are the same live, replayed and through dogd, so dogd can index
+sessions without a migration later.
+
+### LVL 60 — FIRST PHYSICAL HARDWARE DOG     PARTIAL
+
+```text
+SIMULATOR                 PASS
+FIRMWARE CORE (PC + CI)   PASS   every frame validates hdp_v1.json; the engine
+                                 reads it like the simulator; through dogd ==
+                                 direct (web/test/firmware.test.ts)
+FIRMWARE BUILD esp32s3    CI     ESP-IDF v5.4
+FIRMWARE ON SILICON       PENDING  bring-up checklist, FIRMWARE.md
+REPLAY                    PASS
+```
+
+Found on the way, fixed for good: a device that does not watch USB was
+diagnosed USB NOT ENUMERATED from silence. Devices now declare what they
+observe (`hello.caps`), and the USB rules only run when USB is watched
+(ruleset v2).
+
+No custom PCB. ESP32-S3 dev board, INA226, UART, Wi-Fi.
+`REAL HARDWARE -&gt; HDP v1 -&gt; existing software`, the frontend barely
+changes.
+
+```text
+GATE   SIMULATOR   PASS
+       FIRMWARE    PASS     same contract test
+       REPLAY      PASS
+```
+
+### LVL 65 — CALIBRATION + TRUTHFULNESS     PARTIAL
+
+Every measurement exposes its range, sample rate, expected accuracy,
+resolution, calibration date, sensor identity, firmware and limitations,
+and says: `DIAGNOSTIC MEASUREMENT, NOT CERTIFIED METROLOGY`. Several
+INA226 boards are tested against a reference instrument: the goal is to
+know exactly how far the numbers can be trusted.
+
+```text
+[ OK ] power.meter (PROTOCOL.md): sensor, shunt, range, resolution, rate,
+       expected error and its basis (DATASHEET | CALIBRATION), calibration
+       date and reference instrument
+[ OK ] firmware: datasheet worst case from the INA226 figures and the
+       shunt tolerance; meter.cal / meter.clear, stored in NVS, applied to
+       every sample, refused out of range (C tests, firmware.test.ts)
+[ OK ] interface: POWER -&gt; MEASUREMENT, +- next to every live reading,
+       &quot;accuracy unknown&quot; when a device declares nothing
+[ OK ] calibration from the palette: meter point / meter cal, least-squares
+       fit, largest residual declared (calibration.test.ts)
+[ OK ] reports: MEASUREMENT section and the metrology line in every format
+[ -- ] GATE: several INA226 boards against a reference instrument,
+       declared error vs measured error. Needs the boards (FIRMWARE.md,
+       bring-up step 4).
+```
+
+### LVL 70 — REAL FAULT LAB     PARTIAL
+
+Faults created on purpose: cheap USB cable, undervoltage, brownout, loose
+connector, wrong baud, missing I2C pull-up, intermittent I2C, DHCP loss,
+DNS loss, network latency, boot loop, USB reconnect loop.
+
+```text
+PHYSICAL FAILURE -&gt; HDLOG -&gt; CASE -&gt; REGRESSION TEST
+```
+
+The simulator gradually stops being made of imagined scenarios and starts
+reproducing traces of real failures.
+
+```text
+[ OK ] FAULT_LAB.md: twelve faults, how to make each one safely, what to
+       expect, what the reference firmware can see today
+[ OK ] the pipeline: record -&gt; SAVE AS CASE -&gt; context -&gt; hwdog test
+[ -- ] GATE: the faults recorded on the bench as PHYSICAL cases, and the
+       simulator re-tuned from them. Needs the board.
+```
+
+### LVL 75 — PROFESSIONAL REPORTS     DONE
+
+A document a technician attaches to a ticket: device, session, provenance,
+recording hash, observations, correlations, diagnoses, confidence,
+recommended checks, timeline excerpt, measurement limitations.
+Exports TXT, JSON, HTML, PDF. JSON stays the machine-readable truth.
+
+```text
+[ OK ] one source: reportLines() (core/report.ts). TXT, HTML and PDF are
+       set from the same styled lines: no format says what another does not
+[ OK ] timeline excerpt: the events the diagnoses cite (&gt;) with two
+       events of context each side, and how many were left out
+[ OK ] measurement limitations (LVL 65) and the metrology line
+[ OK ] HTML: one file, no script, no remote resource (CSP), everything
+       from the device escaped, prints on A4
+[ OK ] PDF: written by Hardware Dog (core/pdf.ts), no library, no server;
+       standard Courier fonts, A4, the SIMULATED / MODIFIED warning on
+       every page, page numbers, same report = same bytes
+[ OK ] GATE: a real PDF reader (pdf.js, test only) opens it and finds
+       every line of the TXT report (web/test/reports.test.ts)
+```
+
+### LVL 80 — NETWORK + I2C ON HARDWARE
+
+W5500 Ethernet, I2C scanner, network probes, correlated with everything
+else. Not &quot;ping works&quot;, but the chain:
+
+```text
+12:01:22  POWER     sag
+12:01:22  SYSTEM    reboot
+12:01:23  LINK      down
+12:01:26  LINK      up
+12:01:27  DHCP      acquired
+12:01:28  DNS       ready
+```
+
+```text
+[ OK ] HDP: i2c.error, i2c.watch, net.watch; scans carry every_ms
+[ OK ] rules (ruleset 3): I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY,
+       NETWORK_POWER_LOSS with the way back timed: link, DHCP, DNS
+[ OK ] simulator HD-T014 to HD-T016, cases HD-C015 to HD-C017
+[ OK ] firmware core: periodic scans, stuck-line and timeout faults, net
+       checks, background probes, net.status sent on change (C tests,
+       firmware.test.ts: the host build gives the same diagnoses)
+[ OK ] ESP32-S3 glue: W5500 on SPI2 or Wi-Fi, ping / resolve / TCP 443
+       watch task, PING / DNS / TCP / HTTP probe task; built in CI with
+       and without the W5500
+[ OK ] interface: BUS watch + presence per address, NET watch + OUTAGES
+[ -- ] GATE: bring-up steps 9 to 12 on the board (FIRMWARE.md), the
+       router chain recorded as a PHYSICAL case
+```
+
+### LVL 85 — PCB REV A
+
+KiCad: USB power path, current sensing, ESP32-S3, Ethernet, UART
+protection, I2C, display, ESD and power protection, test points,
+programming / debug. Delivered with schematic, PCB, BOM, Gerbers, assembly
+notes and a test procedure.
+
+**No PCB before the physical prototype has many real hours of diagnosis
+behind it.** Otherwise the mistakes get etched into copper.
+
+### LVL 90 — PROBE ARCHITECTURE
+
+Hardware Dog stops being a box and becomes a platform, without growing a
+Frankenstein core: CAN DOG, USB DOG, POWER DOG, ENVIRONMENT, RS-485, GPIO
+are probes, and every probe simply produces HDP.
+
+### LVL 95 — COMMUNITY INCIDENT LIBRARY
+
+Not a social network. A repository of anonymized, reproducible cases
+(`cases/power`, `usb`, `uart`, `network`, `i2c`). Submissions are a pull
+request: .hdlog, description, hardware, expected behavior; tests run
+automatically, then review. A real library of hardware failures is worth
+more than code.
+
+### LVL 100 — HARDWARE DOG 1.0
+
+```text
+[ ] stable HDP v1                  [ ] USB
+[ ] stable HDLOG                   [ ] power
+[ ] deterministic replay           [ ] UART
+[ ] evidence integrity             [ ] I2C
+[ ] diagnostic engine              [ ] network
+[ ] physical reference hardware    [ ] custom PCB
+[ ] documented measurement limits  [ ] enclosure
+[ ] real fault regression library  [ ] reproducible build
+[ ] dogd                           [ ] firmware update procedure
+[ ] session archive                [ ] recovery / failed update path
+[ ] professional reports           [ ] complete documentation
+[ ] security review                [ ] license + trademark docs
+```
+
+Then, without exaggeration:
+
+&gt; Hardware Dog 1.0 is a source-available, local-first hardware diagnostic
+&gt; system that records electrical, protocol and network evidence on one
+&gt; synchronized timeline and turns real incidents into reproducible
+&gt; diagnostic cases.
+
+### MAX LVL — AFTER 1.0
+
+```text
+LIVE INCIDENT -&gt; .HDLOG -&gt; ANONYMIZE -&gt; CASE LIBRARY -&gt; REGRESSION
+              -&gt; BETTER RULES -&gt; BETTER HARDWARE DOG
+```
+
+No mandatory cloud: users choose to contribute an incident. Hardware Dog
+learns in the engineering sense, more reproducible cases, more tests,
+better diagnoses. AI, if ever, comes last and only explains:
+
+```text
+FACTS + CORRELATIONS + RULE RESULTS -&gt; OPTIONAL LOCAL AI -&gt; HUMAN EXPLANATION
+```
+
+Never `raw signals -&gt; AI guess -&gt; trust me bro`.
+
+### Not now
+
+```text
+advanced Bluetooth diagnostics     CAN bus (until LVL 90 probes)
+JTAG / SWD debugger                full USB-PD analyzer
+oscilloscope                       16-channel logic analyzer
+USB packet analyzer                AI everywhere
+```
+
+Otherwise Hardware Dog becomes a Frankenstein before it has an identity.
+
+---
+
+## 18 — DESIGN AND BRAND
+
+Not duplicated here. Both are locked in their own documents:
+
+```text
+DESIGN_SPEC.md   interface, screens, colors, typography, industrial design
+BRAND.md         official mascot, asset roles, favicon / icon / header rules
+```
+
+---
+
+## LICENSING
+
+Hardware Dog uses a dual-license model.
+
+```text
+PERSONAL / NON-COMMERCIAL    PolyForm Noncommercial 1.0.0
+COMMERCIAL                   separate paid Hardware Dog commercial license
+```
+
+See [`LICENSE`](../LICENSE) and [`COMMERCIAL.md`](../COMMERCIAL.md).
+
+The repository is **source-available**. It is not open source in the OSI
+sense.
+
+The Hardware Dog name, logo and official mascot are separate brand assets
+and are not granted for unrestricted third-party branding or resale.
+
+---
+
+## CHANGELOG
+
+```text
+0.7   LVL 60 partial: firmware core verified on a PC and in CI, ESP32-S3
+      build, bring-up checklist; hello.caps and ruleset v2
+0.6   LVL 55 done: dogd (DOGD.md), evidence references locked before it
+0.5   laws of the project (LAWS.md); roadmap by level, LVL 40 to MAX LVL;
+      LVL 40 closed: hostile-file limits, compatibility rule, v1 fixture
+0.4   milestone EVIDENCE INTEGRITY + CASES (section 1): .hdlog v2 with
+      provenance, sealed hash chain and footer; recovery and snapshots;
+      cases as regression tests
+0.3   session recording implemented (section 8): .hdlog format, browser
+      archive, replay, example sessions as regression tests
+0.2   aligned with the implementation: source-available wording, single
+      licensing section, simulator as a core component, precise USB
+      capabilities, HDP schema contract, design and brand by reference,
+      new milestone and roadmap
+0.1   original plan (git history)
+```
+</pre></details><details class="raw-sheet"><summary>FIRMWARE.md <span aria-hidden="true">+</span></summary><pre tabindex="0" aria-label="FIRMWARE.md raw source"># HARDWARE DOG / FIRMWARE
+
+```text
+TARGET        ESP32-S3 dev board (ESP32-S3-DevKitC-1 or equivalent)
+SENSOR        INA226 breakout (R100 shunt), I2C
+SDK           ESP-IDF v5.4, C11
+HDP LINK      native USB (USB-Serial-JTAG), 303A:1001
+STATUS        LVL 60-80: core verified on a PC and in CI, ESP32-S3 builds
+              in CI (Wi-Fi, and W5500 + I2C watch), SILICON BRING-UP
+              PENDING (needs the board on a desk)
+```
+
+The firmware is a producer of HDP v1, like the simulator. Nothing else.
+The interface, the trace engine and dogd do not change for it.
+
+```text
+REALITY -&gt; firmware -&gt; HDP v1 -&gt; (Web Serial | dogd) -&gt; same decoder
+        -&gt; same trace -&gt; same diagnosis
+```
+
+---
+
+## WHAT IS VERIFIED, AND WHERE
+
+No claim without the test that backs it.
+
+```text
+                                       PC      CI      BOARD
+core: HDP frames, commands, UART       PASS    PASS    pending
+  lines, I2C scan, INA226 driver math
+every frame validates hdp_v1.json      PASS    PASS    pending
+engine reads it like the simulator     PASS    PASS    pending
+firmware -&gt; TCP -&gt; dogd == direct      PASS    PASS    --
+ESP-IDF build for esp32s3              --      CI      --
+  (default, and W5500 + I2C watch)
+I2C watch, bus faults, net checks,     PASS    PASS    pending
+  background probes (host simulation)
+W5500 link, real ping / DNS / TCP      --      --      pending
+I2C timing, real INA226, UART pins,    --      --      pending
+  USB link, Wi-Fi
+measurement accuracy                   --      --      LVL 65
+```
+
+&quot;PC&quot; is the core built natively (`firmware/host`) against a board
+simulated at the register level: the INA226 model computes the current
+register the way the chip does (shunt register x calibration / 2048), so
+the driver math is really exercised. It is a test fixture, not the device.
+
+---
+
+## WIRED NETWORK PORT (LVL 80, optional)
+
+`idf.py menuconfig` -&gt; Hardware Dog -&gt; W5500 Ethernet. The wired port wins
+over Wi-Fi when both are configured.
+
+```text
+ESP32-S3            W5500 module (3.3 V)
+3V3        ──────── 3V3
+GND        ──────── GND
+GPIO 12    ──────── SCLK
+GPIO 11    ──────── MOSI
+GPIO 13    ──────── MISO
+GPIO 10    ──────── CS
+GPIO 14    ──────── INT     (-1 in menuconfig: not wired, polled)
+GPIO 21    ──────── RST     (-1: not wired)
+```
+
+Plug the W5500 into the network the incident is about, e.g. into the
+router the target powers: when the router reboots with the supply, the
+link loss, DHCP and DNS are on the same timeline as the voltage drop.
+
+---
+
+## LAYOUT
+
+```text
+firmware/
+├── components/hdp/        THE CORE, portable C11, no ESP-IDF
+│   ├── include/hdp/hdp.h  HAL interface, config, capabilities
+│   └── hdp.c              HDP writer, command parser, INA226 driver
+├── main/main.c            ESP-IDF glue: I2C, UART, USB, Wi-Fi
+├── main/Kconfig.projbuild pins, shunt, Wi-Fi (menuconfig)
+├── sdkconfig.defaults     logs on UART0, never on the HDP link
+└── host/                  the core on a PC
+    ├── host_main.c        hwdog-host: simulated board, stdout or TCP
+    └── tests.c            unit tests (AddressSanitizer + UBSan)
+```
+
+---
+
+## WIRING (defaults, change in menuconfig)
+
+```text
+ESP32-S3            INA226 breakout
+3V3        ──────── VCC
+GND        ──────── GND
+GPIO 8     ──────── SDA
+GPIO 9     ──────── SCL
+                    VIN+  ── supply side (e.g. 5 V from the charger)
+                    VIN-  ── target side (the device under test)
+
+ESP32-S3            TARGET
+GPIO 18 (RX) ────── target TX      (3.3 V logic only)
+GPIO 17 (TX) ────── target RX
+GPIO 4  (SDA) ───── target I2C SDA (target pull-ups)
+GPIO 5  (SCL) ───── target I2C SCL
+GND        ──────── target GND     (always)
+```
+
+**The ESP32-S3 pins are 3.3 V.** A 5 V target UART needs a level shifter.
+The INA226 measures the target rail up to 36 V; its own supply is 3.3 V.
+Default full scale: 0.8 A with a 0.1 ohm shunt (81.92 mV max across it).
+For more current, a smaller shunt and `HWDOG_SHUNT_MOHM` /
+`HWDOG_MAX_CURRENT_MA`.
+
+---
+
+## WHAT THIS REVISION OBSERVES
+
+The device says it in `hello.caps` (PROTOCOL.md):
+
+```text
+power   YES   INA226, identity verified (manufacturer 0x5449, die 0x226)
+uart    YES   lines, framing / parity / overrun / break errors
+i2c     YES   address scan 0x08-0x77 on request, or every N ms (i2c.watch,
+              or HWDOG_I2C_WATCH_MS from boot); a line stuck low or a bus
+              timeout is an i2c.error, never an empty scan; no identity
+              claimed
+net     WITH W5500 OR WI-FI CONFIGURED: link, address, DHCP, sent at once
+              when they change. Gateway, DNS, Internet, latency, loss only
+              from net.watch checks (ping, resolve, TCP 443), else UNKNOWN
+usb     NO    the dev board has no USB host port wired for the target
+probe   WITH A NETWORK: PING (ICMP x4), DNS (resolve), TCP (port 80),
+              HTTP (GET /, status line), in a background task
+```
+
+A floating line (no pull-up at all) can read high as well as low: a stuck
+low line is certain, a floating one is not always seen. The scan then
+finds nothing, or a device that comes and goes.
+
+Because `usb` is not declared, the engine makes **no** USB diagnosis from
+silence (ruleset v2). A target drawing current is not &quot;not enumerated&quot; just
+because nobody is watching its USB.
+
+The INA226 is identified before any number is published. Not answering, or
+answering with another identity, gives a `log` error and **no** power
+frames: never a made-up value.
+
+---
+
+## BUILD AND FLASH
+
+```sh
+cd firmware
+idf.py set-target esp32s3
+idf.py menuconfig            # optional: Hardware Dog -&gt; Wi-Fi, pins, shunt
+idf.py build
+idf.py -p /dev/ttyUSB0 flash # the UART port of the dev board
+```
+
+The Wi-Fi password, if set, stays in your local `sdkconfig` (ignored by
+git). Never commit it.
+
+The core on a PC, no board needed:
+
+```sh
+cmake -S firmware/host -B firmware/host/build &amp;&amp; cmake --build firmware/host/build
+ctest --test-dir firmware/host/build
+firmware/host/build/hwdog-host --fast --scenario sag --seconds 30
+```
+
+`--chip 7cdfa13a1f2c` gives the simulated board a factory id for its
+hello (a board knows its own; a simulation is given one or sends none).
+With `--fast` and commands piped on stdin, every command is read at t=0
+before device time runs: a scripted run never races its script.
+
+---
+
+## BRING-UP ON THE BOARD (the LVL 60 gate)
+
+This is the part a computer cannot do for us. Each step has the result to
+expect; a different result is a finding, not a failure to hide.
+
+```text
+[ ] 1  FLASH       idf.py flash, then plug the NATIVE USB port.
+[ ] 2  IDENTIFY    dogd devices --identify
+                   expect: HARDWARE DOG HD-xxxxxx rev DEVKIT-S3 fw 0.1.0 hdp v1
+                   (the ROM may print its boot banner on USB at reset: those
+                   2-3 lines are not HDP, the interface rejects and counts them)
+[ ] 3  NO SENSOR   INA226 unplugged. Interface: SETUP -&gt; CONNECT DOGD
+                   (dogd --source serial:PORT) or CONNECT WEB SERIAL.
+                   expect: timeline &quot;INA226 not answering at 0x40&quot;, no power
+[ ] 4  POWER       INA226 wired, target powered through it.
+                   expect: power frames at 50 Hz, voltage within the declared
+                   error (POWER -&gt; MEASUREMENT) of a multimeter on VIN-.
+                   3 points with `meter point` (no load, ~100 mA, ~500 mA),
+                   then `meter cal &quot;&lt;multimeter&gt;&quot;`: CALIBRATION survives a
+                   reboot. These points seed the LVL 65 gate.
+[ ] 5  UART        target TX on GPIO 18. expect: its lines on SERIAL.
+                   Set a wrong baud: expect framing errors, then
+                   SERIAL CONFIGURATION MISMATCH.
+[ ] 6  I2C         a known sensor on the target bus, PROBE -&gt; I2C scan.
+                   expect: its address listed, no identity claimed.
+[ ] 7  RECORD      a 10 min session, SAVE .HDLOG, replay it.
+                   expect: VERIFIED, origin PHYSICAL, same diagnosis replayed.
+[ ] 8  HD-P001     a resistive cable (long, thin) between supply and target,
+                   target under load. expect: undervoltage events, SUPPLY SAG.
+
+LVL 80, on the same bench:
+
+[ ] 9  I2C WATCH   i2c watch 5 in the palette, a sensor on the target bus.
+                   Pull its SDA wire for 10 s, twice.
+                   expect: &quot;0x76 no longer answers&quot; / &quot;answers&quot;, then
+                   I2C DEVICE DISAPPEARED, HIGH.
+[ ] 10 PULL-UPS    remove the target bus pull-ups (keep the device).
+                   expect: i2c.error SDA_LOW or SCL_LOW, I2C BUS FAULT; no
+                   empty scan. If the lines float high instead, write it in
+                   the notes: that is what the board does.
+[ ] 11 NET WATCH   W5500 (or Wi-Fi) up, net watch 10 example.com in the
+                   palette. expect: gateway, DNS PASS with latency.
+                   Unplug the cable 20 s: link down, then link, DHCP, DNS
+                   back, timed in NET -&gt; OUTAGES.
+[ ] 12 ROUTER      power a USB travel router through the INA226 and a thin
+                   cable, W5500 plugged into it. Load the rail.
+                   expect: NETWORK LOST WITH POWER, the chain drop &gt; link
+                   down &gt; up &gt; DHCP &gt; DNS. The recording becomes a PHYSICAL
+                   case.
+```
+
+When 1 to 7 pass, LVL 60 is done. The recording of step 8 becomes the first
+**PHYSICAL** case (the next free `cases/HD-Cxxx`): send the `.hdlog`. The
+other faults to record are in [`FAULT_LAB.md`](FAULT_LAB.md).
+
+---
+
+## CALIBRATION (LVL 65)
+
+The firmware declares what its numbers are worth (`power.meter`): the
+INA226 datasheet worst case until the board is calibrated against a
+reference instrument. Out of the box, with a 1 % R100 shunt:
+
+```text
+VOLTAGE   +-0.1 % + 8.75 mV     (5 V rail: +-13.8 mV)
+CURRENT   +-1.1 % + 0.12 mA     (300 mA: +-3.4 mA)   the shunt tolerance dominates
+```
+
+Calibrating, from the command palette (CTRL+K), with a multimeter on the
+same rail and the same load:
+
+```text
+meter                         what the numbers are worth now
+meter point 5.012 2.1         no load: what the multimeter reads (V, mA)
+meter point 4.981 101.4       ~100 mA load
+meter point 4.874 498.0       ~500 mA load
+meter cal &quot;Fluke 87V&quot;         fit, store on the device (NVS), declare
+meter clear                   back to datasheet accuracy
+```
+
+Each point averages the last second of samples, taken before any stored
+calibration. Voltage: one gain. Current: gain and offset when the points
+span 50 mA or more. The device stores the largest residual seen and
+declares it as its accuracy, with the date and the reference named.
+Disagreement above 10 % is refused: that is a wiring fault, not a
+calibration.
+
+**What this is not:** traceable metrology. A calibration is worth the
+reference it was made with, and its accuracy is not included.
+
+## RULES OF THE FIRMWARE
+
+```text
+HDP ONLY ON THE LINK   logs on UART0; the native USB carries HDP and nothing else
+NO MADE-UP VALUE       sensor missing or failing: a log, no number
+NO FAKE IDENTITY       i2c.scan lists addresses; ident only when verified
+SAY WHAT IS OBSERVED   hello.caps; UNKNOWN for what is not checked
+TIME NEVER GOES BACK   t from esp_timer, clamped monotonic
+NO SILENT LOSS         UART overrun -&gt; uart.error &quot;overrun&quot;; long lines split,
+                       never dropped; a frame too long is not sent half
+```
+</pre></details></div><div class="technical-docs"><a class="button secondary" href="https://github.com/SEUB66/HardwareDog/blob/main/docs/ENGINEERING_PLAN.md" target="_blank" rel="noopener noreferrer">Lire le plan complet ↗</a><a class="button secondary" href="https://github.com/SEUB66/HardwareDog/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener noreferrer">Architecture ↗</a><a class="button secondary" href="https://github.com/SEUB66/HardwareDog/blob/main/docs/FIRMWARE.md" target="_blank" rel="noopener noreferrer">Firmware & bring-up ↗</a></div>
 </section></main><footer class="wrap"><a class="brand" href="./index.html">HW <span>DOG</span></a><p>© 2026 Sebastien Germain · SNIFF THE PROBLEM.</p><a href="./index.html">Retour à l’accueil ↗</a></footer><script type="module" src="./src/landing.ts"></script></body></html>

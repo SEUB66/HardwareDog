@@ -139,3 +139,31 @@ body{cursor:var(--cursor-pink),auto}a,button,[role=button]{cursor:var(--cursor-p
 body[data-page=engineering] .technical{padding-top:44px}
 .nav a[href='./engineering.html']{color:var(--accent);padding:9px 15px;border:1px solid var(--border);border-radius:8px;background:var(--glass)}
 @media(max-width:760px){body[data-page=engineering] .technical{padding-top:30px}}
+/* Keep the root canvas themed during mobile overscroll; contain decorative paint. */
+html{background-color:var(--bg);overflow-x:clip;min-height:100%}
+body{min-height:100dvh;overflow-x:clip}
+main,.hero>div,.creator-grid>*,.technical>*{min-width:0}
+.hero-visual{overflow:clip}
+@media(max-width:760px){
+ .nav{position:relative;display:block;padding-top:14px;padding-bottom:14px}
+ .nav>.brand{width:calc(100% - 104px);min-height:46px}
+ .nav .official-lockup{max-width:190px;width:100%;height:auto}
+ #theme{position:absolute;right:0;top:18px;white-space:nowrap;font-size:12px;padding:7px 10px}
+ .nav nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;width:100%;margin-top:12px;font-size:10px;text-align:center}
+ .nav nav>a{white-space:nowrap;padding:8px 0;min-width:0}
+ .nav a[href='./engineering.html']{padding:8px 0}
+ .nav .nav-open{display:none}
+ .button{max-width:100%;gap:12px}
+ .how>div,.law,.creator-story{overflow-wrap:anywhere}
+ .hero-visual::before{inset:8% 0}
+}
+/* Raw repository plans retain their monospace geometry, with scroll inside the sheet. */
+.raw-sheet{min-width:0;margin:0 0 20px;border:1px solid var(--border);border-radius:4px;background:color-mix(in srgb,var(--bg) 94%,var(--text));padding:24px}
+.raw-sheet h2{font:600 14px/1.5 'IBM Plex Mono',monospace;letter-spacing:1px;color:var(--accent);margin:0 0 20px}
+.raw-sheet>p{font-size:13px;color:var(--muted)}
+.raw-sheet pre{font:400 13px/1.55 'IBM Plex Mono',monospace;letter-spacing:0;white-space:pre;overflow:auto;max-width:100%;margin:0;tab-size:2;overscroll-behavior-inline:contain}
+.raw-sheet pre:focus-visible{outline:2px solid var(--pink);outline-offset:5px}
+.raw-sheet summary{display:flex;justify-content:space-between;gap:12px;cursor:pointer;font-size:14px;color:var(--accent);list-style:none}
+.raw-sheet summary::-webkit-details-marker{display:none}.raw-sheet summary span{color:var(--pink)}
+.raw-sheet[open] summary{margin-bottom:24px}.raw-documents pre{max-height:65vh}.raw-documents[open] summary span{transform:rotate(45deg)}
+@media(max-width:760px){.raw-sheet{padding:18px 14px}.raw-sheet pre{font-size:11px}.technical-heading :is(h1,h2){font-size:38px}.raw-sheet summary{font-size:12px}}
