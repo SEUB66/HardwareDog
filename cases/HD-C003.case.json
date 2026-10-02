@@ -8,6 +8,10 @@
     "recording": "db13d0b6e2d91a9759b2c9e22ad93e7e",
     "origin": "SIMULATED"
   },
+  "context": {
+    "description": "Worn connector: USB data drops while the supply stays solid.",
+    "hardware": "None: built-in simulator, scenario HD-T005, seed 1, 30 s. Origin SIMULATED."
+  },
   "ruleset": 1,
   "expect": {
     "facts": {

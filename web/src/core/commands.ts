@@ -61,7 +61,7 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'field <on|off>', summary: 'high-contrast field mode' },
   { usage: 'go <screen>', summary: 'open a screen by name' },
   { usage: 'sim list', summary: 'list simulator fault scenarios' },
-  { usage: 'sim <HD-T000..HD-T010>', summary: 'restart the simulator on a scenario (new session)' },
+  { usage: 'sim <HD-T000..HD-T013>', summary: 'restart the simulator on a scenario (new session)' },
 ];
 
 /** Split on whitespace, honoring "double" and 'single' quotes. */

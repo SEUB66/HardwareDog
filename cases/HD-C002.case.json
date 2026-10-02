@@ -8,6 +8,10 @@
     "recording": "f5db768b4dfb92c6a433abbdb061a370",
     "origin": "SIMULATED"
   },
+  "context": {
+    "description": "Thin cable on a weak port: load bursts sag the rail and the target browns out.",
+    "hardware": "None: built-in simulator, scenario HD-T001, seed 1, 30 s. Origin SIMULATED."
+  },
   "ruleset": 1,
   "expect": {
     "facts": {

@@ -166,7 +166,8 @@ expect; a different result is a finding, not a failure to hide.
 ```
 
 When 1 to 7 pass, LVL 60 is done. The recording of step 8 becomes the first
-**PHYSICAL** case (`cases/HD-C004`): send the `.hdlog`.
+**PHYSICAL** case (the next free `cases/HD-Cxxx`): send the `.hdlog`. The
+other faults to record are in [`FAULT_LAB.md`](FAULT_LAB.md).
 
 ---
 

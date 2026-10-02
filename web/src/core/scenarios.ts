@@ -71,6 +71,9 @@ export const SCENARIO_IDS = [
   'HD-T008',
   'HD-T009',
   'HD-T010',
+  'HD-T011',
+  'HD-T012',
+  'HD-T013',
 ] as const;
 export type ScenarioId = (typeof SCENARIO_IDS)[number];
 
@@ -197,6 +200,37 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     expect: ['USB_NOT_ENUMERATED'],
     supply: STIFF_SUPPLY,
     target: { ...HEALTHY_TARGET, enumerates: false },
+    net: HEALTHY_NET,
+  },
+  'HD-T011': {
+    id: 'HD-T011',
+    title: 'NO NETWORK LINK',
+    fault: 'The Ethernet cable is unplugged, or the far switch port is dead.',
+    expect: ['NO_LINK'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: { link: false, dhcp: 'UNKNOWN', gateway: 'UNKNOWN', dns: 'UNKNOWN', internet: 'UNKNOWN', latency: [0, 0], loss: [0, 0] },
+  },
+  'HD-T012': {
+    id: 'HD-T012',
+    title: 'GATEWAY UNREACHABLE',
+    fault: 'DHCP gives an address, but the router does not answer (wrong subnet mask, router hung).',
+    expect: ['GATEWAY_UNREACHABLE'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    net: { link: true, dhcp: 'PASS', gateway: 'FAIL', dns: 'UNKNOWN', internet: 'UNKNOWN', latency: [0, 0], loss: [0, 0] },
+  },
+  'HD-T013': {
+    id: 'HD-T013',
+    title: 'SUPPLY SAG',
+    fault: 'Long thin cable: the rail sags under each load burst, but the target survives (for now).',
+    expect: ['SUPPLY_SAG'],
+    supply: {
+      volts: 5.07,
+      ohms: 0.09,
+      bursts: { every: [6000, 9000], current: [0.6, 0.7], sag: [0.3, 0.4], brownoutBelow: null },
+    },
+    target: HEALTHY_TARGET,
     net: HEALTHY_NET,
   },
 };

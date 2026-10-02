@@ -1,0 +1,49 @@
+{
+  "case": 1,
+  "id": "HD-C006",
+  "title": "SERIAL FRAMING MISMATCH (simulator HD-T004)",
+  "recording": {
+    "file": "HD-C006.hdlog",
+    "sha256": "661266d7be612441fdf657e3cd4aa8c328e8589821efd9e8c3f6b837d5ec10f6",
+    "recording": "8dec56637316cafc505bd6577f52c85a",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "The target UART runs at 9600 baud; the monitor listens at 115200.",
+    "hardware": "None: built-in simulator, scenario HD-T004, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 0,
+      "framingErrors": 13,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "SERIAL_CONFIGURATION_MISMATCH",
+        "confidence": "HIGH",
+        "evidence": [
+          22,
+          29,
+          35,
+          42,
+          48,
+          55,
+          171,
+          324,
+          482,
+          728,
+          974,
+          1206,
+          1426
+        ]
+      }
+    ]
+  }
+}

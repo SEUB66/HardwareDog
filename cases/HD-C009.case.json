@@ -1,0 +1,52 @@
+{
+  "case": 1,
+  "id": "HD-C009",
+  "title": "UPSTREAM DOWN (simulator HD-T008)",
+  "recording": {
+    "file": "HD-C009.hdlog",
+    "sha256": "ba2f489532c63cbad040688b5766127fd695822201caff611f8953011b545c35",
+    "recording": "bd49dcd56b0eef3b6d00febd72abaf7b",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "LAN and gateway are fine; the Internet connection beyond the gateway is down.",
+    "hardware": "None: built-in simulator, scenario HD-T008, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "UPSTREAM_FAILURE",
+        "confidence": "HIGH",
+        "evidence": [
+          4,
+          113,
+          215,
+          316,
+          418,
+          519,
+          621,
+          723,
+          824,
+          926,
+          1027,
+          1129,
+          1230,
+          1331,
+          1433,
+          1534
+        ]
+      }
+    ]
+  }
+}
