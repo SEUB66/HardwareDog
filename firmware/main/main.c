@@ -129,13 +129,18 @@ static void net_status(void *ctx, hdp_net_t *out) {
     portEXIT_CRITICAL(&net_lock);
 }
 
-static bool wifi_start(void) {
-    if (strlen(CONFIG_HWDOG_WIFI_SSID) == 0) return false; /* no network: link null */
+/* NVS holds the calibration (and the Wi-Fi driver's data): always started,
+   network or not. */
+static void nvs_start(void) {
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
+}
+
+static bool wifi_start(void) {
+    if (strlen(CONFIG_HWDOG_WIFI_SSID) == 0) return false; /* no network: link null */
     esp_netif_init();
     esp_event_loop_create_default();
     sta = esp_netif_create_default_wifi_sta();
@@ -252,6 +257,7 @@ static int cal_save(void *ctx, const hdp_cal_t *cal) {
 }
 
 void app_main(void) {
+    nvs_start();
     buses_start();
     bool wifi = wifi_start();
 
