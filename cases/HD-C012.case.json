@@ -1,0 +1,52 @@
+{
+  "case": 1,
+  "id": "HD-C012",
+  "title": "NO NETWORK LINK (simulator HD-T011)",
+  "recording": {
+    "file": "HD-C012.hdlog",
+    "sha256": "b88dd5c8db0e07c4fd4ca0b860efe174229ae96973cfdc3f6f594b9696825b15",
+    "recording": "66db17f1b3fea17b0900eeff056c0ef4",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "The Ethernet cable is unplugged, or the far switch port is dead.",
+    "hardware": "None: built-in simulator, scenario HD-T011, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "NO_LINK",
+        "confidence": "HIGH",
+        "evidence": [
+          4,
+          113,
+          215,
+          316,
+          418,
+          519,
+          621,
+          722,
+          824,
+          925,
+          1027,
+          1128,
+          1230,
+          1331,
+          1433,
+          1534
+        ]
+      }
+    ]
+  }
+}

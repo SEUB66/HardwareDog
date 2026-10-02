@@ -30,3 +30,5 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # LVL 50: the cases, replayed by the command line, outside the test suite.
+      - run: npm run test:cases

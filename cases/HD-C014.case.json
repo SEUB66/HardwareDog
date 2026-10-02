@@ -1,0 +1,41 @@
+{
+  "case": 1,
+  "id": "HD-C014",
+  "title": "SUPPLY SAG (simulator HD-T013)",
+  "recording": {
+    "file": "HD-C014.hdlog",
+    "sha256": "14cb4eec24ea6b3f33f43bac7a3dede9e61e27c6d99b63a3b068b969bc85c01a",
+    "recording": "259a4b15530549677da7603c8848c9bd",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "Long thin cable: the rail sags under each load burst, but the target survives (for now).",
+    "hardware": "None: built-in simulator, scenario HD-T013, seed 1, 40 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 5,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "SUPPLY_SAG",
+        "confidence": "MEDIUM",
+        "evidence": [
+          295,
+          636,
+          957,
+          1294,
+          1692
+        ]
+      }
+    ]
+  }
+}

@@ -8,6 +8,10 @@
     "recording": "3845fe34f25fa4a6ead8a9658d9fa04b",
     "origin": "SIMULATED"
   },
+  "context": {
+    "description": "Nothing is wrong. Any diagnosis here is a false positive.",
+    "hardware": "None: built-in simulator, scenario HD-T000, seed 1, 30 s. Origin SIMULATED."
+  },
   "ruleset": 1,
   "expect": {
     "facts": {

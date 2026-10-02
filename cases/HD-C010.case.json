@@ -1,0 +1,41 @@
+{
+  "case": 1,
+  "id": "HD-C010",
+  "title": "OVERCURRENT (simulator HD-T009)",
+  "recording": {
+    "file": "HD-C010.hdlog",
+    "sha256": "40f06aea075eda6186558687d86e8212e45b95f6d68c27aefba4578feb6ca07e",
+    "recording": "3aad8997b1da2b1edeb05d3943dbba91",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "A motor stalls: the target pulls more than 1 A in spikes on a stiff supply.",
+    "hardware": "None: built-in simulator, scenario HD-T009, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 5,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "OVERCURRENT",
+        "confidence": "HIGH",
+        "evidence": [
+          295,
+          647,
+          905,
+          1151,
+          1418
+        ]
+      }
+    ]
+  }
+}

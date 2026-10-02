@@ -14,7 +14,9 @@
     "check": "npm run typecheck && npm run test && npm run build",
     "assets": "node scripts/build-brand-assets.mjs",
     "demo": "vite --open",
-    "cases": "UPDATE_CASES=1 vitest run test/cases.test.ts"
+    "cases": "UPDATE_CASES=1 vitest run test/cases.test.ts",
+    "cli": "vite build --config vite.cli.config.ts",
+    "test:cases": "npm run cli && node dist-cli/hwdog.mjs test ../cases"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",

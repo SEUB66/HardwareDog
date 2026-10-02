@@ -1,0 +1,52 @@
+{
+  "case": 1,
+  "id": "HD-C013",
+  "title": "GATEWAY UNREACHABLE (simulator HD-T012)",
+  "recording": {
+    "file": "HD-C013.hdlog",
+    "sha256": "a7a08d64d629302fa72fb60efa0c4df612fdbbff60c6cf1fe834c5abbb44d9db",
+    "recording": "92a588b6f1864d6ecfbd9ff7d693655a",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "DHCP gives an address, but the router does not answer (wrong subnet mask, router hung).",
+    "hardware": "None: built-in simulator, scenario HD-T012, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "GATEWAY_UNREACHABLE",
+        "confidence": "HIGH",
+        "evidence": [
+          4,
+          113,
+          215,
+          316,
+          418,
+          519,
+          621,
+          722,
+          824,
+          925,
+          1027,
+          1128,
+          1230,
+          1331,
+          1433,
+          1534
+        ]
+      }
+    ]
+  }
+}
