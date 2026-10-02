@@ -87,7 +87,7 @@ static void setup(void) {
     B.i = 0.112f;
     B.shunt = 0.1f;
     hdp_config_t cfg = {.device = "HD-TEST", .rev = "T", .fw = "0.1.0", .ina_addr = 0x40, .shunt_ohm = 0.1f, .max_current_a = 0.8f, .sample_ms = 20, .net_ms = 0,
-                       .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C};
+                       .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C, .shunt_tol_pct = 1.0f};
     hdp_hal_t hal = {.ctx = &B, .now_ms = b_now, .write = b_write, .ina_read = b_read, .ina_write = b_write_reg, .target_i2c_probe = b_probe,
                      .target_i2c_hz = 100000, .uart_set_baud = b_baud, .uart_write = b_tx, .net_status = NULL};
     hdp_init(&D, &cfg, &hal);
@@ -149,6 +149,84 @@ static void test_current_accuracy_through_the_chip_math(void) {
         float got = p ? strtof(p + 4, NULL) : -1;
         CHECK(fabsf(got - amps) < 0.0002f); /* within 0.2 mA: quantization, not invention */
     }
+}
+
+static hdp_cal_t stored;
+static int s_load(void *c, hdp_cal_t *out) {
+    (void)c;
+    if (!stored.valid) return -1;
+    *out = stored;
+    return 0;
+}
+static int s_save(void *c, const hdp_cal_t *cal) {
+    (void)c;
+    stored = *cal;
+    return 0;
+}
+
+static void cmd(const char *line) {
+    hdp_host_input(&D, line, strlen(line));
+}
+
+static void test_meter_and_calibration(void) {
+    setup();
+    hdp_start(&D);
+    /* Datasheet worst case: 0.1 % + 7.5 mV + 1 LSB; 0.1 % + 1 % shunt tolerance. */
+    CHECK(has("\"type\":\"power.meter\""));
+    CHECK(has("\"sensor\":\"INA226\",\"shunt_ohm\":0.1,\"v_max\":36,\"i_max\":0.8"));
+    CHECK(has("\"rate_hz\":50"));
+    CHECK(has("\"v_err\":{\"pct\":0.1,\"abs\":0.00875}"));
+    CHECK(has("\"i_err\":{\"pct\":1.1,"));
+    CHECK(has("\"basis\":\"DATASHEET\",\"cal\":null"));
+
+    /* A calibration out of range changes nothing. */
+    clear();
+    cmd("{\"cmd\":\"meter.cal\",\"date\":\"2026-10-02\",\"ref\":\"Fluke 87V\",\"v_gain\":1.5,\"i_gain\":1,\"i_offset\":0,\"v_err\":0.001,\"i_err\":0.0001}\n");
+    CHECK(has("out of range, calibration unchanged"));
+    CHECK(!has("power.meter"));
+    clear();
+    cmd("{\"cmd\":\"meter.cal\",\"date\":\"02/10/2026\",\"ref\":\"Fluke 87V\",\"v_gain\":1,\"i_gain\":1,\"i_offset\":0,\"v_err\":0.001,\"i_err\":0.0001}\n");
+    CHECK(has("out of range"));
+
+    /* A valid one is applied to every sample and declared. No storage: said. */
+    clear();
+    cmd("{\"cmd\":\"meter.cal\",\"date\":\"2026-10-02\",\"ref\":\"Fluke 87V\",\"v_gain\":1.02,\"i_gain\":1,\"i_offset\":0.001,\"v_err\":0.002,\"i_err\":0.0003}\n");
+    CHECK(has("calibration applied but not stored: lost at reboot"));
+    CHECK(has("\"basis\":\"CALIBRATION\",\"cal\":{\"date\":\"2026-10-02\",\"ref\":\"Fluke 87V\",\"v_gain\":1.02,\"i_gain\":1,\"i_offset\":0.001}"));
+    CHECK(has("\"v_err\":{\"pct\":0,\"abs\":0.00325}"));
+    clear();
+    B.t = 20;
+    hdp_poll(&D);
+    CHECK(has("\"v\":5.151,\"i\":0.1130}"));
+    CHECK(lines_well_formed());
+
+    clear();
+    cmd("{\"cmd\":\"meter.clear\"}\n");
+    CHECK(has("calibration removed"));
+    CHECK(has("\"basis\":\"DATASHEET\""));
+
+    /* With storage, a calibration survives a reboot. */
+    memset(&stored, 0, sizeof stored);
+    setup();
+    D.hal.cal_load = s_load;
+    D.hal.cal_save = s_save;
+    hdp_start(&D);
+    cmd("{\"cmd\":\"meter.cal\",\"date\":\"2026-10-02\",\"ref\":\"Fluke 87V\",\"v_gain\":1.02,\"i_gain\":1,\"i_offset\":0,\"v_err\":0.002,\"i_err\":0.0003}\n");
+    CHECK(has("calibration stored"));
+    setup();
+    D.hal.cal_load = s_load;
+    D.hal.cal_save = s_save;
+    hdp_start(&D);
+    CHECK(has("\"basis\":\"CALIBRATION\""));
+
+    /* No verified sensor: no meter, no calibration. */
+    setup();
+    B.nack = true;
+    hdp_start(&D);
+    CHECK(!has("power.meter"));
+    clear();
+    cmd("{\"cmd\":\"meter.cal\",\"date\":\"2026-10-02\",\"ref\":\"X\",\"v_gain\":1,\"i_gain\":1,\"i_offset\":0,\"v_err\":0,\"i_err\":0}\n");
+    CHECK(has("no verified power sensor"));
 }
 
 static void test_ina_missing_or_wrong(void) {
@@ -288,6 +366,7 @@ int main(void) {
     test_boot_and_power();
     test_current_accuracy_through_the_chip_math();
     test_ina_missing_or_wrong();
+    test_meter_and_calibration();
     test_read_failure_stops_power();
     test_time_never_goes_backwards();
     test_commands();

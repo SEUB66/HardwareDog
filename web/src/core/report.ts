@@ -1,5 +1,6 @@
 import { BANNER, DESCRIPTOR, TAGLINE } from './ascii';
 import type { System } from './system';
+import type { Meter } from './protocol';
 import type { Diagnosis } from './diagnostics';
 import { RULESET_VERSION, diagnose } from './diagnostics';
 import type { Footer, IntegrityStatus, Origin } from './session';
@@ -50,6 +51,8 @@ export interface Report {
   sections: ReportSection[];
   diagnoses: Diagnosis[];
   findings: Finding[];
+  /** What the power numbers are worth, as the device declared it. Null: not declared. */
+  measurement: Meter | null;
 }
 
 export interface RecordingRef {
@@ -207,8 +210,28 @@ export function buildReport(sys: System, now = sys.now()): Report {
     sections,
     diagnoses,
     findings,
+    measurement: sys.meter,
   };
 }
+
+/** Lines saying what the measurements are worth (LVL 65). Shared by every format. */
+export function measurementLines(m: Meter | null): [string, string][] {
+  if (!m) return [['METER', 'NOT DECLARED BY THE DEVICE: ACCURACY UNKNOWN']];
+  // Three significant digits: 1.25 mV stays 1.25 mV, not "1.3".
+  const mv = (x: number) => `${Number((x * 1000).toPrecision(3))} mV`;
+  const ma = (x: number) => `${Number((x * 1000).toPrecision(3))} mA`;
+  return [
+    ['SENSOR', `${m.sensor}, shunt ${m.shunt_ohm} ohm`],
+    ['RANGE', `0-${m.v_max} V / +-${m.i_max} A`],
+    ['RESOLUTION', `${mv(m.v_res)} / ${ma(m.i_res)}`],
+    ['RATE', `${m.rate_hz} samples/s`],
+    ['VOLTAGE ERROR', `+-${m.v_err.pct}% + ${mv(m.v_err.abs)}`],
+    ['CURRENT ERROR', `+-${m.i_err.pct}% + ${ma(m.i_err.abs)}`],
+    ['BASIS', m.cal ? `CALIBRATED ${m.cal.date} against ${m.cal.ref}` : 'DATASHEET, NOT CALIBRATED'],
+  ];
+}
+
+export const METROLOGY = 'DIAGNOSTIC MEASUREMENT, NOT CERTIFIED METROLOGY.';
 
 /** A replay names what it replays: a recording keeps its origin. */
 function reportSource(sys: System): string {
@@ -253,6 +276,10 @@ export function reportToText(r: Report, options: { banner?: boolean } = {}): str
   if (rec?.integrity === 'INCOMPLETE') out.push('', '!! INCOMPLETE RECORDING. NEVER FINALIZED: SEALED LINES ARE INTACT, THE END IS MISSING.');
   if (rec?.integrity === 'RECOVERED') out.push('', 'NOTE  Recording closed after an unclean stop (RECOVERED). Every sealed line is intact.');
   if (rec?.integrity === 'UNVERIFIED') out.push('', 'NOTE  hdlog v1 file: no integrity data. Content cannot be verified.');
+
+  out.push('', RULE, '', 'MEASUREMENT', '');
+  for (const [k, v] of measurementLines(r.measurement)) kv(k, v);
+  out.push('', METROLOGY);
 
   for (const s of r.sections) {
     out.push('', RULE, '', s.title, '');

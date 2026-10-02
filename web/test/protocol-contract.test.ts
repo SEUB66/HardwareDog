@@ -52,7 +52,7 @@ describe('HDP v1 contract', () => {
     }
     // The simulator exercises the whole device vocabulary.
     expect([...types].sort()).toEqual(
-      ['hello', 'i2c.scan', 'log', 'net.status', 'power', 'probe.done', 'probe.result', 'uart.config', 'uart.error', 'uart.rx', 'usb.attach', 'usb.detach'],
+      ['hello', 'i2c.scan', 'log', 'net.status', 'power', 'power.meter', 'probe.done', 'probe.result', 'uart.config', 'uart.error', 'uart.rx', 'usb.attach', 'usb.detach'],
     );
   });
 
@@ -65,6 +65,8 @@ describe('HDP v1 contract', () => {
       { cmd: 'i2c.scan' },
       { cmd: 'net.refresh' },
       { cmd: 'probe', id: 'p1', target: '192.168.1.1', tests: ['PING', 'DNS', 'TCP'] },
+      { cmd: 'meter.cal', date: '2026-10-02', ref: 'Fluke 87V', v_gain: 1.0012, i_gain: 0.991, i_offset: 0.0003, v_err: 0.002, i_err: 0.0004 },
+      { cmd: 'meter.clear' },
     ];
     for (const c of commands) {
       expect(validateCommand(JSON.parse(encodeCommand(c))), `${c.cmd}: ${lastErrors(validateCommand)}`).toBe(true);
@@ -77,6 +79,8 @@ describe('HDP v1 contract', () => {
       '{"type":"power","t":1,"v":"5","i":0}',
       '{"type":"i2c.scan","t":1,"speed":400000,"devices":[{"addr":200}]}',
       '{"type":"warp","t":1}',
+      '{"type":"power.meter","t":1,"sensor":"INA226","shunt_ohm":0,"v_max":36,"i_max":0.8,"v_res":0.00125,"i_res":0.0000245,"rate_hz":50,"v_err":{"pct":0.1,"abs":0.0075},"i_err":{"pct":1.1,"abs":0.0001},"basis":"DATASHEET","cal":null}',
+      '{"type":"power.meter","t":1,"sensor":"INA226","shunt_ohm":0.1,"v_max":36,"i_max":0.8,"v_res":0.00125,"i_res":0.0000245,"rate_hz":50,"v_err":{"pct":-1,"abs":0.0075},"i_err":{"pct":1.1,"abs":0.0001},"basis":"DATASHEET","cal":null}',
     ];
     for (const raw of bad) {
       expect(decodeFrame(raw).ok, raw).toBe(false);

@@ -171,6 +171,21 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     expect(sys.power.minVoltage).toBeLessThan(4.65);
   });
 
+  it('LVL 65: the firmware says what its numbers are worth, and takes a calibration', async () => {
+    const sys = await engine(await firmware('healthy', 2));
+    expect(sys.meter).toMatchObject({ sensor: 'INA226', basis: 'DATASHEET', cal: null, rate_hz: 50, v_err: { pct: 0.1, abs: 0.00875 } });
+    expect(sys.meter!.i_err.pct).toBeCloseTo(1.1, 6);
+
+    const lines = await firmware('healthy', 2, [
+      '{"cmd":"meter.cal","date":"2026-10-02","ref":"Fluke 87V","v_gain":1.02,"i_gain":1,"i_offset":0,"v_err":0.002,"i_err":0.0003}',
+    ]);
+    contract(lines);
+    const cal = await engine(lines);
+    expect(cal.meter).toMatchObject({ basis: 'CALIBRATION', cal: { date: '2026-10-02', ref: 'Fluke 87V', v_gain: 1.02 } });
+    // The rail is 5.05 V: after the command, the samples carry the gain.
+    expect(cal.power.voltage).toBeGreaterThan(5.1);
+  });
+
   it('a healthy board gives no finding', async () => {
     const sys = await engine(await firmware('healthy', 30));
     expect(sys.diagnoses).toEqual([]);

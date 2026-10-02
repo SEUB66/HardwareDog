@@ -63,6 +63,38 @@ One sample of the target supply rail. Volts and amps.
 {"type":"power","t":1200,"v":5.041,"i":0.312}
 ```
 
+### power.meter
+
+What the power numbers are worth (LVL 65). Sent once the sensor identity
+is verified, in reply to `hello`, and after every calibration change.
+
+```json
+{"type":"power.meter","t":12,"sensor":"INA226","shunt_ohm":0.1,"v_max":36,"i_max":0.8,"v_res":0.00125,"i_res":0.0000244,"rate_hz":50,"v_err":{"pct":0.1,"abs":0.00875},"i_err":{"pct":1.1,"abs":0.0001244},"basis":"DATASHEET","cal":null}
+```
+
+```text
+sensor          identity as verified by the device (rule 6), never assumed
+v_max / i_max   measured within specification up to these values
+v_res / i_res   one LSB: resolution, not accuracy
+rate_hz         power frames per second: shorter events can be missed
+v_err / i_err   expected maximum error: |error| <= pct % of reading + abs
+basis           DATASHEET    worst case from the datasheets (INA226: gain
+                             0.1 %, bus offset 7.5 mV, shunt offset 10 uV,
+                             one LSB, plus the shunt resistor tolerance)
+                CALIBRATION  largest residual measured against the named
+                             reference, plus one LSB. The reference's own
+                             accuracy adds to it: a calibration is worth
+                             the instrument it was made with.
+cal             null, or the stored calibration: date, reference, gains,
+                current offset
+```
+
+Every number on screen and in reports is a **diagnostic measurement, not
+certified metrology**. A device that sends no `power.meter` (made before
+LVL 65) has an unknown accuracy, and the interface says so. Interfaces
+made before LVL 65 reject this frame type as unknown: one counted frame
+error, nothing else changes.
+
 ### usb.attach / usb.detach
 
 ```json
@@ -141,9 +173,18 @@ measured, never "probably fine".
 {"cmd":"i2c.scan"}
 {"cmd":"net.refresh"}
 {"cmd":"probe","id":"p1","target":"192.168.1.1","tests":["PING","DNS","TCP"]}
+{"cmd":"meter.cal","date":"2026-10-02","ref":"Fluke 87V","v_gain":1.0012,"i_gain":0.991,"i_offset":0.0003,"v_err":0.002,"i_err":0.0004}
+{"cmd":"meter.clear"}
 ```
 
-`i2c.scan`, `usb.enumerate`, `uart.tx` and `probe` are ACTIVE operations:
+`meter.cal` stores a calibration on the device (NVS on the ESP32-S3):
+`v = raw x v_gain`, `i = raw x i_gain + i_offset`. Out of range (gains
+0.9-1.1, offset 50 mA, date YYYY-MM-DD) it is rejected and nothing changes.
+The device answers with `power.meter`. `meter.clear` returns to datasheet
+accuracy.
+
+`i2c.scan`, `usb.enumerate`, `uart.tx`, `probe`, `meter.cal` and
+`meter.clear` are ACTIVE operations:
 the interface always states what they will do before sending them.
 
 ---
