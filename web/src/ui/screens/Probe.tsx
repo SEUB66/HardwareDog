@@ -5,7 +5,9 @@ import type { ProbeTest } from '../../core/types';
 import { PROBE_TESTS } from '../../core/types';
 import { Empty } from '../components/Empty';
 import { Panel } from '../components/Panel';
+import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
+import { explain } from '../../core/glossary';
 
 /** What each active test will put on the wire. Shown before running (spec 20). */
 const WHAT_IT_DOES: Record<ProbeTest, (target: string) => string> = {
@@ -49,7 +51,9 @@ export function Probe({ system }: { system: System }) {
         <Panel title="SETUP" aside="ACTIVE">
           <form onSubmit={run}>
             <label for="probe-target" class="dim">
-              TARGET
+              <Hint text={explain('TARGET', 'PROBE')} focusable={false}>
+                TARGET
+              </Hint>
             </label>
             <div class="actions" style={{ marginTop: 4 }}>
               <input
@@ -74,7 +78,9 @@ export function Probe({ system }: { system: System }) {
               <label class="check" key={t}>
                 <input type="checkbox" checked={tests.has(t)} onChange={() => toggle(t)} />
                 <span class="box">[{tests.has(t) ? 'X' : ' '}]</span>
-                {t}
+                <Hint text={explain(t, 'PROBE')} focusable={false}>
+                  {t}
+                </Hint>
               </label>
             ))}
 
@@ -118,7 +124,9 @@ export function Probe({ system }: { system: System }) {
                           const r = run.results.find((x) => x.test === t);
                           return (
                             <tr key={t}>
-                              <td>{t}</td>
+                              <td>
+                              <Hint text={explain(t, 'PROBE')}>{t}</Hint>
+                            </td>
                               <td>{r ? <Tag status={r.status} /> : <Tag status="PENDING" />}</td>
                               <td class="msg dim">{r?.detail ?? 'waiting'}</td>
                             </tr>

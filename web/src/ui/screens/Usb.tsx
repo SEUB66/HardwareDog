@@ -27,7 +27,7 @@ export function Usb({ system, onTrace, onExport }: UsbProps) {
         USB DEVICE <span class="sub">downstream port</span>
       </h1>
       {!u.connected && u.disconnects > 0 && u.lastDetachAt !== null && (
-        <Panel title="USB DEVICE LOST" tone="fault">
+        <Panel title="USB DEVICE LOST" tone="fault" scope="USB">
           <KV
             rows={[
               ['LAST SEEN', clock(u.lastDetachAt)],
@@ -42,7 +42,7 @@ export function Usb({ system, onTrace, onExport }: UsbProps) {
         <Empty title="NO SIGNAL" hint="Waiting for a USB device on the downstream port." />
       ) : (
         <div class="grid wide">
-          <Panel title="DEVICE">
+          <Panel title="DEVICE" scope="USB" info="The USB device under test: what it says it is, and what it draws.">
             <KV
               rows={[
                 ['STATE', <Tag status={u.connected ? 'PASS' : 'WARN'} label={u.connected ? 'CONNECTED' : 'DISCONNECTED'} />],
@@ -56,7 +56,7 @@ export function Usb({ system, onTrace, onExport }: UsbProps) {
               ]}
             />
           </Panel>
-          <Panel title="DESCRIPTORS" aside={u.lastSeenAt ? `read ${clock(u.lastSeenAt)}` : undefined}>
+          <Panel title="DESCRIPTORS" scope="USB" aside={u.lastSeenAt ? `read ${clock(u.lastSeenAt)}` : undefined}>
             <KV
               rows={[
                 ['MANUFACTURER', d.manufacturer ?? '--'],
@@ -65,7 +65,7 @@ export function Usb({ system, onTrace, onExport }: UsbProps) {
               ]}
             />
           </Panel>
-          <Panel title="SESSION">
+          <Panel title="SESSION" scope="USB">
             <KV
               rows={[
                 ['CONNECTIONS', String(u.connections)],

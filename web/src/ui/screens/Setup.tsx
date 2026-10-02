@@ -11,7 +11,9 @@ import { Panel } from '../components/Panel';
 import type { ComponentChildren } from 'preact';
 import { IntegrityTag } from '../components/IntegrityTag';
 import { SessionsPanel, type SessionsPanelProps } from '../components/SessionsPanel';
+import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
+import { explain } from '../../core/glossary';
 import { beep } from '../sound';
 
 interface SetupProps {
@@ -44,7 +46,9 @@ function NumberField(props: { id: string; label: string; unit: string; value: nu
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
       <label for={props.id} class="dim" style={{ minWidth: 150 }}>
-        {props.label}
+        <Hint text={explain(props.label, 'RULES')} focusable={false}>
+          {props.label}
+        </Hint>
       </label>
       <input
         id={props.id}
