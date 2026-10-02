@@ -105,17 +105,47 @@ if (!motion.matches) {
   addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(updateProgress); } }, { passive: true });
   updateProgress();
   if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    document.querySelectorAll<HTMLElement>('.law,.terminal,.mascot').forEach(card => {
+    const targets = document.querySelectorAll<HTMLElement>('.law,.terminal,.mascot,.official-lockup,.official-dog,.creator-avatar,.creator-photo,.creator-story,.how>div,.signal-panel');
+    targets.forEach(card => card.classList.add('tilt-target'));
+    targets.forEach(card => {
+      // Tilt only the outermost surface: nested images move with their card.
+      if (card.parentElement?.closest('.tilt-target')) return;
+      card.classList.add('tilt-ready');
+      let rect: DOMRect;
+      let targetX = 0, targetY = 0, currentX = 0, currentY = 0;
+      let frame = 0;
+      const render = () => {
+        currentX += (targetX - currentX) * 0.16;
+        currentY += (targetY - currentY) * 0.16;
+        card.style.setProperty('--rx', `${currentX.toFixed(3)}deg`);
+        card.style.setProperty('--ry', `${currentY.toFixed(3)}deg`);
+        if (Math.abs(targetX - currentX) + Math.abs(targetY - currentY) > 0.015) frame = requestAnimationFrame(render);
+        else frame = 0;
+      };
+      const start = () => { if (!frame) frame = requestAnimationFrame(render); };
+      card.addEventListener('pointerenter', () => {
+        // Freeze the unrotated bounds; transformed bounds cause feedback jitter.
+        rect = card.getBoundingClientRect();
+        card.classList.add('tilt-active');
+      });
       card.addEventListener('pointermove', event => {
-        const rect = card.getBoundingClientRect();
-        const x = (event.clientX - rect.left) / rect.width;
-        const y = (event.clientY - rect.top) / rect.height;
+        if (!rect) return;
+        const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
         card.style.setProperty('--mx', `${x * 100}%`);
         card.style.setProperty('--my', `${y * 100}%`);
-        card.style.setProperty('--rx', `${(0.5 - y) * 5}deg`);
-        card.style.setProperty('--ry', `${(x - 0.5) * 5}deg`);
+        targetX = (0.5 - y) * 24;
+        targetY = (x - 0.5) * 24;
+        start();
       });
-      card.addEventListener('pointerleave', () => { card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg'); });
+      const reset = () => {
+        targetX = targetY = 0;
+        card.classList.remove('tilt-active');
+        start();
+      };
+      card.addEventListener('pointerleave', reset);
+      card.addEventListener('pointercancel', reset);
+      addEventListener('blur', reset);
     });
   }
 }
