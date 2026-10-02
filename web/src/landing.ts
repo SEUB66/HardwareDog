@@ -31,6 +31,13 @@ if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: re
   document.querySelectorAll('.reveal').forEach(el => { el.classList.add('animate'); observer.observe(el); });
 }
 const translations: Record<string, string> = {
+'Gratuit pour usage personnel · Code public':'Free for personal use · Public source',
+'Du code.':'Code.', 'Des circuits.':'Circuits.', 'Du concret.':'Real things.',
+'Créateur de Hardware Dog. Une idée simple : comprendre les machines avec des outils qui restent entre vos mains.':'Creator of Hardware Dog. One simple idea: understand machines with tools that stay in your hands.',
+'Découvrir seub.net':'Discover seub.net', 'Hardware Dog sur GitHub':'Hardware Dog on GitHub',
+'Seub à son bureau avec son chien':'Seub at his desk with his dog',
+'Seub dans son atelier, devant un projet mécanique':'Seub in his workshop with a mechanical project',
+'Avatar officiel du chien Hardware Dog':'Official Hardware Dog avatar',
 'Aller au contenu':'Skip to content', 'Les lois':'The laws', 'Le principe':'How it works', 'Ouvrir l’outil ↗':'Open the tool ↗',
 'Votre matériel.':'Your hardware.', 'Vos données.':'Your data.', 'Vos règles.':'Your rules.',
 'Un compagnon de diagnostic qui cherche ce qui s’est réellement passé. Pas votre adresse courriel.':'A diagnostic companion that investigates what actually happened. It never asks for your email.',
