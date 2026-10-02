@@ -98,10 +98,17 @@ describe('execute', () => {
     expect(execute('report export pdf', c).ok).toBe(true);
     expect(execute('report export HTML', c).ok).toBe(true);
     expect(execute('report export docx', c).ok).toBe(false);
+    expect(execute('i2c watch 5', c).ok).toBe(true);
+    expect(execute('i2c watch 0.2', c).ok).toBe(false);
+    expect(execute('i2c watch off', c).ok).toBe(true);
+    expect(execute('net watch 10 example.com example.org', c).ok).toBe(true);
+    expect(execute('net watch 10 "bad host!"', c).ok).toBe(false);
+    expect(execute('net watch off', c).ok).toBe(true);
     expect(execute('session mark "device reboot"', c).ok).toBe(true);
     expect(nav).toEqual(['USB', 'POWER', 'PROBE']);
     expect(exports).toEqual(['txt', 'pdf', 'html']);
-    expect(transport.sent.map((s) => s.cmd)).toEqual(['probe', 'uart.config']);
+    expect(transport.sent.map((s) => s.cmd)).toEqual(['probe', 'uart.config', 'i2c.watch', 'i2c.watch', 'net.watch', 'net.watch']);
+    expect(transport.sent.find((s) => s.cmd === 'net.watch')).toEqual({ cmd: 'net.watch', every_ms: 10000, dns: 'example.com', upstream: 'example.org' });
     expect(sys.trace.all().some((e) => e.message === 'mark: device reboot')).toBe(true);
   });
 

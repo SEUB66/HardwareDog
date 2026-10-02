@@ -34,6 +34,10 @@ const SEEDS: { id: string; scenario: ScenarioId; seed: number; seconds: number }
   { id: 'HD-C012', scenario: 'HD-T011', seed: 1, seconds: 30 },
   { id: 'HD-C013', scenario: 'HD-T012', seed: 1, seconds: 30 },
   { id: 'HD-C014', scenario: 'HD-T013', seed: 1, seconds: 40 },
+  // LVL 80: I2C on the bus, the network going down with the supply.
+  { id: 'HD-C015', scenario: 'HD-T014', seed: 1, seconds: 45 },
+  { id: 'HD-C016', scenario: 'HD-T015', seed: 1, seconds: 30 },
+  { id: 'HD-C017', scenario: 'HD-T016', seed: 1, seconds: 45 },
 ];
 
 /** 2026-09-30 14:21:00 UTC, the date in the design spec. */

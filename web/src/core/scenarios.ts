@@ -1,4 +1,5 @@
 import type { CheckStatus } from './types';
+import type { I2cErrorKind } from './protocol';
 import type { DiagnosisId } from './diagnostics';
 
 /**
@@ -47,7 +48,17 @@ export interface Scenario {
     /** Current spikes above the limit on a stiff supply. */
     spikes: null | { every: Range; current: Range; duration: Range };
   };
+  /** Target I2C bus, scanned periodically (the device's i2c watch, set at boot). */
+  i2c?: {
+    watchMs: number;
+    /** A device that drops off the bus and comes back (loose wire). */
+    flaky: null | { addr: number; every: Range; outage: Range };
+    /** A line stuck low while idle (missing pull-up): every scan fails. */
+    fault: null | { kind: I2cErrorKind };
+  };
   net: {
+    /** The network device behind the port is powered by the target rail: it goes down with it. */
+    followsPower?: boolean;
     link: boolean;
     dhcp: CheckStatus;
     gateway: CheckStatus;
@@ -74,6 +85,9 @@ export const SCENARIO_IDS = [
   'HD-T011',
   'HD-T012',
   'HD-T013',
+  'HD-T014',
+  'HD-T015',
+  'HD-T016',
 ] as const;
 export type ScenarioId = (typeof SCENARIO_IDS)[number];
 
@@ -232,6 +246,39 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     },
     target: HEALTHY_TARGET,
     net: HEALTHY_NET,
+  },
+  'HD-T014': {
+    id: 'HD-T014',
+    title: 'I2C INTERMITTENT',
+    fault: 'A sensor on long loose jumper wires drops off the I2C bus and comes back.',
+    expect: ['I2C_DEVICE_DISAPPEARED'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    i2c: { watchMs: 3000, flaky: { addr: 0x76, every: [8000, 12000], outage: [3500, 6000] }, fault: null },
+    net: HEALTHY_NET,
+  },
+  'HD-T015': {
+    id: 'HD-T015',
+    title: 'I2C MISSING PULL-UP',
+    fault: 'The pull-up resistors of the target I2C bus are missing: SDA sits low, every scan fails.',
+    expect: ['I2C_BUS_INSTABILITY'],
+    supply: STIFF_SUPPLY,
+    target: HEALTHY_TARGET,
+    i2c: { watchMs: 3000, flaky: null, fault: { kind: 'SDA_LOW' } },
+    net: HEALTHY_NET,
+  },
+  'HD-T016': {
+    id: 'HD-T016',
+    title: 'ROUTER LOSES POWER',
+    fault: 'A USB-powered travel router on a thin cable: load bursts brown it out, it reboots, the network drops and comes back.',
+    expect: ['POWER_INSTABILITY', 'NETWORK_POWER_LOSS'],
+    supply: {
+      volts: 5.07,
+      ohms: 0.09,
+      bursts: { every: [9000, 13000], current: [0.66, 0.76], sag: [0.3, 0.46], brownoutBelow: 4.7 },
+    },
+    target: HEALTHY_TARGET,
+    net: { ...HEALTHY_NET, followsPower: true },
   },
 };
 

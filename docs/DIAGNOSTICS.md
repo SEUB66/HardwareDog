@@ -2,11 +2,11 @@
 
 ```text
 ENGINE       deterministic, no AI           web/src/core/diagnostics.ts
-SCENARIOS    11 physical fault scenarios    web/src/core/scenarios.ts
+SCENARIOS    17 physical fault scenarios    web/src/core/scenarios.ts
 PROOF        reliability matrix             web/test/scenarios.test.ts
 RULE TESTS   threshold / precedence tests   web/test/diagnostics.test.ts
 CASES        recorded incidents             cases/, web/test/cases.test.ts
-RULESET      version 2                      RULESET_VERSION, diagnostics.ts
+RULESET      version 3                      RULESET_VERSION, diagnostics.ts
 ```
 
 Hardware Dog does not guess. Every diagnosis comes from a written rule,
@@ -17,6 +17,9 @@ The ruleset has a version. It is bumped whenever a rule, a default
 threshold or a confidence definition changes.
 
 ```text
+v3   NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY;
+     no link-layer diagnosis while a link loss explained by the supply
+     is still open
 v2   USB rules (USB NOT ENUMERATED) only for a device that watches USB
      (hello.caps); silence from a device without USB is not evidence
 v1   first ruleset
@@ -83,6 +86,14 @@ UPSTREAM_FAILURE / DNS_FAILURE
 NETWORK_UNSTABLE                every layer passes, last >= 5 reports:             HIGH  both
                                 latency swings >= 100 ms and reaches 150 ms,       MEDIUM one
                                 and / or average loss >= 2 %
+NETWORK_POWER_LOSS              the link goes down within 5 s of a voltage drop    HIGH >= 2 such losses
+                                or a target reset; the way back is timed            MEDIUM 1
+                                (link, DHCP, DNS)
+I2C_DEVICE_DISAPPEARED          an address answered a scan, then not a later one   HIGH   >= 2 losses that came back
+                                (needs >= 2 scans: probe i2c or i2c watch)          MEDIUM 1 came back, or gone >= 2 scans
+                                                                                    LOW    one missing scan
+I2C_BUS_INSTABILITY             i2c.error: a line low while idle, a transfer       HIGH >= 3 / MEDIUM 2 / LOW 1 fault
+                                that times out, arbitration lost
 ```
 
 Precedence rules that prevent double counting:
@@ -94,6 +105,12 @@ Precedence rules that prevent double counting:
 [X] only the lowest failing network layer is reported: no DNS failure when
     the Internet is down beyond the gateway (that is UPSTREAM_FAILURE)
 [X] DNS_FAILURE is capped at MEDIUM when the Internet check is not PASS
+[X] while the link is down because the supply dropped (NETWORK_POWER_LOSS,
+    link not back yet), NO_LINK is not reported: "check the cable" would
+    point the wrong way
+[X] an I2C loss within 2 s of a voltage drop names the supply as the cause
+[X] a scan that hits a bus fault is not sent: devices are never "gone"
+    because the bus failed
 ```
 
 ---

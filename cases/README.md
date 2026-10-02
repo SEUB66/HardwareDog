@@ -24,6 +24,9 @@ HD-C011   simulator HD-T010, 30 s       USB NOT ENUMERATED, HIGH
 HD-C012   simulator HD-T011, 30 s       NO NETWORK LINK, HIGH
 HD-C013   simulator HD-T012, 30 s       GATEWAY UNREACHABLE, HIGH
 HD-C014   simulator HD-T013, 40 s       SUPPLY SAG, MEDIUM (its ceiling)
+HD-C015   simulator HD-T014, 45 s       I2C DEVICE DISAPPEARED, HIGH
+HD-C016   simulator HD-T015, 30 s       I2C BUS FAULT, HIGH
+HD-C017   simulator HD-T016, 45 s       POWER INSTABILITY + NETWORK LOST WITH POWER, HIGH
 ```
 
 Every diagnosis of the engine has at least one case (checked by

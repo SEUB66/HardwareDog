@@ -1,15 +1,28 @@
+import { useState } from 'preact/hooks';
 import { clock, ms, percent } from '../../core/format';
 import type { System } from '../../core/system';
 import type { CheckStatus } from '../../core/types';
 import { Empty } from '../components/Empty';
 import { Panel } from '../components/Panel';
 import { Hint } from '../components/Hint';
+import { KV } from '../components/KV';
 import { Tag } from '../components/Tag';
 import { explain } from '../../core/glossary';
 
 /** Layer by layer: how far does communication actually get? (spec 19) */
 export function Net({ system }: { system: System }) {
   const n = system.net;
+  const w = system.netWatch;
+  const [dns, setDns] = useState('example.com');
+  const [upstream, setUpstream] = useState('');
+  const [every, setEvery] = useState('10');
+  const [message, setMessage] = useState<string | null>(null);
+  const outages = system.facts.outages.slice(-6).reverse();
+  const plan = ['ping the gateway', dns.trim() ? `resolve ${dns.trim()}` : null, upstream.trim() ? `open TCP ${upstream.trim()}:443, then close it` : null].filter(Boolean);
+  const start = (e: Event) => {
+    e.preventDefault();
+    setMessage(system.watchNet(Number(every), dns.trim() || undefined, upstream.trim() || undefined));
+  };
   const layers: { name: string; value: string; status: CheckStatus }[] = [
     {
       name: 'LINK',
@@ -79,6 +92,83 @@ export function Net({ system }: { system: System }) {
                 REFRESH
               </button>
             </div>
+          </Panel>
+
+          <Panel title="WATCH" aside={w ? 'ACTIVE' : 'OFF'}>
+            {w ? (
+              <>
+                <KV
+                  rows={[
+                    ['EVERY', `${w.everyMs / 1000} s`],
+                    ['DNS NAME', w.dns ?? 'not checked'],
+                    ['UPSTREAM', w.upstream ? `${w.upstream}:443` : 'not checked'],
+                  ]}
+                />
+                <div class="actions">
+                  <button class="btn" onClick={() => setMessage(system.watchNet(0))} disabled={!system.online}>
+                    STOP WATCH
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={start}>
+                <label class="field-row">
+                  <span class="dim">DNS NAME</span>
+                  <input class="input" value={dns} onInput={(e) => setDns((e.target as HTMLInputElement).value)} autocomplete="off" spellcheck={false} />
+                </label>
+                <label class="field-row">
+                  <span class="dim">UPSTREAM</span>
+                  <input class="input" value={upstream} placeholder="optional host" onInput={(e) => setUpstream((e.target as HTMLInputElement).value)} autocomplete="off" spellcheck={false} />
+                </label>
+                <label class="field-row">
+                  <span class="dim">EVERY (S)</span>
+                  <input class="input" type="number" min={2} max={600} value={every} onInput={(e) => setEvery((e.target as HTMLInputElement).value)} />
+                </label>
+                <p class="dim" style={{ margin: '10px 0 4px' }}>
+                  HARDWARE DOG WILL, EVERY {every || '?'} S
+                </p>
+                <ol style={{ margin: 0, paddingLeft: 22 }}>
+                  {plan.map((p) => (
+                    <li key={p}>{p}</li>
+                  ))}
+                </ol>
+                <div class="actions">
+                  <button class="btn primary" type="submit" disabled={!system.online}>
+                    START WATCH
+                  </button>
+                </div>
+              </form>
+            )}
+            {message && <p class="note warn">{message}</p>}
+          </Panel>
+
+          <Panel title="OUTAGES" aside={system.facts.outages.length ? `${system.facts.outages.length} this session` : undefined}>
+            {outages.length === 0 ? (
+              <Empty title="NO LINK LOSS" hint="Every time the link goes down, the way back is timed here: link, DHCP, DNS." />
+            ) : (
+              <div class="trace" style={{ border: 0 }}>
+                <table>
+                  <tbody>
+                    {outages.map((o) => (
+                      <tr key={o.seq}>
+                        <td class="time">{clock(o.t)}</td>
+                        <td>{o.cause ? <Tag status="WARN" label={o.cause.kind === 'DROP' ? 'AFTER DROP' : 'AFTER RESET'} /> : <Tag status="UNKNOWN" label="NO CAUSE SEEN" />}</td>
+                        <td class="msg dim">
+                          {[
+                            o.cause ? `${o.cause.text}, link down +${ms(o.t - o.cause.t)}` : 'link down',
+                            o.upAt !== null ? `up +${ms(o.upAt - o.t)}` : 'still down',
+                            o.dhcpAt !== null ? `DHCP +${ms(o.dhcpAt - o.t)}` : null,
+                            o.dnsAt !== null ? `DNS +${ms(o.dnsAt - o.t)}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' > ')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Panel>
         </div>
       )}

@@ -1,0 +1,5 @@
+# CI only: build the wired port, the boot-time I2C watch and the Wi-Fi code
+# path, so every line of main/ is compiled. Not a configuration to flash.
+CONFIG_HWDOG_ETH_W5500=y
+CONFIG_HWDOG_I2C_WATCH_MS=5000
+CONFIG_HWDOG_WIFI_SSID="ci-not-a-network"

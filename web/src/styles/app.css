@@ -468,6 +468,20 @@ select {
   color: var(--cyan);
 }
 
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.field-row > span {
+  min-width: 10ch;
+}
+.field-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ---------------------------------------------------------------------- tips */
 
 /* A label that explains itself: dotted underline, like a term in a manual.

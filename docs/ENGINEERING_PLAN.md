@@ -577,14 +577,14 @@ reproduce it, and make a decision on it.
 ```text
 LVL   NAME                                  STATUS
 40    .hdlog becomes technical evidence      DONE
-45    diagnostic engine v1                   PARTIAL   13 rules, each with a scenario and a case; I2C rules at 80
+45    diagnostic engine v1                   DONE      16 rules, each with a scenario and a case
 50    .hdlog becomes a CASE                  DONE      context in cases, hwdog test cases/ in CI
 55    dogd, the local backbone               DONE      gate passed, real ESP32 at 60
 60    first physical Hardware Dog            PARTIAL   core PASS on PC + CI, board bring-up pending
 65    calibration + truthfulness             PARTIAL   software PASS, reference comparison on boards pending
 70    real fault lab                         PARTIAL   procedures + pipeline PASS, bench recordings pending
 75    professional reports                   DONE      TXT, JSON, HTML, PDF from the same lines
-80    network + I2C on hardware              PLANNED
+80    network + I2C on hardware              PARTIAL   rules, simulator, firmware core PASS; ESP32-S3 + W5500 builds in CI; silicon pending
 85    PCB Rev A                              PLANNED
 90    probe architecture                     PLANNED
 95    community incident library             PLANNED
@@ -618,7 +618,7 @@ where the evidence came from. Exporting a replay gives back the same bytes,
 so a file can never become "a replay of a replay". The replay state is
 shown by the interface and the report, never written into the evidence.
 
-### LVL 45 — DIAGNOSTIC ENGINE V1
+### LVL 45 — DIAGNOSTIC ENGINE V1     DONE
 
 Not 150 rules. Ten diagnostics that are extremely solid.
 
@@ -632,8 +632,9 @@ UART_CONFIGURATION_MISMATCH  [ OK ] SERIAL_CONFIGURATION_MISMATCH
 DHCP_FAILURE                 [ OK ] DHCP_FAILURE
 DNS_FAILURE                  [ OK ] DNS_FAILURE
 UNSTABLE_NETWORK             [ OK ] NETWORK_UNSTABLE
-I2C_DEVICE_DISAPPEARED       [ -- ] needs repeated I2C scans
-I2C_BUS_INSTABILITY          [ -- ] needs I2C error frames in HDP
+I2C_DEVICE_DISAPPEARED       [ OK ] I2C_DEVICE_DISAPPEARED (i2c.watch, LVL 80)
+I2C_BUS_INSTABILITY          [ OK ] I2C_BUS_INSTABILITY (i2c.error, LVL 80)
++ NETWORK_POWER_LOSS         [ OK ] the network goes down with the supply
 ```
 
 Every diagnosis returns OBSERVED, CORRELATED, POSSIBLE CAUSE, CONFIDENCE,
@@ -641,9 +642,8 @@ RECOMMENDED CHECK and EVIDENCE REFERENCES (`[ OK ]`: the HDP frames it
 rests on, by sequence number). Never "the problem is definitely X".
 
 GATE: every diagnosis has a scenario, an .hdlog, an expected answer and a
-regression test. **PASS for the 13 rules** (HD-T000 to HD-T013, HD-C001
-to HD-C014, `cases.test.ts` fails if one is missing). The two I2C rules
-come with LVL 80.
+regression test. **PASS for the 16 rules** (HD-T000 to HD-T016, HD-C001
+to HD-C017, `cases.test.ts` fails if one is missing).
 
 ### LVL 50 — .hdlog BECOMES A CASE        DONE
 
@@ -790,6 +790,22 @@ else. Not "ping works", but the chain:
 12:01:26  LINK      up
 12:01:27  DHCP      acquired
 12:01:28  DNS       ready
+```
+
+```text
+[ OK ] HDP: i2c.error, i2c.watch, net.watch; scans carry every_ms
+[ OK ] rules (ruleset 3): I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY,
+       NETWORK_POWER_LOSS with the way back timed: link, DHCP, DNS
+[ OK ] simulator HD-T014 to HD-T016, cases HD-C015 to HD-C017
+[ OK ] firmware core: periodic scans, stuck-line and timeout faults, net
+       checks, background probes, net.status sent on change (C tests,
+       firmware.test.ts: the host build gives the same diagnoses)
+[ OK ] ESP32-S3 glue: W5500 on SPI2 or Wi-Fi, ping / resolve / TCP 443
+       watch task, PING / DNS / TCP / HTTP probe task; built in CI with
+       and without the W5500
+[ OK ] interface: BUS watch + presence per address, NET watch + OUTAGES
+[ -- ] GATE: bring-up steps 9 to 12 on the board (FIRMWARE.md), the
+       router chain recorded as a PHYSICAL case
 ```
 
 ### LVL 85 — PCB REV A

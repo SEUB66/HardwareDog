@@ -5,8 +5,9 @@ TARGET        ESP32-S3 dev board (ESP32-S3-DevKitC-1 or equivalent)
 SENSOR        INA226 breakout (R100 shunt), I2C
 SDK           ESP-IDF v5.4, C11
 HDP LINK      native USB (USB-Serial-JTAG), 303A:1001
-STATUS        LVL 60: core verified on a PC and in CI, ESP32-S3 build in CI,
-              SILICON BRING-UP PENDING (needs the board on a desk)
+STATUS        LVL 60-80: core verified on a PC and in CI, ESP32-S3 builds
+              in CI (Wi-Fi, and W5500 + I2C watch), SILICON BRING-UP
+              PENDING (needs the board on a desk)
 ```
 
 The firmware is a producer of HDP v1, like the simulator. Nothing else.
@@ -31,6 +32,10 @@ every frame validates hdp_v1.json      PASS    PASS    pending
 engine reads it like the simulator     PASS    PASS    pending
 firmware -> TCP -> dogd == direct      PASS    PASS    --
 ESP-IDF build for esp32s3              --      CI      --
+  (default, and W5500 + I2C watch)
+I2C watch, bus faults, net checks,     PASS    PASS    pending
+  background probes (host simulation)
+W5500 link, real ping / DNS / TCP      --      --      pending
 I2C timing, real INA226, UART pins,    --      --      pending
   USB link, Wi-Fi
 measurement accuracy                   --      --      LVL 65
@@ -40,6 +45,29 @@ measurement accuracy                   --      --      LVL 65
 simulated at the register level: the INA226 model computes the current
 register the way the chip does (shunt register x calibration / 2048), so
 the driver math is really exercised. It is a test fixture, not the device.
+
+---
+
+## WIRED NETWORK PORT (LVL 80, optional)
+
+`idf.py menuconfig` -> Hardware Dog -> W5500 Ethernet. The wired port wins
+over Wi-Fi when both are configured.
+
+```text
+ESP32-S3            W5500 module (3.3 V)
+3V3        ──────── 3V3
+GND        ──────── GND
+GPIO 12    ──────── SCLK
+GPIO 11    ──────── MOSI
+GPIO 13    ──────── MISO
+GPIO 10    ──────── CS
+GPIO 14    ──────── INT     (-1 in menuconfig: not wired, polled)
+GPIO 21    ──────── RST     (-1: not wired)
+```
+
+Plug the W5500 into the network the incident is about, e.g. into the
+router the target powers: when the router reboots with the supply, the
+link loss, DHCP and DNS are on the same timeline as the voltage drop.
 
 ---
 
@@ -94,12 +122,21 @@ The device says it in `hello.caps` (PROTOCOL.md):
 ```text
 power   YES   INA226, identity verified (manufacturer 0x5449, die 0x226)
 uart    YES   lines, framing / parity / overrun / break errors
-i2c     YES   address scan 0x08-0x77 on request; no identity claimed
-net     WITH WI-FI CONFIGURED: link, address, DHCP. Gateway, DNS and
-              Internet are reported UNKNOWN: not probed yet
+i2c     YES   address scan 0x08-0x77 on request, or every N ms (i2c.watch,
+              or HWDOG_I2C_WATCH_MS from boot); a line stuck low or a bus
+              timeout is an i2c.error, never an empty scan; no identity
+              claimed
+net     WITH W5500 OR WI-FI CONFIGURED: link, address, DHCP, sent at once
+              when they change. Gateway, DNS, Internet, latency, loss only
+              from net.watch checks (ping, resolve, TCP 443), else UNKNOWN
 usb     NO    the dev board has no USB host port wired for the target
-probe   NO    network probes answer UNKNOWN "not available on this firmware"
+probe   WITH A NETWORK: PING (ICMP x4), DNS (resolve), TCP (port 80),
+              HTTP (GET /, status line), in a background task
 ```
+
+A floating line (no pull-up at all) can read high as well as low: a stuck
+low line is certain, a floating one is not always seen. The scan then
+finds nothing, or a device that comes and goes.
 
 Because `usb` is not declared, the engine makes **no** USB diagnosis from
 silence (ruleset v2). A target drawing current is not "not enumerated" just
@@ -163,6 +200,26 @@ expect; a different result is a finding, not a failure to hide.
                    expect: VERIFIED, origin PHYSICAL, same diagnosis replayed.
 [ ] 8  HD-P001     a resistive cable (long, thin) between supply and target,
                    target under load. expect: undervoltage events, SUPPLY SAG.
+
+LVL 80, on the same bench:
+
+[ ] 9  I2C WATCH   i2c watch 5 in the palette, a sensor on the target bus.
+                   Pull its SDA wire for 10 s, twice.
+                   expect: "0x76 no longer answers" / "answers", then
+                   I2C DEVICE DISAPPEARED, HIGH.
+[ ] 10 PULL-UPS    remove the target bus pull-ups (keep the device).
+                   expect: i2c.error SDA_LOW or SCL_LOW, I2C BUS FAULT; no
+                   empty scan. If the lines float high instead, write it in
+                   the notes: that is what the board does.
+[ ] 11 NET WATCH   W5500 (or Wi-Fi) up, net watch 10 example.com in the
+                   palette. expect: gateway, DNS PASS with latency.
+                   Unplug the cable 20 s: link down, then link, DHCP, DNS
+                   back, timed in NET -> OUTAGES.
+[ ] 12 ROUTER      power a USB travel router through the INA226 and a thin
+                   cable, W5500 plugged into it. Load the rail.
+                   expect: NETWORK LOST WITH POWER, the chain drop > link
+                   down > up > DHCP > DNS. The recording becomes a PHYSICAL
+                   case.
 ```
 
 When 1 to 7 pass, LVL 60 is done. The recording of step 8 becomes the first

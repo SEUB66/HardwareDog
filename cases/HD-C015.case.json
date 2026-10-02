@@ -1,0 +1,42 @@
+{
+  "case": 1,
+  "id": "HD-C015",
+  "title": "I2C INTERMITTENT (simulator HD-T014)",
+  "recording": {
+    "file": "HD-C015.hdlog",
+    "sha256": "6590dd09031864f73927fd1f558f9f040f2482b44f3aa90646fb9978b3a74ece",
+    "recording": "557e3e25d5c370c856b34dc1c2e0a64f",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "A sensor on long loose jumper wires drops off the I2C bus and comes back.",
+    "hardware": "None: built-in simulator, scenario HD-T014, seed 1, 45 s. Origin SIMULATED."
+  },
+  "ruleset": 3,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "I2C_DEVICE_DISAPPEARED",
+        "confidence": "HIGH",
+        "evidence": [
+          622,
+          929,
+          1236,
+          1850,
+          2156,
+          2310
+        ]
+      }
+    ]
+  }
+}

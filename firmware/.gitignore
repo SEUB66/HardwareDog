@@ -3,3 +3,4 @@ host/build/
 sdkconfig
 sdkconfig.old
 managed_components/
+build-w5500/
