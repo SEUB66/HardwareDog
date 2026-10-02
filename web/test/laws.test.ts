@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
  */
 
 const sources = import.meta.glob('../src/**/*.{ts,tsx,css}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const html = import.meta.glob('../{index,diagnostic}.html', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const html = import.meta.glob('../{index,diagnostic,engineering}.html', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
 const FORBIDDEN: [RegExp, string][] = [
   [/\bfetch\s*\(/, 'fetch()'],

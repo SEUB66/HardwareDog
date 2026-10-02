@@ -73,6 +73,38 @@ const translations: Record<string, string> = {
 'Bannière officielle Hardware Dog : chien robot, câble USB et SNIFF THE PROBLEM':'Official Hardware Dog banner: robotic dog, USB cable and SNIFF THE PROBLEM',
 'Illustration officielle du chien Hardware Dog':'Official Hardware Dog illustration'
 };
+Object.assign(translations, {
+'Retour à l’accueil ↗':'Back to home ↗',
+'Technique':'Engineering', 'Pensé comme un système.':'Designed as a system.', 'Construit pour être vérifié.':'Built to be verified.',
+'Du navigateur au firmware : des couches séparées, un contrat commun et des preuves reproductibles. Voici le plan, l’état réel et la suite.':'From browser to firmware: separate layers, one shared contract and reproducible evidence. Here is the plan, the actual status and what comes next.',
+'Une architecture. Plusieurs sources.':'One architecture. Multiple sources.', 'Matériel · Simulateur · Replay':'Hardware · Simulator · Replay',
+'JSON Schema / événements':'JSON Schema / events', 'Trace · Règles':'Trace · Rules', 'Chronologie / diagnostic déterministe':'Timeline / deterministic diagnosis', 'Archive · Rapports':'Archive · Reports',
+'Interface Vite, transports séparés du rendu, archive IndexedDB et replay local. Les polices et les images sont embarquées.':'Vite interface, transports separated from rendering, IndexedDB archive and local replay. Fonts and images are bundled.',
+'Daemon local pour le lien matériel et les sessions. Adresse loopback par défaut, contrôle des hôtes et des origines autorisées.':'Local daemon for the hardware link and sessions. Loopback address by default, with host and allowed-origin checks.',
+'ESP32-S3, INA226, UART et réseau. Le cœur est testé sur PC et en CI; les mesures et les liaisons réelles restent à valider sur carte.':'ESP32-S3, INA226, UART and networking. The core is tested on PC and in CI; actual measurements and links still need validation on a board.',
+'Le plan de développement':'The development plan', 'Stabiliser le contrat.':'Stabilize the contract.',
+'Valider HDP, les transports, les diagnostics, les sessions scellées et les exports contre les mêmes tests. Chaque incident enregistré peut devenir un cas de régression.':'Validate HDP, transports, diagnostics, sealed sessions and exports against shared tests. Every recorded incident can become a regression case.',
+'Confronter le code au réel.':'Test the code against reality.',
+'Démarrer la carte ESP32-S3, comparer les INA226 à un instrument de référence et enregistrer des pannes physiques. Le simulateur suit ensuite ces traces.':'Bring up the ESP32-S3 board, compare INA226 sensors against a reference instrument and record physical failures. Then tune the simulator to those traces.',
+'Passer du prototype à l’outil.':'Turn the prototype into a tool.',
+'Concevoir le PCB après les essais sur banc. Livrer schémas, BOM, Gerbers, protections, procédure de test et documentation avant la version 1.0.':'Design the PCB after bench testing. Deliver schematics, BOM, Gerbers, protection, a test procedure and documentation before version 1.0.',
+'Roadmap / par niveau':'Roadmap / by level', 'VALIDATION > CALENDRIER':'VALIDATION > CALENDAR',
+'Un niveau est terminé quand sa condition de validation passe. Le code seul ne suffit pas; aucune date de livraison n’est promise ici.':'A level is complete when its validation gate passes. Code alone is not enough; no delivery dates are promised here.',
+'Roadmap technique':'Engineering roadmap', 'Niveau':'Level', 'Jalon':'Milestone', 'État':'Status', 'Condition de validation':'Validation gate',
+'Socle logiciel & preuves':'Software foundation & evidence', 'Implémenté':'Implemented', 'Partiel':'Partial', 'Planifié':'Planned',
+'Enregistrements scellés, diagnostics, cas de régression, dogd et rapports TXT / JSON / HTML / PDF.':'Sealed recordings, diagnostics, regression cases, dogd and TXT / JSON / HTML / PDF reports.',
+'Prototype & banc de test':'Prototype & test bench',
+'Logiciel et cœur firmware vérifiés. Bring-up, calibration, pannes physiques, Ethernet et I2C à valider sur carte.':'Software and firmware core verified. Bring-up, calibration, physical failures, Ethernet and I2C still need board validation.',
+'Prototype éprouvé avant KiCad, schéma, BOM, Gerbers, assemblage et procédure de test.':'Proven prototype before KiCad, schematics, BOM, Gerbers, assembly and a test procedure.',
+'Architecture de sondes':'Probe architecture',
+'Étendre le système avec des sondes qui produisent le même HDP, sans complexifier le cœur.':'Extend the system with probes that produce the same HDP without complicating the core.',
+'Bibliothèque d’incidents':'Incident library',
+'Cas anonymisés et reproductibles, proposés par pull request et validés automatiquement avant revue.':'Anonymized, reproducible cases submitted through pull requests and automatically validated before review.',
+'Matériel, logiciel, limites de mesure, récupération, sécurité et documentation validés ensemble.':'Hardware, software, measurement limits, recovery, security and documentation validated together.',
+'Apprendre des incidents':'Learn from incidents',
+'Plus de cas réels, de tests et de règles fiables. Une éventuelle IA locale explique les faits; elle ne remplace pas les preuves.':'More real cases, tests and reliable rules. Any future local AI explains facts; it does not replace evidence.',
+'Lire le plan complet ↗':'Read the full plan ↗'
+});
 if (language === 'en') {
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) {
@@ -87,8 +119,9 @@ if (language === 'en') {
       if (value && translations[value]) el.setAttribute(attr, translations[value]);
     }
   });
-  document.title = 'Hardware Dog — Your hardware. Your rules.';
-  document.querySelector('meta[name="description"]')?.setAttribute('content', 'Hardware Dog: local hardware diagnostics. No account, no subscription, no required cloud.');
+  const engineering = document.body.dataset.page === 'engineering';
+  document.title = engineering ? 'Hardware Dog — Architecture & roadmap' : 'Hardware Dog — Your hardware. Your rules.';
+  document.querySelector('meta[name="description"]')?.setAttribute('content', engineering ? 'Hardware Dog architecture, development plan and roadmap: TypeScript, Rust, ESP32-S3 firmware and verifiable evidence.' : 'Hardware Dog: local hardware diagnostics. No account, no subscription, no required cloud.');
 }
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
 if (!motion.matches) {
@@ -105,7 +138,7 @@ if (!motion.matches) {
   addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(updateProgress); } }, { passive: true });
   updateProgress();
   if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
-    const targets = document.querySelectorAll<HTMLElement>('.law,.terminal,.mascot,.official-lockup,.official-dog,.creator-avatar,.creator-photo,.creator-story,.how>div,.signal-panel');
+    const targets = document.querySelectorAll<HTMLElement>('.stack-card,.architecture,.roadmap,.law,.terminal,.mascot,.official-lockup,.official-dog,.creator-avatar,.creator-photo,.creator-story,.how>div,.signal-panel');
     targets.forEach(card => card.classList.add('tilt-target'));
     targets.forEach(card => {
       // Tilt only the outermost surface: nested images move with their card.
