@@ -10,7 +10,7 @@ STATUS
 [ OK ] session recording      .hdlog v2 files, browser archive, replay
 [ OK ] evidence integrity     SHA-256 seals, provenance, cases/
 [ OK ] dogd                   local daemon, fourth transport (docs/DOGD.md)
-[ -- ] firmware               not started
+[ .. ] firmware               firmware/: core verified on PC + CI, board pending
 [ -- ] hardware / PCB         not started
 [ -- ] enclosure              not started
 ```
