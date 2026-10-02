@@ -266,6 +266,12 @@ async fn client(socket: WebSocket, s: AppState) {
             changed = state.changed() => {
                 let st = state.borrow().clone();
                 if changed.is_err() || st.epoch != epoch || st.state != LinkState::Online {
+                    // The device's last bytes arrived before the loss: deliver them first.
+                    while let Ok(c) = bytes.try_recv() {
+                        if tx.send(Message::Binary(c.into())).await.is_err() {
+                            return;
+                        }
+                    }
                     let why = st.reason.unwrap_or_else(|| "link restarted".into());
                     let _ = tx.send(close(CLOSE_LINK_LOST, format!("device link lost: {why}"))).await;
                     return;
