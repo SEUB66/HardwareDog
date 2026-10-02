@@ -38,3 +38,21 @@ body,:root[data-theme=light] body{background:var(--bg)}
 .signal-flow path:nth-child(2){animation-delay:-2.3s;animation-duration:9s}.signal-flow path:nth-child(3){animation-delay:-4s;stroke-width:1}
 @keyframes signal-run{from{stroke-dashoffset:1370}to{stroke-dashoffset:0}}@keyframes signal-breathe{from{transform:scale(1)}to{transform:scale(1.035)}}
 @media(prefers-reduced-motion:reduce){.signal-panel::before,.signal-flow path{animation:none}.signal-flow{display:none}.law,.terminal,.mascot:hover{transform:none}}
+/* Traces measured in the original artwork's 1672 × 941 coordinate system.
+   SVG slice and background cover share the same crop at every viewport. */
+.signal-panel::before{animation:none;transform:none}
+.signal-flow{opacity:.85}
+.signal-flow path{stroke:#bcfaff;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:24 976;animation:trace-pulse 5s linear infinite;filter:drop-shadow(0 0 3px #00e5ff)}
+.signal-flow path:nth-child(2){animation:trace-pulse 6.5s linear infinite;animation-delay:-2.5s}
+.signal-flow path.pink-trace{stroke:#ffc1e3;stroke-width:1.6;animation:trace-pulse 5.5s linear infinite;animation-delay:-1.8s;filter:drop-shadow(0 0 3px #ff4fa3)}
+@keyframes trace-pulse{0%{stroke-dashoffset:1000;opacity:0}8%{opacity:1}90%{opacity:1}100%{stroke-dashoffset:0;opacity:0}}
+@media(prefers-reduced-motion:reduce){.signal-flow{display:none}}
+/* Balanced illustration and explanation panels; no loose square artwork. */
+.how{gap:24px;align-items:stretch}
+.how>div{border:1px solid var(--border);border-radius:18px;background:var(--glass);padding:32px;backdrop-filter:blur(18px)}
+.how>div:first-child{display:flex;flex-direction:column;align-items:flex-start}
+.how h2{font-size:clamp(44px,4.2vw,58px);margin-bottom:24px}
+.official-dog{width:min(270px,100%);height:auto;align-self:center;margin-top:auto;border-radius:18px;border:1px solid var(--border);box-shadow:0 18px 35px #00000015;animation:none}
+.steps article:first-child{padding-top:0}.steps article{padding-block:22px}.steps>.text-link{margin-bottom:0}
+.hero-visual .terminal{width:100%;max-width:none}
+@media(max-width:760px){.how>div{padding:24px}.how{gap:18px}.official-dog{width:min(270px,100%)}.how h2{font-size:48px}}
