@@ -4,7 +4,9 @@ import { Empty } from '../components/Empty';
 import { ErrorBlock } from '../components/ErrorBlock';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
+import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
+import { explain, explainSource, explainStatus } from '../../core/glossary';
 import { useClock } from '../hooks';
 
 /** What is happening right now? (spec 12) */
@@ -119,11 +121,21 @@ export function Status({ system }: { system: System }) {
               <div class="diagnosis" key={d.id}>
                 <div class="diagnosis-head">
                   <Tag status="WARN" label={d.title} />
-                  <span class="dim">CONFIDENCE</span> <span>{d.confidence}</span>
+                  <Hint text={explain('CONFIDENCE', 'DIAGNOSIS')} class="dim">
+                    CONFIDENCE
+                  </Hint>{' '}
+                  <Hint text={explainStatus(d.confidence)} focusable={false}>
+                    {d.confidence}
+                  </Hint>
                   <span class="dim">{`  ${d.basis}`}</span>
                 </div>
                 <div>{d.cause}</div>
-                <div class="dim">NEXT CHECK: {d.next}</div>
+                <div class="dim">
+                  <Hint text={explain('NEXT CHECK', 'DIAGNOSIS')} term="NEXT CHECK">
+                    NEXT CHECK
+                  </Hint>
+                  : {d.next}
+                </div>
               </div>
             ))}
           </div>
@@ -140,7 +152,11 @@ export function Status({ system }: { system: System }) {
                 {recent.map((e) => (
                   <tr key={e.id} class={`${e.severity} src-${e.source}`}>
                     <td class="time">{clock(e.t)}</td>
-                    <td class="src">{e.source}</td>
+                    <td class="src">
+                      <Hint text={explainSource(e.source)} focusable={false}>
+                        {e.source}
+                      </Hint>
+                    </td>
                     <td class="col-sev">
                       <Tag status={e.severity} />
                     </td>

@@ -19,6 +19,7 @@ import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
 import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
 import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
+import { Hint } from './components/Hint';
 import { IntegrityTag } from './components/IntegrityTag';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
@@ -33,6 +34,8 @@ import { Setup } from './screens/Setup';
 import { Status } from './screens/Status';
 import { Trace } from './screens/Trace';
 import { Usb } from './screens/Usb';
+import { hideTip, installTips } from './tips';
+import { explain } from '../core/glossary';
 
 interface Session {
   system: System;
@@ -146,6 +149,10 @@ export function App({ archive }: { archive: SessionArchive }) {
       document.removeEventListener('visibilitychange', flush);
     };
   }, [session]);
+
+  // Every label with a glossary entry explains itself on hover, focus or tap.
+  useEffect(() => installTips(), []);
+  useEffect(() => hideTip(), [screen]);
 
   // Theme and motion are system settings, applied to the document root.
   useEffect(() => {
@@ -441,15 +448,21 @@ export function App({ archive }: { archive: SessionArchive }) {
           <span class="ver">v{BUILD}</span>
         </span>
         <span class="field">
-          <span class="k">DEVICE</span>
+          <Hint text={explain('DEVICE', 'HEADER')} class="k">
+            DEVICE
+          </Hint>
           <span class="v">{system.device.id}</span>
         </span>
         <span class="field opt">
-          <span class="k">SESSION</span>
+          <Hint text={explain('SESSION', 'HEADER')} class="k">
+            SESSION
+          </Hint>
           <span class="v">{duration(now - system.startedAt)}</span>
         </span>
         <span class="field opt wide">
-          <span class="k">SESSION ID</span>
+          <Hint text={explain('SESSION ID', 'HEADER')} class="k">
+            SESSION ID
+          </Hint>
           <span class="v">{system.replayOf?.id ?? sessionId(system.startedAt)}</span>
         </span>
         <span class="spacer" />

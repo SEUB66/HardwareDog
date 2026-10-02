@@ -3,7 +3,9 @@ import type { System } from '../../core/system';
 import type { CheckStatus } from '../../core/types';
 import { Empty } from '../components/Empty';
 import { Panel } from '../components/Panel';
+import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
+import { explain } from '../../core/glossary';
 
 /** Layer by layer: how far does communication actually get? (spec 19) */
 export function Net({ system }: { system: System }) {
@@ -39,7 +41,9 @@ export function Net({ system }: { system: System }) {
                   {layers.map((l, i) => (
                     <tr key={l.name}>
                       <td class="dim">{String(i + 1).padStart(2, '0')}</td>
-                      <td>{l.name}</td>
+                      <td>
+                        <Hint text={explain(l.name, 'NETWORK')}>{l.name}</Hint>
+                      </td>
                       <td class="msg">{l.value}</td>
                       <td>
                         <Tag status={firstFail !== -1 && i > firstFail && l.status === 'UNKNOWN' ? 'UNKNOWN' : l.status} />
@@ -58,11 +62,15 @@ export function Net({ system }: { system: System }) {
           <Panel title="QUALITY">
             <div class="metrics" style={{ border: 0 }}>
               <div class="metric">
-                <div class="label">LATENCY</div>
+                <div class="label">
+                  <Hint text={explain('LATENCY', 'NETWORK')}>LATENCY</Hint>
+                </div>
                 <div class="value">{ms(n.latencyMs)}</div>
               </div>
               <div class="metric">
-                <div class="label">PACKET LOSS</div>
+                <div class="label">
+                  <Hint text={explain('PACKET LOSS', 'NETWORK')}>PACKET LOSS</Hint>
+                </div>
                 <div class="value">{percent(n.packetLoss)}</div>
               </div>
             </div>
