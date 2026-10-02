@@ -34,7 +34,7 @@ export function Serial({ system }: { system: System }) {
         SERIAL / UART <span class="sub">target console</span>
       </h1>
       <div class="grid wide">
-        <Panel title="PORT">
+        <Panel title="PORT" scope="SERIAL">
           <KV
             rows={[
               ['PORT', s.port],
@@ -66,7 +66,7 @@ export function Serial({ system }: { system: System }) {
             </button>
           </form>
         </Panel>
-        <Panel title="COUNTERS">
+        <Panel title="COUNTERS" scope="SERIAL">
           <KV
             rows={[
               ['RX', bytes(s.rxBytes), true],

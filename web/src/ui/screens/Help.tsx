@@ -57,6 +57,7 @@ export function Help() {
               <tr><td>WATCH</td><td class="dim">follow a signal live on the trace</td></tr>
               <tr><td>TRACE</td><td class="dim">every event from every source on one clock</td></tr>
               <tr><td>REPORT</td><td class="dim">observation, correlation and possible cause, kept apart</td></tr>
+              <tr><td><span class="hint">DOTTED</span></td><td class="dim">a dotted label explains itself: hover it, Tab to it, or tap it</td></tr>
             </tbody>
           </table>
         </Panel>

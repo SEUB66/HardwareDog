@@ -1,13 +1,21 @@
+import { explainStatus } from '../../core/glossary';
 import type { CheckStatus, Severity } from '../../core/types';
+import { Hint } from './Hint';
 
 type TagStatus = CheckStatus | Severity | 'OK' | 'LIVE';
 
 /**
  * A status word. The word always carries the meaning; color only
- * reinforces it, so the tag stays readable in monochrome.
+ * reinforces it, so the tag stays readable in monochrome. A known word
+ * explains itself on hover or tap.
  */
 export function Tag({ status, label }: { status: TagStatus; label?: string }) {
-  return <span class={`tag ${status}`}>{label ?? status}</span>;
+  const word = label ?? status;
+  return (
+    <Hint text={explainStatus(word)} term={word} focusable={false} class="tag-hint">
+      <span class={`tag ${status}`}>{word}</span>
+    </Hint>
+  );
 }
 
 /** "[ OK ]" style boot / checklist marker. */

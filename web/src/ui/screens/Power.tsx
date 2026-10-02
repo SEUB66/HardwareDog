@@ -2,7 +2,9 @@ import { amps, clock, volts, watts } from '../../core/format';
 import type { System } from '../../core/system';
 import { Empty } from '../components/Empty';
 import { SignalChart, type ChartMarker } from '../components/SignalChart';
+import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
+import { explain } from '../../core/glossary';
 
 const WINDOW = 15_000;
 
@@ -23,7 +25,9 @@ export function Power({ system }: { system: System }) {
 
   const metric = (label: string, value: string, live = true) => (
     <div class="metric">
-      <div class="label">{label}</div>
+      <div class="label">
+        <Hint text={explain(label, 'POWER')}>{label}</Hint>
+      </div>
       <div class={`value${live ? '' : ' static'}`}>{value}</div>
     </div>
   );
@@ -41,7 +45,9 @@ export function Power({ system }: { system: System }) {
         {metric('MIN VOLTAGE', volts(p.minVoltage, 3), false)}
         {metric('AVG VOLTAGE', volts(avgV, 3), false)}
         <div class="metric">
-          <div class="label">STATE</div>
+          <div class="label">
+            <Hint text={explain('STATE', 'POWER')}>STATE</Hint>
+          </div>
           <div class="value">
             {p.condition === 'STABLE' ? (
               <Tag status="PASS" label="STABLE" />
