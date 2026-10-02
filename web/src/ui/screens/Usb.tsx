@@ -24,7 +24,7 @@ export function Usb({ system, onTrace, onExport }: UsbProps) {
   return (
     <>
       <h1 class="screen-title">
-        USB DEVICE <span class="sub">downstream port</span>
+        USB DEVICE <span class="sub">the one port Hardware Dog watches, one target device</span>
       </h1>
       {!u.connected && u.disconnects > 0 && u.lastDetachAt !== null && (
         <Panel title="USB DEVICE LOST" tone="fault" scope="USB">
