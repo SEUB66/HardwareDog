@@ -2,7 +2,7 @@
   "name": "Hardware Dog",
   "short_name": "HW DOG",
   "description": "Local hardware diagnostic system. Sniff the problem.",
-  "start_url": "./",
+  "start_url": "./diagnostic.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0B0D0F",

@@ -1,0 +1,2 @@
+# Sealed recordings must retain their exact bytes on Windows too.
+*.hdlog text eol=lf
