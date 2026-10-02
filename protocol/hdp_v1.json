@@ -49,6 +49,53 @@
       },
       "additionalProperties": false
     },
+    "error": {
+      "type": "object",
+      "required": ["pct", "abs"],
+      "properties": {
+        "pct": { "type": "number", "minimum": 0, "description": "Part proportional to the reading, in percent." },
+        "abs": { "type": "number", "minimum": 0, "description": "Fixed part, in the unit of the quantity (V or A)." }
+      },
+      "additionalProperties": false,
+      "description": "Expected maximum error: |error| <= pct % of the reading + abs."
+    },
+    "power.meter": {
+      "type": "object",
+      "required": ["type", "t", "sensor", "shunt_ohm", "v_max", "i_max", "v_res", "i_res", "rate_hz", "v_err", "i_err", "basis", "cal"],
+      "properties": {
+        "type": { "const": "power.meter" },
+        "t": { "$ref": "#/definitions/t" },
+        "sensor": { "type": "string", "minLength": 1, "description": "Sensor identity, only as verified by the device (rule 6)." },
+        "shunt_ohm": { "type": "number", "exclusiveMinimum": 0 },
+        "v_max": { "type": "number", "exclusiveMinimum": 0, "description": "Highest rail voltage measured within specification (V)." },
+        "i_max": { "type": "number", "exclusiveMinimum": 0, "description": "Full-scale current (A), either direction." },
+        "v_res": { "type": "number", "exclusiveMinimum": 0, "description": "Voltage resolution, one LSB (V)." },
+        "i_res": { "type": "number", "exclusiveMinimum": 0, "description": "Current resolution, one LSB (A)." },
+        "rate_hz": { "type": "number", "exclusiveMinimum": 0, "description": "power frames per second." },
+        "v_err": { "$ref": "#/definitions/error" },
+        "i_err": { "$ref": "#/definitions/error" },
+        "basis": { "enum": ["DATASHEET", "CALIBRATION"], "description": "Where v_err / i_err come from: worst case from the datasheets, or measured against a reference instrument." },
+        "cal": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["date", "ref", "v_gain", "i_gain", "i_offset"],
+              "properties": {
+                "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+                "ref": { "type": "string", "minLength": 1, "description": "Reference instrument the device was compared against." },
+                "v_gain": { "type": "number" },
+                "i_gain": { "type": "number" },
+                "i_offset": { "type": "number", "description": "A, added after the gain." }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "What the power numbers are worth. Sent when the sensor is verified, and in reply to hello. Diagnostic measurement, not certified metrology."
+    },
     "usb.attach": {
       "type": "object",
       "required": ["type", "t", "speed", "vid", "pid", "cls", "power"],
@@ -195,6 +242,7 @@
       "oneOf": [
         { "$ref": "#/definitions/hello" },
         { "$ref": "#/definitions/power" },
+        { "$ref": "#/definitions/power.meter" },
         { "$ref": "#/definitions/usb.attach" },
         { "$ref": "#/definitions/usb.detach" },
         { "$ref": "#/definitions/uart.config" },
@@ -231,6 +279,23 @@
         },
         { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "i2c.scan" } }, "additionalProperties": false },
         { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "net.refresh" } }, "additionalProperties": false },
+        {
+          "type": "object",
+          "required": ["cmd", "date", "ref", "v_gain", "i_gain", "i_offset", "v_err", "i_err"],
+          "properties": {
+            "cmd": { "const": "meter.cal" },
+            "date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "ref": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "v_gain": { "type": "number", "minimum": 0.9, "maximum": 1.1 },
+            "i_gain": { "type": "number", "minimum": 0.9, "maximum": 1.1 },
+            "i_offset": { "type": "number", "minimum": -0.05, "maximum": 0.05 },
+            "v_err": { "type": "number", "minimum": 0, "description": "Largest residual seen against the reference (V)." },
+            "i_err": { "type": "number", "minimum": 0, "description": "Largest residual seen against the reference (A)." }
+          },
+          "additionalProperties": false,
+          "description": "Store a calibration on the device. It answers with power.meter."
+        },
+        { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "meter.clear" } }, "additionalProperties": false },
         {
           "type": "object",
           "required": ["cmd", "id", "target", "tests"],

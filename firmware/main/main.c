@@ -28,6 +28,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "hdp/hdp.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
@@ -225,6 +226,31 @@ static void drain_uart(hdp_device_t *d) {
     }
 }
 
+/* Calibration kept in NVS, so a calibrated board stays calibrated. */
+#define CAL_NS "hwdog"
+#define CAL_KEY "cal"
+
+static int cal_load(void *ctx, hdp_cal_t *out) {
+    (void)ctx;
+    nvs_handle_t h;
+    if (nvs_open(CAL_NS, NVS_READONLY, &h) != ESP_OK) return -1;
+    size_t len = sizeof *out;
+    esp_err_t err = nvs_get_blob(h, CAL_KEY, out, &len);
+    nvs_close(h);
+    return err == ESP_OK && len == sizeof *out && out->valid ? 0 : -1;
+}
+
+static int cal_save(void *ctx, const hdp_cal_t *cal) {
+    (void)ctx;
+    nvs_handle_t h;
+    if (nvs_open(CAL_NS, NVS_READWRITE, &h) != ESP_OK) return -1;
+    esp_err_t err = cal->valid ? nvs_set_blob(h, CAL_KEY, cal, sizeof *cal) : nvs_erase_key(h, CAL_KEY);
+    if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK; /* nothing to erase */
+    if (err == ESP_OK) err = nvs_commit(h);
+    nvs_close(h);
+    return err == ESP_OK ? 0 : -1;
+}
+
 void app_main(void) {
     buses_start();
     bool wifi = wifi_start();
@@ -244,6 +270,7 @@ void app_main(void) {
         .sample_ms = 20,
         .net_ms = 2000,
         .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C | (wifi ? HDP_CAP_NET : 0),
+        .shunt_tol_pct = (float)CONFIG_HWDOG_SHUNT_TOL_PERMILLE / 10.0f,
     };
     hdp_hal_t hal = {
         .now_ms = now_ms,
@@ -255,6 +282,8 @@ void app_main(void) {
         .uart_set_baud = uart_baud,
         .uart_write = uart_tx,
         .net_status = wifi ? net_status : NULL,
+        .cal_load = cal_load,
+        .cal_save = cal_save,
     };
     static hdp_device_t dev;
     hdp_init(&dev, &cfg, &hal);

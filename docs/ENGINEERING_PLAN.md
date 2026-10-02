@@ -581,7 +581,7 @@ LVL   NAME                                  STATUS
 50    .hdlog becomes a CASE                  PARTIAL   format + test suite
 55    dogd, the local backbone               DONE      gate passed, real ESP32 at 60
 60    first physical Hardware Dog            PARTIAL   core PASS on PC + CI, board bring-up pending
-65    calibration + truthfulness             PLANNED
+65    calibration + truthfulness             PARTIAL   software PASS, reference comparison on boards pending
 70    real fault lab                         PLANNED
 75    professional reports                   PARTIAL   TXT + JSON
 80    network + I2C on hardware              PLANNED
@@ -707,13 +707,30 @@ GATE   SIMULATOR   PASS
        REPLAY      PASS
 ```
 
-### LVL 65 — CALIBRATION + TRUTHFULNESS
+### LVL 65 — CALIBRATION + TRUTHFULNESS     PARTIAL
 
 Every measurement exposes its range, sample rate, expected accuracy,
 resolution, calibration date, sensor identity, firmware and limitations,
 and says: `DIAGNOSTIC MEASUREMENT, NOT CERTIFIED METROLOGY`. Several
 INA226 boards are tested against a reference instrument: the goal is to
 know exactly how far the numbers can be trusted.
+
+```text
+[ OK ] power.meter (PROTOCOL.md): sensor, shunt, range, resolution, rate,
+       expected error and its basis (DATASHEET | CALIBRATION), calibration
+       date and reference instrument
+[ OK ] firmware: datasheet worst case from the INA226 figures and the
+       shunt tolerance; meter.cal / meter.clear, stored in NVS, applied to
+       every sample, refused out of range (C tests, firmware.test.ts)
+[ OK ] interface: POWER -> MEASUREMENT, +- next to every live reading,
+       "accuracy unknown" when a device declares nothing
+[ OK ] calibration from the palette: meter point / meter cal, least-squares
+       fit, largest residual declared (calibration.test.ts)
+[ OK ] reports: MEASUREMENT section and the metrology line in every format
+[ -- ] GATE: several INA226 boards against a reference instrument,
+       declared error vs measured error. Needs the boards (FIRMWARE.md,
+       bring-up step 4).
+```
 
 ### LVL 70 — REAL FAULT LAB
 

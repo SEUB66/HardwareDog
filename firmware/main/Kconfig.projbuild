@@ -44,4 +44,8 @@ menu "Hardware Dog"
         int "Current full scale, mA (shunt x full scale must stay under 81.92 mV)"
         default 800
 
+    config HWDOG_SHUNT_TOL_PERMILLE
+        int "Shunt resistor tolerance, in 0.1 % (1 % R100 boards: 10). Sets the declared current accuracy until calibration."
+        default 10
+
 endmenu

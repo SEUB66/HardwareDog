@@ -1,6 +1,9 @@
 import { amps, clock, volts, watts } from '../../core/format';
 import type { System } from '../../core/system';
+import { uncertainty } from '../../core/calibration';
 import { Empty } from '../components/Empty';
+import { KV } from '../components/KV';
+import { Panel } from '../components/Panel';
 import { SignalChart, type ChartMarker } from '../components/SignalChart';
 import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
@@ -23,12 +26,18 @@ export function Power({ system }: { system: System }) {
   }
   const avgV = p.sampleCount ? p.voltageSum / p.sampleCount : null;
 
-  const metric = (label: string, value: string, live = true) => (
+  const m = system.meter;
+  // What the reading is worth, next to it: +- the expected error.
+  const pmV = (v: number | null) => (m && v !== null ? `± ${(uncertainty(v, m.v_err) * 1000).toFixed(1)} mV` : undefined);
+  const pmI = (i: number | null) => (m && i !== null ? `± ${(uncertainty(i, m.i_err) * 1000).toFixed(2)} mA` : undefined);
+
+  const metric = (label: string, value: string, live = true, pm?: string) => (
     <div class="metric">
       <div class="label">
         <Hint text={explain(label, 'POWER')}>{label}</Hint>
       </div>
       <div class={`value${live ? '' : ' static'}`}>{value}</div>
+      {pm && <div class="pm">{pm}</div>}
     </div>
   );
 
@@ -38,8 +47,8 @@ export function Power({ system }: { system: System }) {
         POWER MONITOR <span class="sub">target supply rail</span>
       </h1>
       <div class="metrics" style={{ marginBottom: 12 }}>
-        {metric('VOLTAGE', volts(p.voltage, 3))}
-        {metric('CURRENT', amps(p.current))}
+        {metric('VOLTAGE', volts(p.voltage, 3), true, pmV(p.voltage))}
+        {metric('CURRENT', amps(p.current), true, pmI(p.current))}
         {metric('POWER', p.voltage !== null && p.current !== null ? watts(p.voltage * p.current) : '--')}
         {metric('PEAK CURRENT', amps(p.peakCurrent), false)}
         {metric('MIN VOLTAGE', volts(p.minVoltage, 3), false)}
@@ -60,6 +69,26 @@ export function Power({ system }: { system: System }) {
         </div>
         {metric('DROPS', String(p.dropCount), false)}
       </div>
+
+      <Panel title="MEASUREMENT" scope="METER" aside={m ? m.basis : 'NOT DECLARED'}>
+        {m ? (
+          <KV
+            rows={[
+              ['SENSOR', `${m.sensor}, shunt ${m.shunt_ohm} ohm`],
+              ['RANGE', `0-${m.v_max} V / ±${m.i_max} A`],
+              ['RESOLUTION', `${(m.v_res * 1000).toFixed(2)} mV / ${(m.i_res * 1e6).toFixed(1)} µA`],
+              ['RATE', `${m.rate_hz} samples/s`],
+              ['VOLTAGE ERROR', `±${m.v_err.pct}% + ${(m.v_err.abs * 1000).toFixed(1)} mV`],
+              ['CURRENT ERROR', `±${m.i_err.pct}% + ${(m.i_err.abs * 1000).toFixed(2)} mA`],
+              ['BASIS', m.cal ? `CALIBRATED ${m.cal.date} / ${m.cal.ref}` : 'DATASHEET, NOT CALIBRATED'],
+              ...(system.calPoints.length ? ([['CAL POINTS', `${system.calPoints.length} waiting`]] as [string, string][]) : []),
+            ]}
+          />
+        ) : (
+          <p class="note warn">This device has not declared what its numbers are worth: accuracy unknown.</p>
+        )}
+        <p class="note">DIAGNOSTIC MEASUREMENT, NOT CERTIFIED METROLOGY</p>
+      </Panel>
 
       {p.samples.length === 0 ? (
         <Empty title="NO SIGNAL" hint="Waiting for power samples from the device." />

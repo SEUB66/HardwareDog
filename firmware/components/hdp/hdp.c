@@ -255,6 +255,46 @@ static void send_net(hdp_device_t *d) {
 
 /* ------------------------------------------------------------ power */
 
+/* Worst case from the INA226 datasheet (SBOS547): bus gain error 0.1 %,
+   bus offset 7.5 mV, shunt gain error 0.1 %, shunt offset 10 uV; plus one
+   LSB of quantization and the shunt resistor tolerance, which dominates
+   the current error until the board is calibrated. */
+#define INA_V_MAX 36.0f
+#define INA_SHUNT_FS_V 0.08192f
+#define INA_GAIN_ERR_PCT 0.1f
+#define INA_BUS_OFFSET_V 0.0075f
+#define INA_SHUNT_OFFSET_V 0.00001f
+
+static void send_meter(hdp_device_t *d) {
+    if (!d->ina_ok) return;
+    float shunt = d->cfg.shunt_ohm;
+    float i_max = INA_SHUNT_FS_V / shunt;
+    if (d->cfg.max_current_a < i_max) i_max = d->cfg.max_current_a;
+    line_t l;
+    begin(d, &l, "power.meter");
+    puts_(&l, ",\"sensor\":\"INA226\"");
+    putf(&l, ",\"shunt_ohm\":%.6g,\"v_max\":%.6g,\"i_max\":%.6g", (double)shunt, (double)INA_V_MAX, (double)i_max);
+    putf(&l, ",\"v_res\":%.6g,\"i_res\":%.6g", (double)INA_BUS_LSB_V, (double)d->current_lsb);
+    putf(&l, ",\"rate_hz\":%.6g", 1000.0 / (double)d->cfg.sample_ms);
+    const hdp_cal_t *c = &d->cal;
+    if (c->valid) {
+        /* Measured against the reference: the residual, plus one LSB. */
+        putf(&l, ",\"v_err\":{\"pct\":0,\"abs\":%.6g}", (double)(c->v_err + INA_BUS_LSB_V));
+        putf(&l, ",\"i_err\":{\"pct\":0,\"abs\":%.6g}", (double)(c->i_err + d->current_lsb));
+        puts_(&l, ",\"basis\":\"CALIBRATION\",\"cal\":{\"date\":");
+        put_cstr(&l, c->date);
+        puts_(&l, ",\"ref\":");
+        put_cstr(&l, c->ref);
+        putf(&l, ",\"v_gain\":%.7g,\"i_gain\":%.7g,\"i_offset\":%.7g}", (double)c->v_gain, (double)c->i_gain, (double)c->i_offset);
+    } else {
+        putf(&l, ",\"v_err\":{\"pct\":%.6g,\"abs\":%.6g}", (double)INA_GAIN_ERR_PCT, (double)(INA_BUS_OFFSET_V + INA_BUS_LSB_V));
+        putf(&l, ",\"i_err\":{\"pct\":%.6g,\"abs\":%.6g}", (double)(INA_GAIN_ERR_PCT + d->cfg.shunt_tol_pct),
+             (double)(INA_SHUNT_OFFSET_V / shunt + d->current_lsb));
+        puts_(&l, ",\"basis\":\"DATASHEET\",\"cal\":null");
+    }
+    send(d, &l);
+}
+
 static void ina_start(hdp_device_t *d) {
     uint16_t man = 0, die = 0;
     uint8_t a = d->cfg.ina_addr;
@@ -279,6 +319,8 @@ static void ina_start(hdp_device_t *d) {
     snprintf(msg, sizeof msg, "INA226 at 0x%02X verified (manufacturer 0x5449, die 0x%04X), shunt %.3f ohm, current LSB %.1f uA", a, die,
              (double)d->cfg.shunt_ohm, (double)(d->current_lsb * 1e6f));
     send_log(d, "info", msg);
+    if (d->hal.cal_load && d->hal.cal_load(d->hal.ctx, &d->cal) != 0) memset(&d->cal, 0, sizeof d->cal);
+    send_meter(d);
 }
 
 static void sample_power(hdp_device_t *d) {
@@ -292,6 +334,10 @@ static void sample_power(hdp_device_t *d) {
     }
     float v = (float)bus * INA_BUS_LSB_V;
     float i = (float)(int16_t)cur * d->current_lsb;
+    if (d->cal.valid) {
+        v *= d->cal.v_gain;
+        i = i * d->cal.i_gain + d->cal.i_offset;
+    }
     line_t l;
     begin(d, &l, "power");
     putf(&l, ",\"v\":%.3f,\"i\":%.4f", (double)v, (double)i);
@@ -546,6 +592,47 @@ static void probe(hdp_device_t *d, const kv_t *id, const kv_t *tests) {
     send(d, &l);
 }
 
+static bool is_date(const char *s) {
+    if (strlen(s) != 10 || s[4] != '-' || s[7] != '-') return false;
+    for (int k = 0; k < 10; k++)
+        if (k != 4 && k != 7 && (s[k] < '0' || s[k] > '9')) return false;
+    return true;
+}
+
+/* Store a calibration. Checked like the schema: a bad one changes nothing. */
+static void meter_cal(hdp_device_t *d, const kv_t *kvs, int n) {
+    const kv_t *date = field(kvs, n, "date", V_STR), *ref = field(kvs, n, "ref", V_STR);
+    const kv_t *vg = field(kvs, n, "v_gain", V_NUM), *ig = field(kvs, n, "i_gain", V_NUM), *io = field(kvs, n, "i_offset", V_NUM);
+    const kv_t *ve = field(kvs, n, "v_err", V_NUM), *ie = field(kvs, n, "i_err", V_NUM);
+    if (!d->ina_ok) {
+        reject(d, "meter.cal: no verified power sensor");
+        return;
+    }
+    if (!date || !ref || !vg || !ig || !io || !ve || !ie) {
+        reject(d, "meter.cal needs date, ref, v_gain, i_gain, i_offset, v_err, i_err");
+        return;
+    }
+    if (!is_date(date->str) || ref->str_len == 0 || ref->str_len > 64 || vg->num < 0.9 || vg->num > 1.1 || ig->num < 0.9 || ig->num > 1.1 ||
+        fabs(io->num) > 0.05 || ve->num < 0 || ie->num < 0) {
+        reject(d, "meter.cal: value out of range, calibration unchanged");
+        return;
+    }
+    hdp_cal_t c;
+    memset(&c, 0, sizeof c);
+    c.valid = true;
+    memcpy(c.date, date->str, 10);
+    memcpy(c.ref, ref->str, ref->str_len);
+    c.v_gain = (float)vg->num;
+    c.i_gain = (float)ig->num;
+    c.i_offset = (float)io->num;
+    c.v_err = (float)ve->num;
+    c.i_err = (float)ie->num;
+    d->cal = c;
+    if (d->hal.cal_save && d->hal.cal_save(d->hal.ctx, &c) == 0) send_log(d, "info", "calibration stored");
+    else send_log(d, "warn", "calibration applied but not stored: lost at reboot");
+    send_meter(d);
+}
+
 static void handle_command(hdp_device_t *d, const char *line, size_t len) {
     static kv_t kvs[MAX_KEYS]; /* large: not on the stack */
     memset(kvs, 0, sizeof kvs);
@@ -564,6 +651,7 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         send_hello(d);
         send_uart_config(d);
         send_net(d);
+        send_meter(d);
     } else if (!strcmp(c, "uart.config")) {
         const kv_t *b = field(kvs, n, "baud", V_NUM);
         if (!b || b->num < 300 || b->num > 4000000 || b->num != floor(b->num)) {
@@ -589,6 +677,17 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         scan_i2c(d);
     } else if (!strcmp(c, "net.refresh")) {
         send_net(d);
+    } else if (!strcmp(c, "meter.cal")) {
+        meter_cal(d, kvs, n);
+    } else if (!strcmp(c, "meter.clear")) {
+        if (!d->ina_ok) {
+            reject(d, "meter.clear: no verified power sensor");
+            return;
+        }
+        memset(&d->cal, 0, sizeof d->cal);
+        if (d->hal.cal_save) d->hal.cal_save(d->hal.ctx, &d->cal);
+        send_log(d, "info", "calibration removed: datasheet accuracy");
+        send_meter(d);
     } else if (!strcmp(c, "usb.enumerate")) {
         send_log(d, "warn", "usb.enumerate: this hardware revision has no USB host port");
     } else if (!strcmp(c, "probe")) {
