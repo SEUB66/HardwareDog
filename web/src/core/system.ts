@@ -17,6 +17,7 @@ import type {
   Source,
   Thresholds,
   TransportKind,
+  UsbDescriptor,
   UsbState,
 } from './types';
 import { DEFAULT_SETTINGS, THRESHOLD_KEYS, thresholdsOf } from './types';
@@ -146,6 +147,13 @@ const emptyNet = (): NetState => ({
   packetLoss: null,
   updatedAt: null,
 });
+
+/** One USB device, as the trace names it: VID:PID and what it says it is. */
+const usbName = (d: UsbDescriptor | null): string => {
+  if (!d) return 'unknown device';
+  const id = (n: number) => n.toString(16).toUpperCase().padStart(4, '0');
+  return [`${id(d.vid)}:${id(d.pid)}`, d.manufacturer, d.product].filter(Boolean).join(' ');
+};
 
 const statusSeverity = (s: CheckStatus): Severity => (s === 'PASS' ? 'PASS' : s === 'FAIL' ? 'FAIL' : s === 'WARN' ? 'WARN' : 'INFO');
 
@@ -654,7 +662,7 @@ export class System {
       u.connections++;
       this.remember(this.facts.attaches, t);
       this.facts.unenumerated.since = null;
-      this.log(t, 'USB', 'INFO', 'device connected', `${f.speed} SPEED`);
+      this.log(t, 'USB', 'INFO', 'device connected', `${usbName(u.descriptor)} / ${f.speed} SPEED`);
     }
     this.log(t, 'USB', 'PASS', 'descriptor received', `VID ${hex(f.vid)} / PID ${hex(f.pid)} ${f.cls}`);
   }
@@ -666,7 +674,8 @@ export class System {
     u.disconnects++;
     u.lastSeenAt = t;
     u.lastDetachAt = t;
-    this.log(t, 'USB', 'WARN', 'device disconnected');
+    // Same device every time: the name says so, it is not a new one.
+    this.log(t, 'USB', 'WARN', 'device disconnected', usbName(u.descriptor));
 
     // Rule: USB / power correlation.
     const window = this.settings.correlationWindowMs;
