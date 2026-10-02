@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
  */
 
 const sources = import.meta.glob('../src/**/*.{ts,tsx,css}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const html = import.meta.glob('../index.html', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const html = import.meta.glob('../{index,diagnostic}.html', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
 const FORBIDDEN: [RegExp, string][] = [
   [/\bfetch\s*\(/, 'fetch()'],
@@ -51,7 +51,7 @@ describe('LAW: the cloud is never required', () => {
     const text = sources[LOCAL_DAEMON]!;
     const urls = text.split('\n').filter((l) => /(https?|wss?):\/\//.test(l));
     expect(urls).toHaveLength(1);
-    expect(urls[0]).toMatch(LOOPBACK_URL);
+    expect(urls[0].trimEnd()).toMatch(LOOPBACK_URL);
     // every request goes to the base URL, never to an address built elsewhere
     for (const call of text.match(/fetch\([^,)]*/g) ?? []) expect(call).toMatch(/fetch\((url|`\$\{base\}\/v1\/)/);
     const sockets = text.split('\n').filter((l) => l.includes('new WebSocket('));
@@ -59,9 +59,12 @@ describe('LAW: the cloud is never required', () => {
     expect(sockets[0]).toContain('new WebSocket(`${this.base.replace(');
   });
 
-  it('index.html loads nothing from a remote host', () => {
-    const page = Object.values(html)[0]!;
-    expect(page).not.toMatch(/(src|href)\s*=\s*["']https?:/);
-    expect(page).not.toMatch(/(src|href)\s*=\s*["']\/\//);
-  });
+  for (const [path, page] of Object.entries(html)) {
+    it(`${path} loads nothing from a remote host`, () => {
+      // A user-activated repository link is navigation, not a runtime dependency.
+      const resources = page.replace(/<a\b[^>]*>/gi, '');
+      expect(resources).not.toMatch(/(src|href)\s*=\s*["']https?:/);
+      expect(resources).not.toMatch(/(src|href)\s*=\s*["']\/\//);
+    });
+  }
 });

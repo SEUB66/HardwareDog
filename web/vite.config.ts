@@ -14,6 +14,7 @@ export default defineConfig({
     outDir: 'dist',
     assetsInlineLimit: 0,
     reportCompressedSize: true,
+    rollupOptions: { input: { home: 'index.html', diagnostic: 'diagnostic.html' } },
   },
   test: {
     include: ['test/**/*.test.ts'],
