@@ -12,7 +12,7 @@
  *
  *   hwdog-host [--scenario healthy|sag|serial|noina|wrongchip|i2cflaky|nopullup|router]
  *              [--seconds N] [--fast] [--seed N]
- *              [--tcp PORT] [--wait-hello N]
+ *              [--tcp PORT] [--wait-hello N] [--chip HEX12]
  */
 #define _POSIX_C_SOURCE 200809L
 #include <arpa/inet.h>
@@ -305,6 +305,7 @@ int main(int argc, char **argv) {
     sim_t s = {.scenario = HEALTHY, .seed = 4, .out_fd = 1, .in_fd = 0, .shunt_ohm = 0.1f, .baud = 115200, .config = 0x4127};
     uint32_t seconds = 30;
     int port = 0, wait_hello = 0;
+    const char *chip = NULL; /* a simulated board has no factory id unless given one */
     for (int k = 1; k < argc; k++) {
         const char *a = argv[k];
         const char *v = k + 1 < argc ? argv[k + 1] : "";
@@ -313,6 +314,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--seed")) s.seed = (uint32_t)atoi(v) | 1u, k++;
         else if (!strcmp(a, "--tcp")) port = atoi(v), k++;
         else if (!strcmp(a, "--wait-hello")) wait_hello = atoi(v), k++;
+        else if (!strcmp(a, "--chip")) chip = v, k++;
         else if (!strcmp(a, "--scenario")) {
             const char *names[] = {"healthy", "sag", "serial", "noina", "wrongchip", "i2cflaky", "nopullup", "router"};
             bool found = false;
@@ -324,14 +326,14 @@ int main(int argc, char **argv) {
             }
             k++;
         } else {
-            fprintf(stderr, "usage: hwdog-host [--scenario NAME] [--seconds N] [--fast] [--seed N] [--tcp PORT] [--wait-hello N]\n");
+            fprintf(stderr, "usage: hwdog-host [--scenario NAME] [--seconds N] [--fast] [--seed N] [--tcp PORT] [--wait-hello N] [--chip HEX12]\n");
             return 2;
         }
     }
     if (port) s.out_fd = s.in_fd = listen_once(port);
     clock_gettime(CLOCK_MONOTONIC, &s.t0);
 
-    hdp_config_t cfg = {.device = "HD-HOST01", .rev = "HOST", .fw = "0.1.0", .ina_addr = 0x40, .shunt_ohm = 0.1f, .max_current_a = 0.8f, .sample_ms = 20, .net_ms = 2000,
+    hdp_config_t cfg = {.device = "HD-HOST01", .chip = chip, .rev = "HOST", .fw = "0.1.0", .ina_addr = 0x40, .shunt_ohm = 0.1f, .max_current_a = 0.8f, .sample_ms = 20, .net_ms = 2000,
                        .caps = HDP_CAP_POWER | HDP_CAP_UART | HDP_CAP_I2C | HDP_CAP_NET | HDP_CAP_PROBE, .shunt_tol_pct = 1.0f,
                        /* the I2C scenarios model a board configured to watch its bus from boot */
                        .i2c_watch_ms = s.scenario == I2CFLAKY || s.scenario == NOPULLUP ? 3000 : 0};
@@ -348,6 +350,15 @@ int main(int argc, char **argv) {
     hdp_start(&d);
     uint32_t last = 0;
     bool open = true;
+    /* A scripted fast run (--fast, commands piped on stdin): every command is
+     * read at t=0, up to the end of input. Device time runs faster than any
+     * host can write, so polling would race the script and drop commands. */
+    if (s.fast && !port && !isatty(s.in_fd)) {
+        char buf[512];
+        ssize_t n;
+        while ((n = read(s.in_fd, buf, sizeof buf)) > 0) hdp_host_input(&d, buf, (size_t)n);
+        open = false;
+    }
     while (now_ms(&s) < seconds * 1000) {
         uint32_t t = now_ms(&s);
         for (uint32_t u = last + 1; u <= t; u++) target_uart(&s, &d, u);
