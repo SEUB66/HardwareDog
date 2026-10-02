@@ -1,0 +1,58 @@
+name: firmware
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'firmware/**'
+      - 'protocol/**'
+      - 'web/**'
+      - 'dogd/**'
+      - '.github/workflows/firmware.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  # The firmware core on a PC: unit tests (ASan + UBSan), then the HDP v1
+  # contract and the engine, directly and through a real dogd.
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build core (host)
+        run: |
+          cmake -S firmware/host -B firmware/host/build -DCMAKE_BUILD_TYPE=Debug
+          cmake --build firmware/host/build
+      - name: unit tests
+        run: ctest --test-dir firmware/host/build --output-on-failure
+      - name: build dogd
+        working-directory: dogd
+        run: cargo build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: install interface
+        working-directory: web
+        run: npm ci
+      - name: firmware speaks HDP v1, the engine reads it, dogd is transparent
+        working-directory: web
+        run: >
+          FIRMWARE_HOST_BIN="$GITHUB_WORKSPACE/firmware/host/build/hwdog-host"
+          DOGD_BIN="$GITHUB_WORKSPACE/dogd/target/debug/dogd"
+          npx vitest run test/firmware.test.ts
+
+  # The real target: the ESP-IDF build for the ESP32-S3.
+  esp32s3:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ESP-IDF build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.1
+          target: esp32s3
+          path: firmware
