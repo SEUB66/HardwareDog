@@ -76,7 +76,11 @@ USAGE
   dogd devices [--identify]   what is plugged in, and who it is (read only);
                               --identify sends one HDP hello per port
   dogd devices --known        every device identity dogd remembers
-  dogd alias HW-ID NAME       name a device once (--clear removes the name)
+  dogd alias HW-ID NAME       a label for people (--clear removes it); it
+                              tells no look-alikes apart
+  dogd bind PORT HW-ID        the device on PORT is HW-ID: settles an
+                              ambiguity, confirms a hint (refused if their
+                              chip id, MAC or serial differ)
   dogd sessions [--data DIR]  list stored sessions (works with dogd stopped)
 
 OPTIONS (serve)

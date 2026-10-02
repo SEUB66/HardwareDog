@@ -51,8 +51,8 @@ async function spawn(bin: string, args: string[]): Promise<Child> {
 }
 
 /** Run the firmware core on a PC; commands go in on stdin, HDP comes out. */
-async function firmware(scenario: string, seconds: number, commands: string[] = []): Promise<string[]> {
-  const c = await spawn(BIN!, ['--fast', '--scenario', scenario, '--seconds', String(seconds)]);
+async function firmware(scenario: string, seconds: number, commands: string[] = [], extra: string[] = []): Promise<string[]> {
+  const c = await spawn(BIN!, ['--fast', '--scenario', scenario, '--seconds', String(seconds), ...extra]);
   let out = '';
   const text = new TextDecoder();
   c.stdout.on('data', (b) => (out += text.decode(b, { stream: true })));
@@ -135,6 +135,16 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
       for (let k = 1; k < t.length; k++) expect(t[k]).toBeGreaterThanOrEqual(t[k - 1]!); // rule 2
     });
   }
+
+  it('hello carries the 48-bit chip id when the board has one, valid against HDP v1', async () => {
+    const lines = await firmware('healthy', 2, [], ['--chip', '7cdfa13a1f2c']);
+    contract(lines);
+    const hello = decodeFrame(lines[0]!);
+    expect(hello.ok && hello.frame).toMatchObject({ type: 'hello', device: 'HD-HOST01', chip: '7cdfa13a1f2c' });
+    // Without one, nothing is invented.
+    const bare = decodeFrame((await firmware('healthy', 2))[0]!);
+    expect(bare.ok && bare.frame.type === 'hello' && 'chip' in bare.frame).toBe(false);
+  });
 
   it('answers every HDP command with valid frames, and rejects bad ones in HDP', async () => {
     const lines = await firmware('healthy', 2, [
@@ -262,5 +272,44 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     expect(sys.facts).toEqual(direct.facts);
     expect(sys.diagnoses.map((d) => [d.id, d.confidence, d.evidence])).toEqual(direct.diagnoses.map((d) => [d.id, d.confidence, d.evidence]));
     expect(sys.frameErrors).toBe(0);
+  });
+
+  it.runIf(DOGD)('identity: the same board through dogd twice, and after a restart, is one identity by its chip id', async () => {
+    type Attached = { id: string | null; strength: string | null; fingerprint: { chip_id: string | null; legacy_id: string | null } };
+    type Known = { id: string; chip_id: string | null; strength: string };
+    const data = `/tmp/dogd-id-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const once = async (): Promise<{ attached: Attached; known: Known[] }> => {
+      const port = 43000 + Math.floor(Math.random() * 2000);
+      const fw = await spawn(BIN!, ['--fast', '--scenario', 'healthy', '--seconds', '3', '--tcp', String(port), '--wait-hello', '1', '--chip', '7cdfa13a1f2c']);
+      await new Promise<void>((r) => fw.stderr.on('data', (b) => new TextDecoder().decode(b).includes('LISTEN') && r()));
+      const dogd = await spawn(DOGD!, ['serve', '--listen', '127.0.0.1:0', '--source', `tcp:127.0.0.1:${port}`, '--source-origin', 'simulated', '--data', data]);
+      try {
+        const base = await new Promise<string>((r) => {
+          let s = '';
+          dogd.stdout.on('data', (b) => {
+            s += new TextDecoder().decode(b);
+            const m = /LISTEN\s+(\S+)/.exec(s);
+            if (m) r(`http://${m[1]}`);
+          });
+        });
+        const deadline = Date.now() + 10_000;
+        for (;;) {
+          const d = (await fetch(`${base}/v1/devices`).then((r) => r.json())) as { attached: Attached[]; known: Known[] };
+          const a = d.attached.find((x) => x.fingerprint.chip_id === '7cdfa13a1f2c');
+          if (a) return { attached: a, known: d.known };
+          if (Date.now() > deadline) throw new Error('dogd never identified the firmware');
+          await new Promise((r) => setTimeout(r, 20));
+        }
+      } finally {
+        dogd.kill();
+        fw.kill();
+      }
+    };
+    const first = await once();
+    expect(first.attached.strength).toBe('EXCELLENT');
+    expect(first.attached.fingerprint.legacy_id).toBe('HD-HOST01');
+    const second = await once(); // another connection, another dogd process, same index
+    expect(second.attached.id).toBe(first.attached.id);
+    expect(second.known.filter((k) => k.chip_id === '7cdfa13a1f2c')).toHaveLength(1);
   });
 });

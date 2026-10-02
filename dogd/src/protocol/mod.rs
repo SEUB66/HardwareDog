@@ -21,6 +21,19 @@ pub struct Hello {
     pub rev: String,
     pub fw: String,
     pub proto: u64,
+    /// 48-bit factory id (12 lowercase hex: the ESP32 eFuse MAC). Absent
+    /// on devices from before it, or when it is not well formed: `device`
+    /// is 24 bits of the MAC and is not unique.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chip: Option<String>,
+}
+
+fn chip_id(v: &serde_json::Value) -> Option<String> {
+    let c = v.get("chip")?.as_str()?;
+    (c.len() == 12
+        && c.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    .then(|| c.to_string())
 }
 
 /// A `hello` frame, or None for any other line (including broken ones:
@@ -35,6 +48,7 @@ pub fn parse_hello(line: &[u8]) -> Option<Hello> {
         rev: v.get("rev")?.as_str()?.to_string(),
         fw: v.get("fw")?.as_str()?.to_string(),
         proto: v.get("proto")?.as_u64()?,
+        chip: chip_id(&v),
     })
 }
 
@@ -86,9 +100,23 @@ mod tests {
                 device: "HD-001".into(),
                 rev: "A".into(),
                 fw: "0.1.0".into(),
-                proto: 1
+                proto: 1,
+                chip: None
             }]
         );
+    }
+
+    #[test]
+    fn reads_the_48_bit_chip_id_only_when_well_formed() {
+        let hello = |chip: &str| {
+            parse_hello(format!("{{\"type\":\"hello\",\"t\":0,\"proto\":1,\"device\":\"HD-3A1F2C\",\"rev\":\"A\",\"fw\":\"1\",\"chip\":{chip}}}").as_bytes())
+                .unwrap()
+                .chip
+        };
+        assert_eq!(hello("\"7cdfa13a1f2c\""), Some("7cdfa13a1f2c".into()));
+        for bad in ["\"3a1f2c\"", "\"7CDFA13A1F2C\"", "\"7cdfa13a1f2g\"", "42"] {
+            assert_eq!(hello(bad), None, "{bad}");
+        }
     }
 
     #[test]
