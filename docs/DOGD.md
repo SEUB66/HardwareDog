@@ -94,8 +94,10 @@ Then in the interface: **SETUP → CONNECT DOGD**.
 
 ```text
 dogd status              ask a running dogd how it is
-dogd devices             list serial ports (never writes to them)
+dogd devices             what is plugged in, and who it is (never writes to a port)
 dogd devices --identify  send one HDP hello per port: HARDWARE DOG or UNKNOWN DEVICE
+dogd devices --known     every device identity dogd remembers
+dogd alias HW-ID NAME    name a device once
 dogd sessions            list stored sessions (works with dogd stopped)
 ```
 
@@ -125,7 +127,9 @@ simulated source stays labeled SIMULATED everywhere.
 ```text
 GET  /v1/health                {"status":"ok","dogd":"0.1.0","hdp":1}
 GET  /v1/link                  state, source, origin, label, device, epoch
-GET  /v1/devices               serial ports + Hardware Dogs seen
+GET  /v1/devices               attached devices and who they are, known identities
+GET  /v1/devices/events        ATTACHED / DETACHED / IDENTIFIED (?since=N)
+PUT  /v1/devices/{id}/alias    name a device once
 GET  /v1/sessions              the session index
 GET  /v1/sessions/{id}         one session
 GET  /v1/sessions/{id}/hdlog   the file, byte for byte
@@ -163,7 +167,12 @@ sessions   id, recording_id, session_label, origin, source, device_id,
            hdlog_path, stored_at
 devices    device_id, hardware_revision, firmware_version, hdp_version,
            port, first_seen, last_seen
+hw_devices / hw_events   hardware identities and plug events (index v2):
+           IDENTITY.md
 ```
+
+Device identity (what is plugged in, is it the same as last time) has its
+own page: [`IDENTITY.md`](IDENTITY.md). A port name is never an identity.
 
 - dogd stores hdlog v2 files, under their own recording id only.
 - It checks each file with the same integrity algorithm as the interface
