@@ -1,0 +1,52 @@
+{
+  "case": 1,
+  "id": "HD-C005",
+  "title": "DNS FAILURE (simulator HD-T003)",
+  "recording": {
+    "file": "HD-C005.hdlog",
+    "sha256": "805b446b63b40ab2ccdd44b406cf1f48bd587f1c0764dee824134b6d4853d1d0",
+    "recording": "43a28aacac018b2e4fafac54a299a2db",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "The configured DNS server does not answer; the Internet is reachable by IP.",
+    "hardware": "None: built-in simulator, scenario HD-T003, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "DNS_FAILURE",
+        "confidence": "HIGH",
+        "evidence": [
+          4,
+          113,
+          215,
+          316,
+          418,
+          519,
+          621,
+          723,
+          824,
+          926,
+          1027,
+          1129,
+          1230,
+          1331,
+          1433,
+          1534
+        ]
+      }
+    ]
+  }
+}

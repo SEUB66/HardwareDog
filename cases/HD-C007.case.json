@@ -1,0 +1,40 @@
+{
+  "case": 1,
+  "id": "HD-C007",
+  "title": "TARGET RESET LOOP (simulator HD-T006)",
+  "recording": {
+    "file": "HD-C007.hdlog",
+    "sha256": "dd3a4e1bc5e81c9925b9e957a82fb11b0950b29e63fe6cd2723468d32ca0a5be",
+    "recording": "f2c0cfed1f322d58e535dc0746b8cec3",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "Firmware hangs and the task watchdog reboots the target every few seconds.",
+    "hardware": "None: built-in simulator, scenario HD-T006, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 5,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "TARGET_RESET_LOOP",
+        "confidence": "HIGH",
+        "evidence": [
+          360,
+          648,
+          1010,
+          1297
+        ]
+      }
+    ]
+  }
+}

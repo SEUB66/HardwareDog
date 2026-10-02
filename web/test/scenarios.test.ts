@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SCENARIOS, SCENARIO_IDS } from '../src/core/scenarios';
+import type { Confidence, DiagnosisId } from '../src/core/diagnostics';
 import { runScenario } from './helpers';
 
 /**
@@ -24,11 +25,14 @@ describe('reliability matrix', () => {
     });
   }
 
-  it('reaches HIGH confidence on every fault within a 90 s session', async () => {
+  it('reaches its highest confidence on every fault within a 90 s session', async () => {
+    // SUPPLY SAG never goes above MEDIUM (docs/DIAGNOSTICS.md): the target
+    // survived every sag, so how much it matters is not proven.
+    const ceiling: Partial<Record<DiagnosisId, Confidence>> = { SUPPLY_SAG: 'MEDIUM' };
     for (const id of SCENARIO_IDS) {
       if (SCENARIOS[id].expect.length === 0) continue;
       const { diagnoses } = await runScenario(id, 3);
-      for (const d of diagnoses) expect(`${id} ${d.id} ${d.confidence}`).toBe(`${id} ${d.id} HIGH`);
+      for (const d of diagnoses) expect(`${id} ${d.id} ${d.confidence}`).toBe(`${id} ${d.id} ${ceiling[d.id] ?? 'HIGH'}`);
     }
   });
 });

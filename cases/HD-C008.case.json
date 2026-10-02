@@ -1,0 +1,46 @@
+{
+  "case": 1,
+  "id": "HD-C008",
+  "title": "UNSTABLE NETWORK (simulator HD-T007)",
+  "recording": {
+    "file": "HD-C008.hdlog",
+    "sha256": "fffba644565a748bd9ea5449eafc6b396a02cb3a872447ae3063f4ca8fe17608",
+    "recording": "55fd2b57f06d0ec48765eb9d88bf2b16",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "Weak Wi-Fi: every layer answers, but latency swings and packets drop.",
+    "hardware": "None: built-in simulator, scenario HD-T007, seed 1, 30 s. Origin SIMULATED."
+  },
+  "ruleset": 2,
+  "expect": {
+    "facts": {
+      "undervoltage": 0,
+      "overcurrent": 0,
+      "usbAttaches": 1,
+      "usbDisconnects": 0,
+      "disconnectsAfterDrop": 0,
+      "targetResets": 1,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "NETWORK_UNSTABLE",
+        "confidence": "HIGH",
+        "evidence": [
+          621,
+          723,
+          824,
+          926,
+          1027,
+          1129,
+          1230,
+          1331,
+          1433,
+          1534
+        ]
+      }
+    ]
+  }
+}

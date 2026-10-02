@@ -37,6 +37,8 @@ export interface CaseFile {
   id: string;
   title: string;
   recording: { file: string; sha256: string; recording: string; origin: Origin };
+  /** What happened, on what hardware, in words. Optional; never affects the check. */
+  context?: CaseContext;
   /** Ruleset that produced the expectation. */
   ruleset: number;
   expect: {
@@ -45,6 +47,16 @@ export interface CaseFile {
     diagnoses: { id: DiagnosisId; confidence: Confidence; evidence?: number[] }[];
   };
 }
+
+export interface CaseContext {
+  /** What went wrong, as the technician saw it. */
+  description: string;
+  /** Board, target, supply, cable, network: what a reader needs to reproduce it. */
+  hardware: string;
+  notes?: string;
+}
+
+const CONTEXT_MAX = 4000;
 
 export function factSummary(sys: System): FactSummary {
   const f = sys.facts;
@@ -69,7 +81,7 @@ export async function replayRecording(recording: Recording): Promise<System> {
 }
 
 /** The case a replayed recording supports, as the engine sees it now. */
-export function caseFrom(sys: System, recording: Recording, fields: { id: string; title: string; file: string }): CaseFile {
+export function caseFrom(sys: System, recording: Recording, fields: { id: string; title: string; file: string; context?: CaseContext }): CaseFile {
   const integrity = recording.integrity;
   if (!integrity || (integrity.status !== 'VERIFIED' && integrity.status !== 'RECOVERED')) {
     throw new Error(`a case needs a finalized, intact recording (this one is ${integrity?.status ?? 'not from a file'})`);
@@ -79,6 +91,7 @@ export function caseFrom(sys: System, recording: Recording, fields: { id: string
     id: fields.id,
     title: fields.title,
     recording: { file: fields.file, sha256: integrity.fileSha256, recording: recording.header.recording, origin: recording.header.origin },
+    ...(fields.context ? { context: fields.context } : {}),
     ruleset: RULESET_VERSION,
     expect: {
       facts: factSummary(sys),
@@ -91,6 +104,13 @@ export function parseCase(text: string): CaseFile {
   const c = JSON.parse(text) as CaseFile;
   if (c.case !== CASE_VERSION) throw new Error(`not a case v${CASE_VERSION} file`);
   if (!/^[0-9a-f]{64}$/.test(c.recording?.sha256 ?? '')) throw new Error('case: recording.sha256 missing');
+  if (c.context !== undefined) {
+    const x = c.context as unknown as Record<string, unknown>;
+    for (const k of ['description', 'hardware'] as const) {
+      if (typeof x[k] !== 'string' || (x[k] as string).length > CONTEXT_MAX) throw new Error(`case: context.${k} must be text (${CONTEXT_MAX} characters at most)`);
+    }
+    if (x['notes'] !== undefined && (typeof x['notes'] !== 'string' || x['notes'].length > CONTEXT_MAX)) throw new Error('case: context.notes must be text');
+  }
   for (const d of c.expect?.diagnoses ?? []) {
     if (!(DIAGNOSIS_IDS as readonly string[]).includes(d.id)) throw new Error(`case: unknown diagnosis ${d.id}`);
   }

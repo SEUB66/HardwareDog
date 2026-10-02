@@ -7,6 +7,7 @@ import { sha256 } from '../src/core/sha256';
 import { SimulatedDevice } from '../src/core/simulator';
 import { System, memoryStore } from '../src/core/system';
 import { thresholdsOf } from '../src/core/types';
+import { DIAGNOSIS_IDS } from '../src/core/diagnostics';
 
 /**
  * cases/*.hdlog + cases/*.case.json: recorded incidents kept as regression
@@ -21,6 +22,18 @@ const SEEDS: { id: string; scenario: ScenarioId; seed: number; seconds: number }
   { id: 'HD-C001', scenario: 'HD-T000', seed: 1, seconds: 30 },
   { id: 'HD-C002', scenario: 'HD-T001', seed: 1, seconds: 30 },
   { id: 'HD-C003', scenario: 'HD-T005', seed: 1, seconds: 30 },
+  // LVL 45 gate: one case per diagnosis.
+  { id: 'HD-C004', scenario: 'HD-T002', seed: 1, seconds: 30 },
+  { id: 'HD-C005', scenario: 'HD-T003', seed: 1, seconds: 30 },
+  { id: 'HD-C006', scenario: 'HD-T004', seed: 1, seconds: 30 },
+  { id: 'HD-C007', scenario: 'HD-T006', seed: 1, seconds: 30 },
+  { id: 'HD-C008', scenario: 'HD-T007', seed: 1, seconds: 30 },
+  { id: 'HD-C009', scenario: 'HD-T008', seed: 1, seconds: 30 },
+  { id: 'HD-C010', scenario: 'HD-T009', seed: 1, seconds: 30 },
+  { id: 'HD-C011', scenario: 'HD-T010', seed: 1, seconds: 30 },
+  { id: 'HD-C012', scenario: 'HD-T011', seed: 1, seconds: 30 },
+  { id: 'HD-C013', scenario: 'HD-T012', seed: 1, seconds: 30 },
+  { id: 'HD-C014', scenario: 'HD-T013', seed: 1, seconds: 40 },
 ];
 
 /** 2026-09-30 14:21:00 UTC, the date in the design spec. */
@@ -57,16 +70,28 @@ async function recordSeed(s: (typeof SEEDS)[number]): Promise<string> {
 }
 
 describe('cases', () => {
-  it.runIf(UPDATE)('regenerates the seed cases', async () => {
-    const fs = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { writeFileSync(path: URL, data: string): void };
+  it.runIf(UPDATE)('writes the seed cases that do not exist yet', async () => {
+    const fs = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { writeFileSync(path: URL, data: string): void; existsSync(path: URL): boolean };
     for (const s of SEEDS) {
+      // A recording is evidence: once written, never rewritten (PROTOCOL.md, compatibility).
+      if (fs.existsSync(new URL(`../../cases/${s.id}.hdlog`, import.meta.url))) continue;
       const text = await recordSeed(s);
       const recording = parseHdlog(text);
       const sys = await replayRecording(recording);
-      const c = caseFrom(sys, recording, { id: s.id, title: `${SCENARIOS[s.scenario].title} (simulator ${s.scenario})`, file: `${s.id}.hdlog` });
+      const c = caseFrom(sys, recording, {
+        id: s.id,
+        title: `${SCENARIOS[s.scenario].title} (simulator ${s.scenario})`,
+        file: `${s.id}.hdlog`,
+        context: { description: SCENARIOS[s.scenario].fault, hardware: `None: built-in simulator, scenario ${s.scenario}, seed ${s.seed}, ${s.seconds} s. Origin SIMULATED.` },
+      });
       fs.writeFileSync(new URL(`../../cases/${s.id}.hdlog`, import.meta.url), text);
       fs.writeFileSync(new URL(`../../cases/${s.id}.case.json`, import.meta.url), JSON.stringify(c, null, 2) + '\n');
     }
+  });
+
+  it.skipIf(UPDATE)('every diagnosis has a case (LVL 45 gate)', () => {
+    const covered = new Set(Object.values(cases).flatMap((json) => parseCase(json).expect.diagnoses.map((d) => d.id)));
+    expect(DIAGNOSIS_IDS.filter((id) => !covered.has(id))).toEqual([]);
   });
 
   it.skipIf(UPDATE)('every case has its recording, and every recording its case', () => {
@@ -84,12 +109,13 @@ describe('cases', () => {
     });
   }
 
-  it('a seed case answers its scenario key, with HIGH confidence', async () => {
+  it('a seed case answers its scenario key, at the highest confidence its rule allows', async () => {
     for (const s of SEEDS) {
       const recording = parseHdlog(await recordSeed(s));
       const sys = await replayRecording(recording);
       expect(sys.diagnoses.map((d) => d.id), s.id).toEqual(SCENARIOS[s.scenario].expect);
-      for (const d of sys.diagnoses) expect(d.confidence).toBe('HIGH');
+      // SUPPLY SAG stops at MEDIUM by design (docs/DIAGNOSTICS.md).
+      for (const d of sys.diagnoses) expect(d.confidence, s.id).toBe(d.id === 'SUPPLY_SAG' ? 'MEDIUM' : 'HIGH');
     }
   });
 

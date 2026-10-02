@@ -577,12 +577,12 @@ reproduce it, and make a decision on it.
 ```text
 LVL   NAME                                  STATUS
 40    .hdlog becomes technical evidence      DONE
-45    diagnostic engine v1                   PARTIAL   13 rules, scenarios
-50    .hdlog becomes a CASE                  PARTIAL   format + test suite
+45    diagnostic engine v1                   PARTIAL   13 rules, each with a scenario and a case; I2C rules at 80
+50    .hdlog becomes a CASE                  DONE      context in cases, hwdog test cases/ in CI
 55    dogd, the local backbone               DONE      gate passed, real ESP32 at 60
 60    first physical Hardware Dog            PARTIAL   core PASS on PC + CI, board bring-up pending
 65    calibration + truthfulness             PARTIAL   software PASS, reference comparison on boards pending
-70    real fault lab                         PLANNED
+70    real fault lab                         PARTIAL   procedures + pipeline PASS, bench recordings pending
 75    professional reports                   DONE      TXT, JSON, HTML, PDF from the same lines
 80    network + I2C on hardware              PLANNED
 85    PCB Rev A                              PLANNED
@@ -641,9 +641,11 @@ RECOMMENDED CHECK and EVIDENCE REFERENCES (`[ OK ]`: the HDP frames it
 rests on, by sequence number). Never "the problem is definitely X".
 
 GATE: every diagnosis has a scenario, an .hdlog, an expected answer and a
-regression test (cases: 3 of 10 today).
+regression test. **PASS for the 13 rules** (HD-T000 to HD-T013, HD-C001
+to HD-C014, `cases.test.ts` fails if one is missing). The two I2C rules
+come with LVL 80.
 
-### LVL 50 — .hdlog BECOMES A CASE
+### LVL 50 — .hdlog BECOMES A CASE        DONE
 
 ```text
 incident.hdlog -> CREATE CASE -> HD-Cxxx -> hwdog test cases/
@@ -652,8 +654,9 @@ incident.hdlog -> CREATE CASE -> HD-Cxxx -> hwdog test cases/
 ```text
 [ OK ] case = recording + SHA-256 + expected facts + diagnosis + confidence
 [ OK ] SAVE AS CASE in the interface; every case runs on each commit
-[ -- ] description, hardware context, notes in the case file
-[ -- ] hwdog test cases/: a command line runner outside the test suite
+[ OK ] description, hardware context, notes in the case file
+[ OK ] hwdog test cases/: a command line runner outside the test suite
+       (web/src/cli/hwdog.ts, run in CI), and hwdog report <file.hdlog>
 ```
 
 ### LVL 55 — dogd, THE LOCAL BACKBONE        DONE
@@ -732,7 +735,7 @@ know exactly how far the numbers can be trusted.
        bring-up step 4).
 ```
 
-### LVL 70 — REAL FAULT LAB
+### LVL 70 — REAL FAULT LAB     PARTIAL
 
 Faults created on purpose: cheap USB cable, undervoltage, brownout, loose
 connector, wrong baud, missing I2C pull-up, intermittent I2C, DHCP loss,
@@ -744,6 +747,14 @@ PHYSICAL FAILURE -> HDLOG -> CASE -> REGRESSION TEST
 
 The simulator gradually stops being made of imagined scenarios and starts
 reproducing traces of real failures.
+
+```text
+[ OK ] FAULT_LAB.md: twelve faults, how to make each one safely, what to
+       expect, what the reference firmware can see today
+[ OK ] the pipeline: record -> SAVE AS CASE -> context -> hwdog test
+[ -- ] GATE: the faults recorded on the bench as PHYSICAL cases, and the
+       simulator re-tuned from them. Needs the board.
+```
 
 ### LVL 75 — PROFESSIONAL REPORTS     DONE
 
