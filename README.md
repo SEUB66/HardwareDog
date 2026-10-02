@@ -83,10 +83,11 @@ I want one instrument that can help answer a very simple question:
 
 ## RUN THE INTERFACE
 
-The web build contains two entry points: `index.html` is the French project
-landing page (official branding, project laws, light/dark theme), and
+The web build contains three entry points: `index.html` is the bilingual project
+landing page (official branding, project laws, light/dark theme),
+`engineering.html` presents the architecture, development plan and roadmap, and
 `diagnostic.html` opens the local diagnostic interface and simulator.
-Both use bundled assets and fonts; the landing page has no account,
+They use bundled assets and fonts; the landing page has no account,
 subscription, telemetry or runtime network dependency.
 
 ```text
