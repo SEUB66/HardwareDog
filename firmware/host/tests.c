@@ -31,6 +31,10 @@ typedef struct {
     uint32_t baud;
     char tx[256];
     size_t tx_len;
+    bool sda_low, bus_timeout;
+    int net_watch_calls;
+    uint32_t net_watch_every;
+    char probe_id[64];
 } board_t;
 
 static uint32_t b_now(void *c) { return ((board_t *)c)->t; }
@@ -62,8 +66,29 @@ static int b_write_reg(void *c, uint8_t a, uint8_t reg, uint16_t v) {
     return 0;
 }
 static int b_probe(void *c, uint8_t a) {
-    (void)c;
-    return a == 0x3C || a == 0x76 ? 0 : -1;
+    board_t *b = c;
+    if (b->bus_timeout && a == 0x20) return HDP_I2C_TIMEOUT;
+    return a == 0x3C || a == 0x76 ? HDP_I2C_ACK : HDP_I2C_NACK;
+}
+static int b_lines(void *c, bool *sda, bool *scl) {
+    *sda = !((board_t *)c)->sda_low;
+    *scl = true;
+    return 0;
+}
+static int b_net_watch(void *c, uint32_t every, const char *dns, const char *up) {
+    board_t *b = c;
+    (void)dns;
+    (void)up;
+    b->net_watch_calls++;
+    b->net_watch_every = every;
+    return 0;
+}
+static int b_probe_start(void *c, const char *id, const char *target, const char (*tests)[16], int n) {
+    (void)target;
+    (void)tests;
+    (void)n;
+    snprintf(((board_t *)c)->probe_id, 64, "%s", id);
+    return 0;
 }
 static int b_baud(void *c, uint32_t baud) {
     if (baud == 12345) return -1;
@@ -229,6 +254,88 @@ static void test_meter_and_calibration(void) {
     CHECK(has("no verified power sensor"));
 }
 
+static void test_i2c_watch_and_faults(void) {
+    setup();
+    D.hal.target_i2c_lines = b_lines;
+    hdp_start(&D);
+    clear();
+    cmd("{\"cmd\":\"i2c.watch\",\"every_ms\":500}\n");
+    CHECK(has("i2c.watch needs every_ms 0 or 1000..600000"));
+    cmd("{\"cmd\":\"i2c.watch\",\"every_ms\":2000}\n");
+    CHECK(has("i2c watch on"));
+    clear();
+    B.t = 1000;
+    hdp_poll(&D);
+    CHECK(!has("i2c.scan"));
+    B.t = 2000;
+    hdp_poll(&D);
+    CHECK(has("{\"type\":\"i2c.scan\",\"t\":2000,\"speed\":100000,\"every_ms\":2000,\"devices\":[{\"addr\":60,"));
+
+    /* A line stuck low: a fault, never an empty scan. */
+    clear();
+    B.sda_low = true;
+    B.t = 4000;
+    hdp_poll(&D);
+    CHECK(has("{\"type\":\"i2c.error\",\"t\":4000,\"kind\":\"SDA_LOW\",\"detail\":\"SDA low while the bus is idle\",\"every_ms\":2000}"));
+    CHECK(!has("i2c.scan"));
+
+    /* A transfer that times out stops the scan. */
+    clear();
+    B.sda_low = false;
+    B.bus_timeout = true;
+    cmd("{\"cmd\":\"i2c.scan\"}\n");
+    CHECK(has("\"kind\":\"TIMEOUT\",\"detail\":\"while probing 0x20\"}"));
+    CHECK(!has("i2c.scan"));
+    CHECK(lines_well_formed());
+
+    clear();
+    cmd("{\"cmd\":\"i2c.watch\",\"every_ms\":0}\n");
+    CHECK(has("i2c watch off"));
+    clear();
+    B.t = 10000;
+    hdp_poll(&D);
+    CHECK(!has("i2c."));
+}
+
+static void test_network_checks_and_probes(void) {
+    setup();
+    hdp_start(&D);
+    /* No network hook: gateway, DNS, Internet stay UNKNOWN, never guessed. */
+    CHECK(has("\"gateway\":{\"address\":null,\"status\":\"UNKNOWN\"}"));
+    CHECK(has("\"internet\":\"UNKNOWN\",\"latency\":null,\"loss\":null"));
+    clear();
+    cmd("{\"cmd\":\"net.watch\",\"every_ms\":10000,\"dns\":\"example.com\"}\n");
+    CHECK(has("net.watch: no network checks on this hardware"));
+    cmd("{\"cmd\":\"probe\",\"id\":\"p1\",\"target\":\"example.com\",\"tests\":[\"PING\"]}\n");
+    CHECK(has("\"status\":\"UNKNOWN\",\"detail\":\"not available on this firmware\""));
+
+    D.hal.net_watch = b_net_watch;
+    D.hal.probe_start = b_probe_start;
+    clear();
+    cmd("{\"cmd\":\"net.watch\",\"every_ms\":10000,\"dns\":\"bad host!\"}\n");
+    CHECK(has("dns and upstream are host names"));
+    CHECK(B.net_watch_calls == 0);
+    cmd("{\"cmd\":\"net.watch\",\"every_ms\":10000,\"dns\":\"example.com\",\"upstream\":\"example.org\"}\n");
+    CHECK(B.net_watch_calls == 1 && B.net_watch_every == 10000);
+    CHECK(has("net watch on"));
+
+    /* Background probes: nothing answered in the foreground, results later. */
+    clear();
+    cmd("{\"cmd\":\"probe\",\"id\":\"p2\",\"target\":\"192.168.1.1\",\"tests\":[\"PING\",\"DNS\"]}\n");
+    CHECK(!strcmp(B.probe_id, "p2"));
+    CHECK(!has("probe.result"));
+    cmd("{\"cmd\":\"probe\",\"id\":\"p3\",\"target\":\"a b\",\"tests\":[\"PING\"]}\n");
+    CHECK(has("probe target must be a host name"));
+    hdp_probe_result(&D, "p2", "PING", HDP_CHECK_PASS, "4/4 replies, avg 2 ms");
+    hdp_probe_done(&D, "p2");
+    CHECK(has("\"type\":\"probe.result\",\"t\":0,\"id\":\"p2\",\"test\":\"PING\",\"status\":\"PASS\",\"detail\":\"4/4 replies, avg 2 ms\"}"));
+    CHECK(has("\"type\":\"probe.done\",\"t\":0,\"id\":\"p2\"}"));
+    clear();
+    hdp_net_changed(&D);
+    CHECK(has("\"type\":\"net.status\""));
+    CHECK(lines_well_formed());
+}
+
 static void test_ina_missing_or_wrong(void) {
     setup();
     B.nack = true;
@@ -367,6 +474,8 @@ int main(void) {
     test_current_accuracy_through_the_chip_math();
     test_ina_missing_or_wrong();
     test_meter_and_calibration();
+    test_i2c_watch_and_faults();
+    test_network_checks_and_probes();
     test_read_failure_stops_power();
     test_time_never_goes_backwards();
     test_commands();

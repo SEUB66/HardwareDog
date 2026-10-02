@@ -24,7 +24,7 @@ import { clock, milliamps, ms, volts } from './format';
  * or a confidence definition changes: recordings carry the version they
  * were made with, and a replay on other rules says so.
  */
-export const RULESET_VERSION = 2;
+export const RULESET_VERSION = 3; // 3: NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY
 
 export const DIAGNOSIS_IDS = [
   'POWER_INSTABILITY',
@@ -40,6 +40,9 @@ export const DIAGNOSIS_IDS = [
   'DNS_FAILURE',
   'UPSTREAM_FAILURE',
   'NETWORK_UNSTABLE',
+  'NETWORK_POWER_LOSS',
+  'I2C_DEVICE_DISAPPEARED',
+  'I2C_BUS_INSTABILITY',
 ] as const;
 export type DiagnosisId = (typeof DIAGNOSIS_IDS)[number];
 
@@ -140,6 +143,8 @@ export interface SessionFacts {
     resets: ResetFact[];
   };
   net: NetFact[];
+  i2c: { scans: I2cScanFact[]; errors: I2cErrorFact[] };
+  outages: NetOutageFact[];
 }
 
 export const emptyFacts = (): SessionFacts => ({
@@ -150,6 +155,8 @@ export const emptyFacts = (): SessionFacts => ({
   unenumerated: { since: null, longestMs: 0, firstAt: null, firstSeq: null },
   uart: { baud: 115200, rxLines: 0, rxAtBaud: 0, framingAtBaud: [], resets: [] },
   net: [],
+  i2c: { scans: [], errors: [] },
+  outages: [],
 });
 
 /** Keep fact lists bounded on long sessions. */
@@ -162,12 +169,49 @@ export function parseResetLine(line: string, t: number, seq = 0): ResetFact | nu
   return m ? { seq, t, code: parseInt(m[1]!, 16), reason: m[2]!.toUpperCase() } : null;
 }
 
+/** One scan of the target I2C bus: the addresses that answered. */
+export interface I2cScanFact {
+  seq: number;
+  t: number;
+  addresses: number[];
+}
+
+export interface I2cErrorFact {
+  seq: number;
+  t: number;
+  kind: string;
+}
+
+/**
+ * The network link went down, and how it came back: link, DHCP, DNS.
+ * `cause` is what preceded it inside NET_POWER_WINDOW_MS, if anything.
+ */
+export interface NetOutageFact {
+  seq: number;
+  t: number;
+  cause: null | { kind: 'DROP' | 'RESET'; t: number; seq: number; text: string };
+  upAt: number | null;
+  upSeq: number | null;
+  dhcpAt: number | null;
+  dhcpSeq: number | null;
+  dnsAt: number | null;
+  dnsSeq: number | null;
+}
+
 // ------------------------------------------------------------------ thresholds
 
 /** Target current above which the target counts as powered and running. */
 export const RUNNING_CURRENT = 0.05;
 /** Powered without USB for this long means it does not enumerate. */
 export const UNENUMERATED_MS = 3000;
+/**
+ * A link that goes down this soon after a voltage drop or a target reset
+ * went down with it. Seconds, not milliseconds: the link is reported by
+ * net.status, and a rebooting network device takes time to drop it.
+ */
+export const NET_POWER_WINDOW_MS = 5000;
+/** An I2C device lost this soon after a voltage drop was lost with it. */
+export const I2C_POWER_WINDOW_MS = 2000;
 
 const pct = (a: number, b: number) => (b === 0 ? 0 : Math.round((a / b) * 100));
 
@@ -324,11 +368,130 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
     }
   }
 
-  // NETWORK: the lowest failing layer explains everything above it.
-  const net = diagnoseNetwork(f.net);
+  // NETWORK: the lowest failing layer explains everything above it, unless
+  // the link is down because the supply dropped: that is said below, and
+  // "check the cable" would send the technician the wrong way.
+  const open = f.outages.at(-1);
+  const explained = open !== undefined && open.cause !== null && open.upAt === null;
+  const net = explained ? null : diagnoseNetwork(f.net);
   if (net) add(net);
 
+  // NETWORK + POWER: the link goes down with the supply.
+  const linked = f.outages.filter((o) => o.cause !== null);
+  if (linked.length > 0) {
+    const back = linked.filter((o) => o.upAt !== null);
+    const recovery = back.map((o) => (o.dnsAt ?? o.dhcpAt ?? o.upAt!) - o.t);
+    const chain = (o: NetOutageFact) =>
+      [
+        `${o.cause!.text} ${clock(o.cause!.t)}`,
+        `link down +${ms(o.t - o.cause!.t)}`,
+        o.upAt !== null ? `up +${ms(o.upAt - o.t)}` : 'still down',
+        o.dhcpAt !== null ? `DHCP +${ms(o.dhcpAt - o.t)}` : null,
+        o.dnsAt !== null ? `DNS +${ms(o.dnsAt - o.t)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' > ');
+    add({
+      id: 'NETWORK_POWER_LOSS',
+      title: 'NETWORK LOST WITH POWER',
+      confidence: linked.length >= 2 ? 'HIGH' : 'MEDIUM',
+      basis: `${linked.length} of ${f.outages.length} link loss(es) followed a voltage drop or a target reset`,
+      observed: [
+        `${f.outages.length} network link loss(es); ${linked.length} within ${ms(NET_POWER_WINDOW_MS)} of a voltage drop or a target reset.`,
+        back.length
+          ? `Network back (link, DHCP, DNS) after ${ms(Math.min(...recovery))} to ${ms(Math.max(...recovery))}.`
+          : 'The network has not come back yet.',
+      ],
+      correlation: `Latest: ${chain(linked.at(-1)!)}.`,
+      cause: 'The network goes down when the supply drops: the device behind this port (router, switch, or the target itself) loses power or reboots.',
+      next: 'Measure the supply of the network device during the event; give it a stable supply and check its reboot log.',
+      since: linked[0]!.cause!.t,
+      evidence: evidence(...linked.flatMap((o) => [o.cause!.seq, o.seq, o.upSeq, o.dhcpSeq, o.dnsSeq])),
+    });
+  }
+
+  // I2C: devices that stop answering, and a bus that fails.
+  const lost = diagnoseI2cLoss(f, s);
+  if (lost) add(lost);
+  const errs = f.i2c.errors;
+  if (errs.length > 0) {
+    const kinds = [...new Set(errs.map((e) => e.kind))];
+    const stuck = kinds.some((k) => k === 'SDA_LOW' || k === 'SCL_LOW');
+    add({
+      id: 'I2C_BUS_INSTABILITY',
+      title: 'I2C BUS FAULT',
+      confidence: errs.length >= 3 ? 'HIGH' : errs.length === 2 ? 'MEDIUM' : 'LOW',
+      basis: `${errs.length} bus fault(s): ${kinds.join(', ')}`,
+      observed: [`${errs.length} I2C bus fault(s) (${kinds.join(', ')}), last at ${clock(errs.at(-1)!.t)}.`],
+      correlation: null,
+      cause: stuck
+        ? 'A line sits low while the bus is idle: missing pull-up resistors, a device holding SDA (stuck mid-transfer), or a short to ground.'
+        : 'Transfers fail on the bus: noise, pull-ups too weak for the bus length or speed, or a misbehaving device.',
+      next: stuck
+        ? 'Measure SDA and SCL at idle: both must sit at the logic supply (3.3 V). At 0 V, fit 2.2-4.7 kOhm pull-ups, or power-cycle the device holding the line.'
+        : 'Lower the bus speed, shorten the wires, check the pull-ups (2.2 kOhm at 400 kHz).',
+      since: errs[0]!.t,
+      evidence: evidence(...errs.map((e) => e.seq)),
+    });
+  }
+
   return out;
+}
+
+/**
+ * An address that answered a scan, then stopped answering in a later one.
+ * Coming back and going again is the strongest sign (a loose wire); gone
+ * for good after several sightings is weaker; one missing scan is a hint.
+ */
+function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
+  const scans = f.i2c.scans;
+  if (scans.length < 2) return null;
+  const all = [...new Set(scans.flatMap((x) => x.addresses))].sort((a, b) => a - b);
+  type Loss = { addr: number; t: number; seq: number; back: { t: number; seq: number } | null; absent: number };
+  const losses: Loss[] = [];
+  for (const addr of all) {
+    let open: Loss | null = null;
+    for (let k = 1; k < scans.length; k++) {
+      const was = scans[k - 1]!.addresses.includes(addr);
+      const is = scans[k]!.addresses.includes(addr);
+      if (was && !is) {
+        open = { addr, t: scans[k]!.t, seq: scans[k]!.seq, back: null, absent: 1 };
+        losses.push(open);
+      } else if (!was && !is && open) open.absent++;
+      else if (!was && is && open) {
+        open.back = { t: scans[k]!.t, seq: scans[k]!.seq };
+        open = null;
+      }
+    }
+  }
+  if (losses.length === 0) return null;
+  const addrs = [...new Set(losses.map((l) => l.addr))];
+  const name = (a: number) => `0x${a.toString(16).toUpperCase().padStart(2, '0')}`;
+  const flapping = losses.filter((l) => l.back !== null).length;
+  const confirmed = losses.some((l) => l.absent >= 2);
+  const confidence: Confidence = flapping >= 2 ? 'HIGH' : flapping === 1 || confirmed ? 'MEDIUM' : 'LOW';
+  const afterDrop = losses.filter((l) => f.drops.some((d) => l.t >= d.start && l.t - d.start <= I2C_POWER_WINDOW_MS));
+  return {
+    id: 'I2C_DEVICE_DISAPPEARED',
+    title: 'I2C DEVICE DISAPPEARED',
+    confidence,
+    basis: `${losses.length} loss(es) of ${addrs.map(name).join(', ')} over ${scans.length} scans, ${flapping} came back`,
+    observed: [
+      ...addrs.map((a) => `${name(a)} answered ${scans.filter((x) => x.addresses.includes(a)).length} of ${scans.length} scans.`),
+      `Last loss at ${clock(losses.at(-1)!.t)}.`,
+    ],
+    correlation: afterDrop.length
+      ? `${afterDrop.length} / ${losses.length} losses within ${ms(I2C_POWER_WINDOW_MS)} of a voltage drop below ${volts(s.undervoltageThreshold)}.`
+      : null,
+    cause: afterDrop.length
+      ? 'The device resets or browns out with the supply: it stops answering after each voltage drop.'
+      : flapping
+        ? 'The device stops answering and comes back: loose wire or connector, marginal pull-ups, or the device resetting.'
+        : 'A device that answered no longer does: disconnected, unpowered, or hung.',
+    next: `Check the wiring to ${addrs.map(name).join(', ')} (SDA, SCL, power, ground); reseat the connector; check the device supply.`,
+    since: losses[0]!.t,
+    evidence: evidence(...losses.flatMap((l) => [l.seq, l.back?.seq])),
+  };
 }
 
 type Layer = 'NO_LINK' | 'DHCP_FAILURE' | 'GATEWAY_UNREACHABLE' | 'UPSTREAM_FAILURE' | 'DNS_FAILURE';

@@ -76,16 +76,17 @@ host port for the target: USB faults need a board that watches USB
 3   brownout              TARGET RESET LOOP + sag       power, UART  HD-C007
 4   loose connector       USB INTERMITTENT              NO (usb)     HD-C003
 5   wrong baud            SERIAL CONFIG MISMATCH        UART         HD-C006
-6   missing I2C pull-up   I2C bus fault                 LVL 80       --
-7   intermittent I2C      I2C device disappeared        LVL 80       --
+6   missing I2C pull-up   I2C BUS FAULT                 i2c.error    HD-C016
+7   intermittent I2C      I2C DEVICE DISAPPEARED        i2c watch    HD-C015
 8   DHCP loss             DHCP FAILURE                  Wi-Fi        HD-C004
-9   DNS loss              DNS FAILURE                   LVL 80       HD-C005
-10  network latency       NETWORK UNSTABLE              LVL 80       HD-C008
+9   DNS loss              DNS FAILURE                   net watch    HD-C005
+10  network latency       NETWORK UNSTABLE              net watch    HD-C008
+13  router loses power    NETWORK LOST WITH POWER       power, net   HD-C017
 11  boot loop             TARGET RESET LOOP             UART         HD-C007
 12  USB reconnect loop    USB INTERMITTENT              NO (usb)     HD-C003
 ```
 
-DNS, latency and loss need the network probes of LVL 80: until then the
+DNS, latency and loss come from `net watch` (LVL 80): until it runs, the
 firmware reports them UNKNOWN, never guessed.
 
 ### 1  CHEAP USB CABLE
@@ -207,6 +208,20 @@ Target firmware that disconnects and reconnects its USB device every
 5 s (`tud_disconnect()` / `tud_connect()` in TinyUSB). **Needs USB
 observation**, like fault 4.
 
+### 13  ROUTER LOSES POWER
+
+A USB-powered travel router (5 V) fed through the INA226 and the thin 2 m
+cable; the W5500 of Hardware Dog plugged into one of its LAN ports;
+`net watch 10 <a name>` running. Load bursts on the same rail (the 10 ohm
+load) until the router browns out.
+
+```text
+EXPECT   NETWORK LOST WITH POWER: voltage drop > link down > up > DHCP >
+         DNS, each step timed; NET -> OUTAGES lists every loss
+CONTROL  the router on its own stable supply: link stays up through the
+         same bursts
+```
+
 ---
 
 ## WHAT "DONE" MEANS FOR LVL 70
@@ -216,8 +231,8 @@ observation**, like fault 4.
 [ OK ] case files carry description, hardware, notes
 [ OK ] the procedure above, one per fault
 [ -- ] faults 1, 2, 3, 5, 8, 11 recorded on the bench as PHYSICAL cases
-[ -- ] faults 6, 7, 9, 10 after LVL 80 firmware; 4 and 12 on a board
-       that watches USB
+[ -- ] faults 6, 7, 9, 10, 13 with the LVL 80 firmware; 4 and 12 on a
+       board that watches USB
 [ -- ] simulator scenarios re-tuned from the physical recordings
        (the sag depth, the burst timing, the reset intervals measured)
 ```

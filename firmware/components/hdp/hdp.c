@@ -234,7 +234,9 @@ static void send_uart_config(hdp_device_t *d) {
 static void send_net(hdp_device_t *d) {
     hdp_net_t n;
     memset(&n, 0, sizeof n);
-    n.dhcp = HDP_CHECK_UNKNOWN;
+    n.dhcp = n.gateway_status = n.dns_status = n.internet = HDP_CHECK_UNKNOWN;
+    n.latency_ms = -1;
+    n.loss_pct = -1;
     if (d->hal.net_status) d->hal.net_status(d->hal.ctx, &n);
     line_t l;
     begin(d, &l, "net.status");
@@ -244,12 +246,22 @@ static void send_net(hdp_device_t *d) {
     put_opt(&l, n.address);
     puts_(&l, ",\"dhcp\":\"");
     puts_(&l, check_name(n.dhcp));
-    /* Gateway, DNS and Internet are not probed by this firmware yet: UNKNOWN, never guessed. */
+    /* Gateway, DNS and Internet are only known from net.watch checks:
+       until one ran, UNKNOWN, never guessed. */
     puts_(&l, "\",\"gateway\":{\"address\":");
     put_opt(&l, n.gateway);
-    puts_(&l, ",\"status\":\"UNKNOWN\"},\"dns\":{\"address\":");
+    puts_(&l, ",\"status\":\"");
+    puts_(&l, check_name(n.gateway_status));
+    puts_(&l, "\"},\"dns\":{\"address\":");
     put_opt(&l, n.dns);
-    puts_(&l, ",\"status\":\"UNKNOWN\"},\"internet\":\"UNKNOWN\",\"latency\":null,\"loss\":null");
+    puts_(&l, ",\"status\":\"");
+    puts_(&l, check_name(n.dns_status));
+    puts_(&l, "\"},\"internet\":\"");
+    puts_(&l, check_name(n.internet));
+    if (n.latency_ms >= 0) putf(&l, "\",\"latency\":%ld", (long)n.latency_ms);
+    else puts_(&l, "\",\"latency\":null");
+    if (n.loss_pct >= 0) putf(&l, ",\"loss\":%.1f", (double)n.loss_pct);
+    else puts_(&l, ",\"loss\":null");
     send(d, &l);
 }
 
@@ -346,14 +358,41 @@ static void sample_power(hdp_device_t *d) {
 
 /* ------------------------------------------------------------ target I2C */
 
-static void scan_i2c(hdp_device_t *d) {
+static void i2c_error(hdp_device_t *d, const char *kind, const char *detail, bool periodic) {
+    line_t l;
+    begin(d, &l, "i2c.error");
+    puts_(&l, ",\"kind\":\"");
+    puts_(&l, kind);
+    puts_(&l, "\",\"detail\":");
+    put_cstr(&l, detail);
+    if (periodic) putf(&l, ",\"every_ms\":%lu", (unsigned long)d->i2c_watch_ms);
+    send(d, &l);
+}
+
+/* One scan of the target bus. A bus fault is reported as such, and the
+   scan is not sent: an empty list would read as every device gone. */
+static void scan_i2c(hdp_device_t *d, bool periodic) {
+    bool sda = true, scl = true;
+    if (d->hal.target_i2c_lines && d->hal.target_i2c_lines(d->hal.ctx, &sda, &scl) == 0 && (!sda || !scl)) {
+        i2c_error(d, !sda ? "SDA_LOW" : "SCL_LOW", !sda ? "SDA low while the bus is idle" : "SCL low while the bus is idle", periodic);
+        return;
+    }
     line_t l;
     begin(d, &l, "i2c.scan");
-    putf(&l, ",\"speed\":%lu,\"devices\":[", (unsigned long)d->hal.target_i2c_hz);
+    putf(&l, ",\"speed\":%lu", (unsigned long)d->hal.target_i2c_hz);
+    if (periodic) putf(&l, ",\"every_ms\":%lu", (unsigned long)d->i2c_watch_ms);
+    puts_(&l, ",\"devices\":[");
     bool first = true;
     if (d->hal.target_i2c_probe) {
         for (uint8_t a = 0x08; a <= 0x77; a++) {
-            if (d->hal.target_i2c_probe(d->hal.ctx, a) != 0) continue;
+            int r = d->hal.target_i2c_probe(d->hal.ctx, a);
+            if (r == HDP_I2C_TIMEOUT || r == HDP_I2C_ARB_LOST) {
+                char detail[48];
+                snprintf(detail, sizeof detail, "while probing 0x%02X", a);
+                i2c_error(d, r == HDP_I2C_TIMEOUT ? "TIMEOUT" : "ARB_LOST", detail, periodic);
+                return;
+            }
+            if (r != HDP_I2C_ACK) continue;
             /* No identity: this firmware does not verify one yet (rule 6). */
             putf(&l, "%s{\"addr\":%u,\"ident\":null,\"method\":null}", first ? "" : ",", a);
             first = false;
@@ -568,20 +607,55 @@ static void reject(hdp_device_t *d, const char *why) {
     send_log(d, "warn", msg);
 }
 
-static void probe(hdp_device_t *d, const kv_t *id, const kv_t *tests) {
-    /* Network probes are not implemented on this firmware yet: say so per test. */
+static bool is_host(const char *s, size_t n) {
+    if (n == 0 || n > 253) return false;
+    for (size_t k = 0; k < n; k++) {
+        char c = s[k];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-')) return false;
+    }
+    return true;
+}
+
+static void net_watch(hdp_device_t *d, const kv_t *kvs, int n) {
+    const kv_t *e = field(kvs, n, "every_ms", V_NUM);
+    const kv_t *dns = field(kvs, n, "dns", V_STR), *up = field(kvs, n, "upstream", V_STR);
+    if (!e || e->num != floor(e->num) || e->num < 0 || (e->num > 0 && e->num < 2000) || e->num > 600000) {
+        reject(d, "net.watch needs every_ms 0 or 2000..600000");
+        return;
+    }
+    if ((dns && !is_host(dns->str, dns->str_len)) || (up && !is_host(up->str, up->str_len))) {
+        reject(d, "net.watch: dns and upstream are host names");
+        return;
+    }
+    if (!d->hal.net_watch || d->hal.net_watch(d->hal.ctx, (uint32_t)e->num, dns ? dns->str : NULL, up ? up->str : NULL) != 0) {
+        send_log(d, "warn", "net.watch: no network checks on this hardware");
+        return;
+    }
+    send_log(d, "info", e->num > 0 ? "net watch on" : "net watch off");
+}
+
+static bool is_test(const char *t) { return !strcmp(t, "PING") || !strcmp(t, "DNS") || !strcmp(t, "TCP") || !strcmp(t, "HTTP"); }
+
+static void probe(hdp_device_t *d, const kv_t *id, const kv_t *target, const kv_t *tests) {
+    for (int k = 0; k < tests->arr_n; k++)
+        if (!is_test(tests->arr[k])) {
+            reject(d, "unknown probe test");
+            return;
+        }
+    if (!is_host(target->str, target->str_len)) {
+        reject(d, "probe target must be a host name or an IPv4 address");
+        return;
+    }
+    /* Real probes run in the background on hardware that has them. */
+    if (d->hal.probe_start && d->hal.probe_start(d->hal.ctx, id->str, target->str, (const char(*)[16])tests->arr, tests->arr_n) == 0) return;
+    /* Not available here: say so per test. */
     for (int k = 0; tests && k < tests->arr_n; k++) {
         line_t l;
         begin(d, &l, "probe.result");
         puts_(&l, ",\"id\":");
         put_str(&l, id->str, id->str_len);
         puts_(&l, ",\"test\":");
-        const char *t = tests->arr[k];
-        if (strcmp(t, "PING") && strcmp(t, "DNS") && strcmp(t, "TCP") && strcmp(t, "HTTP")) {
-            reject(d, "unknown probe test");
-            continue;
-        }
-        put_cstr(&l, t);
+        put_cstr(&l, tests->arr[k]);
         puts_(&l, ",\"status\":\"UNKNOWN\",\"detail\":\"not available on this firmware\"");
         send(d, &l);
     }
@@ -674,7 +748,18 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         d->hal.uart_write(d->hal.ctx, data->str, data->str_len);
         d->hal.uart_write(d->hal.ctx, "\r\n", 2);
     } else if (!strcmp(c, "i2c.scan")) {
-        scan_i2c(d);
+        scan_i2c(d, false);
+    } else if (!strcmp(c, "i2c.watch")) {
+        const kv_t *e = field(kvs, n, "every_ms", V_NUM);
+        if (!e || e->num != floor(e->num) || e->num < 0 || (e->num > 0 && e->num < 1000) || e->num > 600000) {
+            reject(d, "i2c.watch needs every_ms 0 or 1000..600000");
+            return;
+        }
+        d->i2c_watch_ms = (uint32_t)e->num;
+        d->next_i2c = now(d) + d->i2c_watch_ms;
+        send_log(d, "info", d->i2c_watch_ms ? "i2c watch on" : "i2c watch off");
+    } else if (!strcmp(c, "net.watch")) {
+        net_watch(d, kvs, n);
     } else if (!strcmp(c, "net.refresh")) {
         send_net(d);
     } else if (!strcmp(c, "meter.cal")) {
@@ -693,11 +778,11 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
     } else if (!strcmp(c, "probe")) {
         const kv_t *id = field(kvs, n, "id", V_STR);
         const kv_t *tests = field(kvs, n, "tests", V_ARR);
-        if (!id || !tests || !field(kvs, n, "target", V_STR)) {
+        if (!id || !tests || tests->arr_n == 0 || !field(kvs, n, "target", V_STR)) {
             reject(d, "probe needs id, target and tests");
             return;
         }
-        probe(d, id, tests);
+        probe(d, id, field(kvs, n, "target", V_STR), tests);
     } else {
         reject(d, "unknown cmd");
     }
@@ -710,6 +795,7 @@ void hdp_init(hdp_device_t *d, const hdp_config_t *cfg, const hdp_hal_t *hal) {
     d->cfg = *cfg;
     d->hal = *hal;
     d->baud = 115200;
+    d->i2c_watch_ms = cfg->i2c_watch_ms;
 }
 
 void hdp_start(hdp_device_t *d) {
@@ -720,6 +806,7 @@ void hdp_start(hdp_device_t *d) {
     uint32_t t = now(d);
     d->next_sample = t;
     d->next_net = d->cfg.net_ms ? t + d->cfg.net_ms : 0;
+    d->next_i2c = t + d->i2c_watch_ms;
 }
 
 void hdp_host_input(hdp_device_t *d, const char *data, size_t len) {
@@ -772,6 +859,10 @@ void hdp_uart_error(hdp_device_t *d, const char *kind) {
 
 void hdp_poll(hdp_device_t *d) {
     uint32_t t = now(d);
+    if (d->i2c_watch_ms && t >= d->next_i2c) {
+        scan_i2c(d, true);
+        d->next_i2c = t + d->i2c_watch_ms;
+    }
     if (d->ina_ok && t >= d->next_sample) {
         sample_power(d);
         d->next_sample += d->cfg.sample_ms;
@@ -782,4 +873,28 @@ void hdp_poll(hdp_device_t *d) {
         send_net(d);
         d->next_net = t + d->cfg.net_ms;
     }
+}
+
+void hdp_net_changed(hdp_device_t *d) { send_net(d); }
+
+void hdp_probe_result(hdp_device_t *d, const char *id, const char *test, hdp_check_t status, const char *detail) {
+    line_t l;
+    begin(d, &l, "probe.result");
+    puts_(&l, ",\"id\":");
+    put_cstr(&l, id);
+    puts_(&l, ",\"test\":");
+    put_cstr(&l, test);
+    puts_(&l, ",\"status\":\"");
+    puts_(&l, check_name(status));
+    puts_(&l, "\",\"detail\":");
+    put_cstr(&l, detail);
+    send(d, &l);
+}
+
+void hdp_probe_done(hdp_device_t *d, const char *id) {
+    line_t l;
+    begin(d, &l, "probe.done");
+    puts_(&l, ",\"id\":");
+    put_cstr(&l, id);
+    send(d, &l);
 }

@@ -48,7 +48,10 @@ export type DeviceFrame =
       t: number;
       speed: number;
       devices: { addr: number; ident: string | null; method: string | null }[];
+      /** The periodic scan this one belongs to; absent: a one-off scan. */
+      every_ms?: number;
     }
+  | { type: 'i2c.error'; t: number; kind: I2cErrorKind; detail: string | null; every_ms?: number }
   | {
       type: 'net.status';
       t: number;
@@ -71,7 +74,9 @@ export type HostCommand =
   | { cmd: 'uart.config'; baud: number }
   | { cmd: 'uart.tx'; data: string }
   | { cmd: 'i2c.scan' }
+  | { cmd: 'i2c.watch'; every_ms: number }
   | { cmd: 'net.refresh' }
+  | { cmd: 'net.watch'; every_ms: number; dns?: string; upstream?: string }
   | ({ cmd: 'meter.cal' } & MeterCalCommand)
   | { cmd: 'meter.clear' }
   | { cmd: 'probe'; id: string; target: string; tests: ProbeTest[] };
@@ -111,6 +116,9 @@ export interface MeterCalCommand extends MeterCalibration {
   v_err: number;
   i_err: number;
 }
+
+export const I2C_ERROR_KINDS = ['SDA_LOW', 'SCL_LOW', 'TIMEOUT', 'ARB_LOST'] as const;
+export type I2cErrorKind = (typeof I2C_ERROR_KINDS)[number];
 
 export type DecodeResult = { ok: true; frame: DeviceFrame } | { ok: false; error: string; raw: string };
 
@@ -254,7 +262,14 @@ function parseFrame(o: Obj): DeviceFrame {
         if (!Number.isInteger(addr) || addr < 0 || addr > 0x7f) throw new FrameError(`devices[${n}].addr out of range`);
         return { addr, ident: strOrNull(d as Obj, 'ident'), method: strOrNull(d as Obj, 'method') };
       });
-      return { type, t, speed: num(o, 'speed'), devices };
+      const scan: DeviceFrame = { type, t, speed: num(o, 'speed'), devices };
+      if (o['every_ms'] !== undefined && o['every_ms'] !== null) scan.every_ms = num(o, 'every_ms');
+      return scan;
+    }
+    case 'i2c.error': {
+      const e: DeviceFrame = { type, t, kind: oneOf(o, 'kind', I2C_ERROR_KINDS), detail: strOrNull(o, 'detail') };
+      if (o['every_ms'] !== undefined && o['every_ms'] !== null) e.every_ms = num(o, 'every_ms');
+      return e;
     }
     case 'net.status': {
       let link: { up: boolean; mbps: number | null; duplex: 'FULL' | 'HALF' | null } | null = null;

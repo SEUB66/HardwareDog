@@ -131,6 +131,11 @@ export interface BusState {
   state: BusCondition;
   devices: I2cDevice[];
   lastScanAt: number | null;
+  /** Periodic scan requested by i2c.watch (ACTIVE). 0 = off. */
+  watchMs: number;
+  /** Bus faults reported (i2c.error) this session. */
+  faults: number;
+  lastFault: { t: number; kind: string } | null;
 }
 
 export interface NetHop {
