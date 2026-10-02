@@ -9,10 +9,14 @@ import { PROBE_TESTS } from './types';
 export const SCREENS = ['STATUS', 'TRACE', 'POWER', 'USB', 'SERIAL', 'BUS', 'NET', 'PROBE', 'REPORT', 'SETUP'] as const;
 export type Screen = (typeof SCREENS)[number] | 'HELP';
 
+/** TXT for any terminal, JSON for machines, HTML and PDF for a ticket. */
+export const REPORT_FORMATS = ['txt', 'json', 'html', 'pdf'] as const;
+export type ReportFormat = (typeof REPORT_FORMATS)[number];
+
 export interface CommandContext {
   system: System;
   navigate(screen: Screen): void;
-  exportReport(format: 'txt' | 'json'): void;
+  exportReport(format: ReportFormat): void;
   /** Restart the simulator on a fault scenario (new session). */
   simulate?(scenario: ScenarioId): void;
   /** Archived sessions, newest first. */
@@ -48,7 +52,7 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'meter clear', summary: 'ACTIVE: remove the calibration (datasheet accuracy)' },
   { usage: 'serial send "<text>"', summary: 'ACTIVE: write a line to the target UART' },
   { usage: 'trace <pause|resume|clear>', summary: 'control the trace view' },
-  { usage: 'report export [txt|json]', summary: 'save the diagnostic report locally' },
+  { usage: 'report export [txt|json|html|pdf]', summary: 'save the diagnostic report locally' },
   { usage: 'session mark "<text>"', summary: 'add a marker to the timeline' },
   { usage: 'session export', summary: 'save this session as .hdlog, replayable anywhere' },
   { usage: 'session list', summary: 'sessions recorded in this browser' },
@@ -219,9 +223,9 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
       return fail('usage: trace <pause|resume|clear>');
 
     case 'report': {
-      if (a0 !== 'export') return fail('usage: report export [txt|json]');
-      const fmt = (args[1]?.toLowerCase() ?? 'txt') as 'txt' | 'json';
-      if (fmt !== 'txt' && fmt !== 'json') return fail('format must be txt or json');
+      if (a0 !== 'export') return fail('usage: report export [txt|json|html|pdf]');
+      const fmt = (args[1]?.toLowerCase() ?? 'txt') as ReportFormat;
+      if (!REPORT_FORMATS.includes(fmt)) return fail('format must be txt, json, html or pdf');
       ctx.exportReport(fmt);
       return ok(`report exported (${fmt}), saved locally`);
     }
