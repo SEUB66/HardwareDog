@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SessionMeta } from '../src/core/archive';
 import { execute, tokenize, type Screen } from '../src/core/commands';
 import { newHeader } from '../src/core/session';
+import { SCENARIO_IDS } from '../src/core/scenarios';
 import { T0, connectedSystem } from './helpers';
 
 async function ctx() {
@@ -22,7 +23,7 @@ describe('sim', () => {
     const { sys } = await connectedSystem();
     const switched: string[] = [];
     const c = { system: sys, navigate: () => {}, exportReport: () => {}, simulate: (id: string) => switched.push(id) };
-    expect(execute('sim list', c).lines).toHaveLength(11);
+    expect(execute('sim list', c).lines).toHaveLength(SCENARIO_IDS.length);
     expect(execute('sim hd-t004', c).ok).toBe(true);
     expect(execute('sim HD-T999', c).ok).toBe(false);
     expect(switched).toEqual(['HD-T004']);
