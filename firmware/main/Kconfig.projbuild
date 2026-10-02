@@ -48,4 +48,47 @@ menu "Hardware Dog"
         int "Shunt resistor tolerance, in 0.1 % (1 % R100 boards: 10). Sets the declared current accuracy until calibration."
         default 10
 
+    config HWDOG_I2C_WATCH_MS
+        int "Scan the target I2C bus from boot every N ms (0: on request only). ACTIVE: each scan probes 0x08-0x77."
+        range 0 600000
+        default 0
+
+    config HWDOG_ETH_W5500
+        bool "W5500 Ethernet on SPI2: the wired network port (wins over Wi-Fi)"
+        default n
+        select ETH_USE_SPI_ETHERNET
+        select ETH_SPI_ETHERNET_W5500
+
+    config HWDOG_ETH_SCLK
+        int "W5500 SCLK GPIO"
+        depends on HWDOG_ETH_W5500
+        default 12
+
+    config HWDOG_ETH_MOSI
+        int "W5500 MOSI GPIO"
+        depends on HWDOG_ETH_W5500
+        default 11
+
+    config HWDOG_ETH_MISO
+        int "W5500 MISO GPIO"
+        depends on HWDOG_ETH_W5500
+        default 13
+
+    config HWDOG_ETH_CS
+        int "W5500 CS GPIO"
+        depends on HWDOG_ETH_W5500
+        default 10
+
+    config HWDOG_ETH_INT
+        int "W5500 INT GPIO (-1: not wired, the driver polls)"
+        depends on HWDOG_ETH_W5500
+        range -1 48
+        default 14
+
+    config HWDOG_ETH_RST
+        int "W5500 RST GPIO (-1: not wired)"
+        depends on HWDOG_ETH_W5500
+        range -1 48
+        default 21
+
 endmenu
