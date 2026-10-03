@@ -17,6 +17,8 @@
  */
 
 import type { CheckStatus, Settings } from './types';
+import type { Clk } from './pack';
+import { relation } from './pack';
 import { clock, milliamps, ms, volts } from './format';
 
 /**
@@ -73,6 +75,16 @@ export interface Diagnosis {
 /** At most this many references per diagnosis: the first and the latest. */
 export const EVIDENCE_LIMIT = 64;
 
+/** "+-4 ms", "+-2 to 9 ms", "unbounded": how well two probes' clocks agree. */
+function alignment(margins: (number | null)[]): string {
+  if (margins.some((m) => m === null || !Number.isFinite(m))) return 'without a bound (no time sample yet)';
+  const ms = margins as number[];
+  const lo = Math.min(...ms);
+  const hi = Math.max(...ms);
+  const r = (x: number) => (x < 10 ? x.toFixed(1) : Math.round(x).toString());
+  return lo === hi ? `to +-${r(hi)} ms` : `to +-${r(lo)} to ${r(hi)} ms`;
+}
+
 function evidence(...seqs: (number | null | undefined)[]): number[] {
   const all = [...new Set(seqs.filter((s): s is number => typeof s === 'number'))].sort((a, b) => a - b);
   if (all.length <= EVIDENCE_LIMIT) return all;
@@ -88,6 +100,8 @@ export interface DropFact {
   start: number;
   end: number | null;
   min: number;
+  /** The clock it was read on, in a pack (several Dogs). */
+  clk?: Clk;
 }
 
 export interface SpikeFact {
@@ -106,6 +120,14 @@ export interface DetachFact {
   dropMin: number | null;
   /** Target current ~100 ms after the disconnect: still running or not. */
   currentAfter: number | null;
+  clk?: Clk;
+  /**
+   * In a pack: the drop and the disconnect came from two clocks whose
+   * alignment (this margin, ms; null: unbounded) cannot tell whether the
+   * disconnect followed the drop inside the window. Neither explained nor
+   * unexplained: said as it is.
+   */
+  undetermined?: number | null;
 }
 
 export interface ResetFact {
@@ -113,6 +135,7 @@ export interface ResetFact {
   t: number;
   code: number;
   reason: string;
+  clk?: Clk;
 }
 
 export interface NetFact {
@@ -125,6 +148,7 @@ export interface NetFact {
   internet: CheckStatus;
   latency: number | null;
   loss: number | null;
+  clk?: Clk;
 }
 
 export interface SessionFacts {
@@ -174,12 +198,14 @@ export interface I2cScanFact {
   seq: number;
   t: number;
   addresses: number[];
+  clk?: Clk;
 }
 
 export interface I2cErrorFact {
   seq: number;
   t: number;
   kind: string;
+  clk?: Clk;
 }
 
 /**
@@ -190,6 +216,9 @@ export interface NetOutageFact {
   seq: number;
   t: number;
   cause: null | { kind: 'DROP' | 'RESET'; t: number; seq: number; text: string };
+  clk?: Clk;
+  /** In a pack: a drop or reset that the clocks' alignment (ms, null: unbounded) cannot place. */
+  undetermined?: number | null;
   upAt: number | null;
   upSeq: number | null;
   dhcpAt: number | null;
@@ -223,6 +252,12 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
 
   // POWER: disconnects explained by the supply.
   const correlated = f.detaches.filter((d) => d.dropAt !== null);
+  // In a pack, a disconnect the clocks cannot place is neither.
+  const unplaced = f.detaches.filter((d) => d.undetermined !== undefined);
+  const unplacedNote =
+    unplaced.length > 0
+      ? `${unplaced.length} disconnect(s) could not be placed against the drops: the probes' clocks are aligned ${alignment(unplaced.map((d) => d.undetermined!))}, too coarse for the ${s.correlationWindowMs} ms window.`
+      : null;
   const n = f.detaches.length;
   const c = correlated.length;
   if (c > 0) {
@@ -238,6 +273,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       observed: [
         `${f.drops.length} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`,
         `${n} USB disconnect(s), last at ${clock(f.detaches[n - 1]!.t)}.`,
+        ...(unplacedNote ? [unplacedNote] : []),
       ],
       correlation: `${c} / ${n} disconnects occurred within ${s.correlationWindowMs} ms of a voltage drop below ${volts(s.undervoltageThreshold)} (delay ${ms(Math.min(...delays))} to ${ms(Math.max(...delays))}).`,
       cause: 'The target browns out when its load rises: the supply or the cable cannot hold the rail.',
@@ -251,8 +287,13 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       id: 'SUPPLY_SAG',
       title: 'SUPPLY SAG',
       confidence: f.drops.length >= 3 ? 'MEDIUM' : 'LOW',
-      basis: `${f.drops.length} drop(s), none followed by a disconnect`,
-      observed: [`${f.drops.length} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`],
+      basis: unplaced.length
+        ? `${f.drops.length} drop(s), none known to be followed by a disconnect`
+        : `${f.drops.length} drop(s), none followed by a disconnect`,
+      observed: [
+        `${f.drops.length} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`,
+        ...(unplacedNote ? [unplacedNote] : []),
+      ],
       correlation: null,
       cause: 'The rail sags under load but the target has survived it so far.',
       next: 'Check the supply margin before it becomes a brownout.',
@@ -280,7 +321,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
   }
 
   // USB: disconnects the supply does not explain.
-  const unexplained = f.detaches.filter((d) => d.dropAt === null);
+  const unexplained = f.detaches.filter((d) => d.dropAt === null && d.undetermined === undefined);
   if (unexplained.length >= 2) {
     const u = unexplained.length;
     const kept = unexplained.filter((d) => d.currentAfter !== null && d.currentAfter >= RUNNING_CURRENT).length;
@@ -447,7 +488,7 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   const scans = f.i2c.scans;
   if (scans.length < 2) return null;
   const all = [...new Set(scans.flatMap((x) => x.addresses))].sort((a, b) => a - b);
-  type Loss = { addr: number; t: number; seq: number; back: { t: number; seq: number } | null; absent: number };
+  type Loss = { addr: number; t: number; seq: number; clk: Clk | undefined; back: { t: number; seq: number } | null; absent: number };
   const losses: Loss[] = [];
   for (const addr of all) {
     let open: Loss | null = null;
@@ -455,7 +496,7 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
       const was = scans[k - 1]!.addresses.includes(addr);
       const is = scans[k]!.addresses.includes(addr);
       if (was && !is) {
-        open = { addr, t: scans[k]!.t, seq: scans[k]!.seq, back: null, absent: 1 };
+        open = { addr, t: scans[k]!.t, seq: scans[k]!.seq, clk: scans[k]!.clk, back: null, absent: 1 };
         losses.push(open);
       } else if (!was && !is && open) open.absent++;
       else if (!was && is && open) {
@@ -470,7 +511,9 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   const flapping = losses.filter((l) => l.back !== null).length;
   const confirmed = losses.some((l) => l.absent >= 2);
   const confidence: Confidence = flapping >= 2 ? 'HIGH' : flapping === 1 || confirmed ? 'MEDIUM' : 'LOW';
-  const afterDrop = losses.filter((l) => f.drops.some((d) => l.t >= d.start && l.t - d.start <= I2C_POWER_WINDOW_MS));
+  const afterDrop = losses.filter((l) =>
+    f.drops.some((d) => relation({ t: d.start, clk: d.clk }, { t: l.t, clk: l.clk }, I2C_POWER_WINDOW_MS) === 'IN'),
+  );
   return {
     id: 'I2C_DEVICE_DISAPPEARED',
     title: 'I2C DEVICE DISAPPEARED',
