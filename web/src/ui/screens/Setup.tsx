@@ -21,6 +21,8 @@ interface SetupProps {
   /** Active simulator scenario, or null on real hardware. */
   scenario: ScenarioId | null;
   onSwitch: (kind: Exclude<TransportKind, 'REPLAY'>, scenario?: ScenarioId) => void;
+  /** End this session and go back to NOT CONNECTED; null when nothing is connected. */
+  onDisconnect: (() => void) | null;
   sessions: SessionsPanelProps;
   /** What the current session has written so far; null for a replay. */
   recording: { entries: number; bytes: number } | null;
@@ -83,7 +85,7 @@ function recordingCell(system: System, recording: SetupProps['recording']) {
   return <Tag status="LIVE" label={`REC ${recording.entries.toLocaleString('en-US')} EVENTS / ${bytes(recording.bytes)}`} />;
 }
 
-export function Setup({ system, scenario, onSwitch, sessions, recording }: SetupProps) {
+export function Setup({ system, scenario, onSwitch, onDisconnect, sessions, recording }: SetupProps) {
   const s = system.settings;
   const set = (patch: Partial<Settings>) => system.updateSettings(patch);
   const serialOk = webSerialSupported();
@@ -116,7 +118,7 @@ export function Setup({ system, scenario, onSwitch, sessions, recording }: Setup
           )}
           <div class="actions">
             <button class={`btn ${system.transportKind === 'SIMULATOR' ? 'active' : ''}`} onClick={() => onSwitch('SIMULATOR')}>
-              USE SIMULATOR
+              DEMO MODE
             </button>
             <button class={`btn ${system.transportKind === 'DOGD' ? 'active' : ''}`} onClick={() => onSwitch('DOGD')} title="The local daemon on this machine (127.0.0.1:4782)">
               CONNECT DOGD
@@ -124,6 +126,11 @@ export function Setup({ system, scenario, onSwitch, sessions, recording }: Setup
             <button class={`btn ${system.transportKind === 'WEB SERIAL' ? 'active' : ''}`} onClick={() => onSwitch('WEB SERIAL')} disabled={!serialOk}>
               CONNECT WEB SERIAL
             </button>
+            {onDisconnect && (
+              <button class="btn" onClick={onDisconnect} title="End this session; nothing runs until you choose a source again">
+                DISCONNECT
+              </button>
+            )}
           </div>
           {!serialOk && <p class="note warn">WEB SERIAL NOT AVAILABLE IN THIS BROWSER. Use a Chromium-based browser over https or localhost.</p>}
           <p class="note">Switching source starts a new session, so simulated and real measurements are never mixed in one report.</p>

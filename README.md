@@ -86,7 +86,10 @@ I want one instrument that can help answer a very simple question:
 The web build contains three entry points: `index.html` is the bilingual project
 landing page (official branding, project laws, light/dark theme),
 `engineering.html` presents the architecture, development plan and roadmap, and
-`diagnostic.html` opens the local diagnostic interface and simulator.
+`diagnostic.html` opens the local diagnostic interface. It opens NOT CONNECTED
+and measures nothing until you choose a source: Web Serial, dogd, a recorded
+`.hdlog`, or DEMO MODE (the simulator, only when you ask for it; a link can
+ask with `?demo` or `?scenario=HD-T004`).
 They use bundled assets and fonts; the landing page has no account,
 subscription, telemetry or runtime network dependency.
 
@@ -99,7 +102,7 @@ cd web
 npm ci
 npm run dev        # http://localhost:5173
 npm run check      # typecheck + tests + production build
-npm run demo       # open the interface against the simulator
+npm run demo       # open the interface in DEMO MODE (simulator)
 ```
 
 Optional, the local daemon (Rust): it holds the device link and stores
