@@ -198,6 +198,10 @@ export class SimulatedDevice implements Transport {
       case 'probe':
         this.runProbe(cmd.id, cmd.target, cmd.tests);
         break;
+      case 'time':
+        // The clock now, at once: what a pack aligns Dogs with.
+        this.emit({ type: 'time', t: this.t, id: cmd.id });
+        break;
       case 'meter.cal': {
         const { cmd: _cmd, v_err, i_err, ...cal } = cmd;
         this.cal = { cal, v_err, i_err };

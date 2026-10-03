@@ -187,6 +187,21 @@ measured, never "probably fine".
 
 `level`: `info | warn | error`.
 
+### time
+
+```json
+{"type":"time","t":120345,"id":17}
+```
+
+The answer to the host command `time`, sent at once: the device clock now,
+with the same `id`. The host notes when it sent the command (h0) and when
+the answer arrived (h1): the device read `t` somewhere in between, so its
+clock is aligned to the host's to within (h1 - h0) / 2. That is how a pack
+of several Dogs gets one clock with a known error ([`PACK.md`](PACK.md)).
+A device that does not know `time` rejects it (`log`, "command rejected"):
+its clock then stays aligned by its `hello` only, with no bound, and the
+host says so.
+
 ---
 
 ## HOST -> DEVICE
@@ -203,6 +218,7 @@ measured, never "probably fine".
 {"cmd":"probe","id":"p1","target":"192.168.1.1","tests":["PING","DNS","TCP"]}
 {"cmd":"meter.cal","date":"2026-10-02","ref":"Fluke 87V","v_gain":1.0012,"i_gain":0.991,"i_offset":0.0003,"v_err":0.002,"i_err":0.0004}
 {"cmd":"meter.clear"}
+{"cmd":"time","id":17}
 ```
 
 `meter.cal` stores a calibration on the device (NVS on the ESP32-S3):
@@ -216,6 +232,9 @@ less than 1000). `net.watch` (0 stops; at least 2000) pings the gateway,
 resolves `dns` and opens TCP 443 to `upstream`, and reports the results in
 `net.status` (gateway, dns, internet, latency, loss). Without `dns` or
 `upstream`, those stay UNKNOWN: nothing is checked that was not asked.
+
+`time` asks for the device clock (`id` 0 to 4294967295); the device answers
+with a `time` frame. It changes nothing on the device or the target.
 
 `i2c.scan`, `i2c.watch`, `net.watch`, `usb.enumerate`, `uart.tx`, `probe`,
 `meter.cal` and `meter.clear` are ACTIVE operations:

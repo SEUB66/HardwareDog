@@ -586,7 +586,7 @@ LVL   NAME                                  STATUS
 75    professional reports                   DONE      TXT, JSON, HTML, PDF from the same lines
 80    network + I2C on hardware              PARTIAL   rules, simulator, firmware core PASS; ESP32-S3 + W5500 builds in CI; silicon pending
 85    PCB Rev A                              PLANNED
-90    probe architecture                     PLANNED
+90    probe architecture                     PARTIAL   pack core PASS: several Dogs, one timeline, one clock (PACK.md); recording, dogd, UI next
 95    community incident library             PLANNED
 100   Hardware Dog 1.0                       PLANNED
 MAX   incidents make Hardware Dog better     PLANNED
@@ -824,6 +824,29 @@ Hardware Dog stops being a box and becomes a platform, without growing a
 Frankenstein core: CAN DOG, USB DOG, POWER DOG, ENVIRONMENT, RS-485, GPIO
 are probes, and every probe simply produces HDP.
 
+Several Dogs watching one incident are a **pack** ([`PACK.md`](PACK.md)):
+one timeline, one clock with a known error, one source of truth per
+signal, and rules that never know which Dog spoke.
+
+```text
+[ OK ] HDP time: {"cmd":"time","id":n} -> {"type":"time","t":T,"id":n};
+       schema, decoder, simulator, firmware core (C tests)
+[ OK ] clocks: hello (unbounded), time round trips (+- half the round
+       trip), 100 ppm drift, resampling every 10 s (core/pack.ts)
+[ OK ] one timeline: a frame waits for the other Dogs (500 ms at most),
+       released only on arrivals, so a replay is the session again
+[ OK ] no fake certainty: across clocks a correlation is IN, OUT or
+       UNKNOWN, never guessed; UNKNOWN is said in the diagnosis
+[ OK ] one source per signal: capabilities claimed once, commands routed
+       to the Dog that observes them, a lost Dog does not stop the pack
+[ OK ] GATE (software): a simulated pack of three Dogs reaches the same
+       diagnosis as one device on every scenario (pack-system.test.ts)
+[ -- ] hdlog v3: record and replay a pack                    LVL 90.2
+[ -- ] dogd with several sources; two firmwares through it   LVL 90.3
+[ -- ] the interface shows the pack                          LVL 90.4
+[ -- ] GATE (hardware): two boards on one bench, a PHYSICAL case
+```
+
 ### LVL 95 — COMMUNITY INCIDENT LIBRARY
 
 Not a social network. A repository of anonymized, reproducible cases
@@ -919,6 +942,8 @@ and are not granted for unrestricted third-party branding or resale.
 ## CHANGELOG
 
 ```text
+0.8   LVL 90 started: the pack (PACK.md), HDP time, one timeline and one
+      clock for several Dogs, verified against every scenario
 0.7   LVL 60 partial: firmware core verified on a PC and in CI, ESP32-S3
       build, bring-up checklist; hello.caps and ruleset v2
 0.6   LVL 55 done: dogd (DOGD.md), evidence references locked before it

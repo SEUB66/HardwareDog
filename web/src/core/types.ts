@@ -44,6 +44,17 @@ export interface DeviceInfo {
   caps: readonly string[] | null;
 }
 
+/** One Dog of a pack: who it said it is, what it observes, whether its link is up. */
+export interface DogState {
+  /** Its place in the pack: D1, D2... */
+  id: string;
+  /** From its hello; null until it says hello. */
+  device: DeviceInfo | null;
+  /** Capabilities this Dog is the source for in the pack. */
+  observes: string[];
+  lost: boolean;
+}
+
 export interface PowerSample {
   t: number;
   voltage: number;
