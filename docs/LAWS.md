@@ -45,7 +45,14 @@ ENFORCED BY   web/test/protocol-contract.test.ts   every simulator frame
               web/test/session.test.ts             replay == live: same
                                                     timeline, facts,
                                                     diagnoses
+              web/test/pack-system.test.ts         several Dogs (a pack,
+                                                    three clocks) == one
+                                                    device, every scenario
 ```
+
+Several probes do not mean several clocks on the timeline: each Dog's
+clock is mapped onto one, with its error kept, and a comparison the
+error cannot settle is said to be undetermined ([`PACK.md`](PACK.md)).
 
 ---
 

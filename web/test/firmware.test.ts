@@ -154,6 +154,7 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
       '{"cmd":"uart.tx","data":"AT+RST"}',
       '{"cmd":"net.refresh"}',
       '{"cmd":"usb.enumerate"}',
+      '{"cmd":"time","id":5}',
       '{"cmd":"probe","id":"p1","target":"192.168.1.1","tests":["PING","DNS"]}',
       'not json',
       '{"cmd":"uart.config","baud":1}',
@@ -167,6 +168,8 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     // The host build has probes (a simulated LAN): results come back in the background.
     expect(frames.filter((f) => f.type === 'probe.result').map((f) => (f.type === 'probe.result' ? `${f.test} ${f.status}` : ''))).toEqual(['PING PASS', 'DNS PASS']);
     expect(frames.some((f) => f.type === 'probe.done')).toBe(true);
+    // time: the device clock, the same id back (what a pack aligns Dogs with)
+    expect(frames.filter((f) => f.type === 'time').map((f) => (f.type === 'time' ? f.id : -1))).toEqual([5]);
     const rejected = frames.filter((f) => f.type === 'log' && f.message.startsWith('command rejected'));
     expect(rejected).toHaveLength(3);
   });

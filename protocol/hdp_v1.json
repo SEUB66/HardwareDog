@@ -259,6 +259,17 @@
       },
       "additionalProperties": false
     },
+    "time": {
+      "type": "object",
+      "required": ["type", "t", "id"],
+      "properties": {
+        "type": { "const": "time" },
+        "t": { "$ref": "#/definitions/t" },
+        "id": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      },
+      "additionalProperties": false,
+      "description": "Answer to the host command time, sent at once: the device clock now. The host brackets it between sending and receiving to align this device's clock with others, with a known error."
+    },
 
     "deviceFrame": {
       "oneOf": [
@@ -275,7 +286,8 @@
         { "$ref": "#/definitions/net.status" },
         { "$ref": "#/definitions/probe.result" },
         { "$ref": "#/definitions/probe.done" },
-        { "$ref": "#/definitions/log" }
+        { "$ref": "#/definitions/log" },
+        { "$ref": "#/definitions/time" }
       ]
     },
 
@@ -339,6 +351,13 @@
           "description": "Store a calibration on the device. It answers with power.meter."
         },
         { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "meter.clear" } }, "additionalProperties": false },
+        {
+          "type": "object",
+          "required": ["cmd", "id"],
+          "properties": { "cmd": { "const": "time" }, "id": { "type": "integer", "minimum": 0, "maximum": 4294967295 } },
+          "additionalProperties": false,
+          "description": "Ask for the device clock. The device answers with a time frame carrying the same id."
+        },
         {
           "type": "object",
           "required": ["cmd", "id", "target", "tests"],

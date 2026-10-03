@@ -4,6 +4,7 @@ import schema from '../../protocol/hdp_v1.json';
 import { decodeFrame, encodeCommand, type DeviceFrame, type HostCommand } from '../src/core/protocol';
 import { SCENARIO_IDS } from '../src/core/scenarios';
 import { SimulatedDevice } from '../src/core/simulator';
+import { SimulatedPack } from '../src/core/simpack';
 import type { TransportSink } from '../src/core/transport';
 
 /**
@@ -34,6 +35,7 @@ async function capture(scenario: (typeof SCENARIO_IDS)[number], seconds: number)
   sim.send({ cmd: 'probe', id: 'p1', target: '192.168.1.1', tests: ['PING', 'DNS', 'TCP', 'HTTP'] });
   sim.send({ cmd: 'probe', id: 'p2', target: 'example.invalid', tests: ['DNS', 'HTTP'] });
   sim.send({ cmd: 'uart.tx', data: 'status' });
+  sim.send({ cmd: 'time', id: 4294967295 });
   for (let k = 0; k < seconds * 10; k++) sim.advance(100);
   await sim.close();
   return { frames, errors };
@@ -52,7 +54,7 @@ describe('HDP v1 contract', () => {
     }
     // The simulator exercises the whole device vocabulary.
     expect([...types].sort()).toEqual(
-      ['hello', 'i2c.error', 'i2c.scan', 'log', 'net.status', 'power', 'power.meter', 'probe.done', 'probe.result', 'uart.config', 'uart.error', 'uart.rx', 'usb.attach', 'usb.detach'],
+      ['hello', 'i2c.error', 'i2c.scan', 'log', 'net.status', 'power', 'power.meter', 'probe.done', 'probe.result', 'time', 'uart.config', 'uart.error', 'uart.rx', 'usb.attach', 'usb.detach'],
     );
   });
 
@@ -83,6 +85,9 @@ describe('HDP v1 contract', () => {
       '{"type":"power","t":1,"v":"5","i":0}',
       '{"type":"i2c.scan","t":1,"speed":400000,"devices":[{"addr":200}]}',
       '{"type":"warp","t":1}',
+      '{"type":"time","t":1,"id":-1}',
+      '{"type":"time","t":1,"id":1.5}',
+      '{"type":"time","t":1}',
       '{"type":"i2c.error","t":1,"kind":"MELTED"}',
       '{"type":"power.meter","t":1,"sensor":"INA226","shunt_ohm":0,"v_max":36,"i_max":0.8,"v_res":0.00125,"i_res":0.0000245,"rate_hz":50,"v_err":{"pct":0.1,"abs":0.0075},"i_err":{"pct":1.1,"abs":0.0001},"basis":"DATASHEET","cal":null}',
       '{"type":"power.meter","t":1,"sensor":"INA226","shunt_ohm":0.1,"v_max":36,"i_max":0.8,"v_res":0.00125,"i_res":0.0000245,"rate_hz":50,"v_err":{"pct":-1,"abs":0.0075},"i_err":{"pct":1.1,"abs":0.0001},"basis":"DATASHEET","cal":null}',
@@ -91,5 +96,19 @@ describe('HDP v1 contract', () => {
       expect(decodeFrame(raw).ok, raw).toBe(false);
       expect(validateFrame(JSON.parse(raw)), raw).toBe(false);
     }
+  });
+
+  it('every frame of a simulated pack (three Dogs, time samples included) validates too', async () => {
+    const frames: DeviceFrame[] = [];
+    const errors: string[] = [];
+    const pack = new SimulatedPack({ seed: 5, manual: true, scenario: 'HD-T016' });
+    await pack.open({ frame: (f) => frames.push(f), error: (m) => errors.push(m), lost: () => {} });
+    for (const dog of pack.dogs) pack.send({ cmd: 'time', id: 7 }, dog);
+    for (let k = 0; k < 400; k++) pack.advance(100);
+    await pack.close();
+    expect(errors).toEqual([]);
+    expect(frames.filter((f) => f.type === 'hello')).toHaveLength(3);
+    expect(frames.filter((f) => f.type === 'time')).toHaveLength(3);
+    for (const f of frames) if (!validateFrame(f)) throw new Error(`${f.type}: ${lastErrors(validateFrame)}\n${JSON.stringify(f)}`);
   });
 });

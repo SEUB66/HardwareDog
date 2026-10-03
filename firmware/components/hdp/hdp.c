@@ -759,6 +759,18 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         }
         d->hal.uart_write(d->hal.ctx, data->str, data->str_len);
         d->hal.uart_write(d->hal.ctx, "\r\n", 2);
+    } else if (!strcmp(c, "time")) {
+        /* The clock now, at once: the host brackets this answer between
+         * sending and receiving to align several devices on one clock. */
+        const kv_t *id = field(kvs, n, "id", V_NUM);
+        if (!id || id->num < 0 || id->num > 4294967295.0 || id->num != floor(id->num)) {
+            reject(d, "time needs an integer id 0..4294967295");
+            return;
+        }
+        line_t l;
+        begin(d, &l, "time");
+        putf(&l, ",\"id\":%lu", (unsigned long)id->num);
+        send(d, &l);
     } else if (!strcmp(c, "i2c.scan")) {
         scan_i2c(d, false);
     } else if (!strcmp(c, "i2c.watch")) {

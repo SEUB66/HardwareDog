@@ -1,4 +1,7 @@
-import type { DeviceFrame, Meter } from './protocol';
+import type { Capability, DeviceFrame, Meter } from './protocol';
+import { CAPABILITIES, capabilityOf } from './protocol';
+import type { Clk, Placed, Stamp } from './pack';
+import { Pack, SYNC_EVERY_MS, during, margin, relation } from './pack';
 import { fitCalibration, rawOf, type CalPoint } from './calibration';
 import type { Transport } from './transport';
 import { Trace } from './trace';
@@ -6,6 +9,7 @@ import type {
   BusState,
   CheckStatus,
   DeviceInfo,
+  DogState,
   LinkState,
   NetState,
   PowerState,
@@ -160,6 +164,31 @@ const statusSeverity = (s: CheckStatus): Severity => (s === 'PASS' ? 'PASS' : s 
 
 const utf8Length = (s: string) => new TextEncoder().encode(s).length;
 
+/** The capability a command is for; null: every Dog (hello). time is always addressed. */
+function commandCapability(cmd: HostCommand): Capability | null {
+  switch (cmd.cmd) {
+    case 'hello':
+    case 'time':
+      return null;
+    case 'usb.enumerate':
+      return 'usb';
+    case 'uart.config':
+    case 'uart.tx':
+      return 'uart';
+    case 'i2c.scan':
+    case 'i2c.watch':
+      return 'i2c';
+    case 'net.refresh':
+    case 'net.watch':
+      return 'net';
+    case 'meter.cal':
+    case 'meter.clear':
+      return 'power';
+    case 'probe':
+      return 'probe';
+  }
+}
+
 /**
  * The one and only source of truth.
  *
@@ -205,6 +234,15 @@ export class System {
   replayIntegrity: Integrity | null = null;
   /** Why recording stopped (storage refused a write), if it did. */
   recordingError: string | null = null;
+  /**
+   * A pack: several Dogs on one timeline and one clock (core/pack.ts).
+   * Null: one device, exactly as before packs.
+   */
+  pack: Pack | null = null;
+  /** The Dogs of a pack, in order. Empty for one device. */
+  dogs: DogState[] = [];
+  /** In a pack, one Dog observes each capability: the first to claim it. */
+  readonly owners = new Map<Capability, string>();
 
   private transport: Transport | null = null;
   private listeners = new Set<Listener>();
@@ -226,6 +264,13 @@ export class System {
   private seenFrames = new Set<DeviceFrame['type']>();
   private lastDiagnosisAt = -Infinity;
   private reported = new Map<DiagnosisId, Confidence>();
+  /** Clock of the frame being handled, in a pack. */
+  private clk: Clk | null = null;
+  private lastBelowClk: Clk | undefined;
+  private lastSync = new Map<string, number>();
+  private syncId = 0;
+  /** Dog/capability pairs already reported as refused (said once). */
+  private refusedSaid = new Set<string>();
 
   /** The operator's own settings, as stored. A replay may run on others. */
   private own: Settings;
@@ -321,22 +366,37 @@ export class System {
     this.origin = transport.origin;
     this.replayOf = transport instanceof ReplayTransport ? transport.recording.header : null;
     this.replayIntegrity = transport instanceof ReplayTransport ? (transport.recording.integrity ?? null) : null;
+    this.pack = transport.dogs ? new Pack(transport.dogs) : null;
+    this.dogs = (transport.dogs ?? []).map((id) => ({ id, device: null, observes: [], lost: false }));
+    this.owners.clear();
+    this.refusedSaid.clear();
+    this.lastSync.clear();
+    if (this.pack && this.recorder) {
+      // hdlog v2 has no Dog on its lines: a pack in it could not be replayed.
+      this.recorder = null;
+      this.recordingStopped('a pack is recorded from hdlog v3 on (LVL 90.2): this session is not recorded');
+    }
     // Same thresholds as when it was recorded, or the diagnosis could differ.
     if (this.replayOf?.thresholds) this.settings = { ...this.settings, ...this.replayOf.thresholds };
     this.changed();
     try {
       await transport.open({
-        frame: (f) => {
+        frame: (f, dog) => {
           this.recorder?.add({ at: this.now(), frame: f });
-          this.onFrame(f);
+          if (this.pack && dog !== undefined) this.onPackFrame(dog, f);
+          else this.onFrame(f);
         },
-        error: (message, raw) => {
+        error: (message, raw, dog) => {
           this.recorder?.add(raw === undefined ? { at: this.now(), reject: message } : { at: this.now(), reject: message, raw });
-          this.onFrameError(message, raw);
+          this.onFrameError(dog === undefined ? message : `${dog}: ${message}`, raw);
         },
-        lost: (reason) => {
+        lost: (reason, dog) => {
           this.recorder?.add({ at: this.now(), lost: reason });
-          this.onLost(reason);
+          if (this.pack && dog !== undefined) this.onDogLost(dog, reason);
+          else this.onLost(reason);
+        },
+        sent: (cmd, dog) => {
+          if (this.pack && dog !== undefined && cmd.cmd === 'time') this.pack.sent(dog, cmd.id, this.now());
         },
         annotate: (text) => this.mark(text),
         configure: (thresholds) => this.useThresholds(thresholds),
@@ -364,6 +424,7 @@ export class System {
     if (!this.transport) return;
     const t = this.transport;
     this.transport = null;
+    this.flushPack();
     await t.close();
     this.link = 'OFFLINE';
     this.usb.connected = false;
@@ -395,6 +456,7 @@ export class System {
 
   /** A recording has been fully played: final diagnosis, link closed. */
   private onReplayEnded(): void {
+    this.flushPack();
     const t = this.now();
     this.transport = null;
     if (this.link !== 'LOST') this.link = 'OFFLINE';
@@ -404,6 +466,7 @@ export class System {
   }
 
   private onLost(reason: string): void {
+    this.flushPack();
     const t = this.now();
     this.transport = null;
     this.link = 'LOST';
@@ -412,6 +475,114 @@ export class System {
     this.lastError = { what: 'DEVICE LINK LOST', where: this.transportLabel || 'transport', when: t, detail: reason };
     this.log(t, 'SYS', 'FAIL', 'device link lost', reason);
     this.changed();
+  }
+
+  // ------------------------------------------------------------ pack
+
+  /**
+   * A frame from one Dog of a pack. It is numbered on arrival (the number
+   * the evidence cites is its place in the stream, as recorded), then goes
+   * on the timeline when the pack can place it in the true order.
+   */
+  private onPackFrame(dog: string, f: DeviceFrame): void {
+    this.framesReceived++;
+    this.seenFrames.add(f.type);
+    const at = this.now();
+    const placed = this.pack!.arrive(dog, this.framesReceived, f, at);
+    // Keep each live Dog's clock sampled: at once after its hello, then every SYNC_EVERY_MS.
+    if (this.transport && this.transportKind !== 'REPLAY') {
+      if (f.type === 'hello') this.lastSync.delete(dog);
+      const last = this.lastSync.get(dog);
+      if (last === undefined || at - last >= SYNC_EVERY_MS) {
+        this.lastSync.set(dog, at);
+        this.sendTo(dog, { cmd: 'time', id: ++this.syncId });
+      }
+    }
+    for (const p of placed) this.place(p);
+  }
+
+  /** Put one placed frame on the timeline, on its Dog's clock. */
+  private place(p: Placed): void {
+    this.frameSeq = p.seq;
+    this.clk = { dog: p.dog, err: p.err };
+    try {
+      const f = p.frame;
+      if (f.type === 'time') return; // clock samples: the pack has used them
+      if (f.type === 'hello') return this.onDogHello(p.dog, f, p.t);
+      const cap = capabilityOf(f.type);
+      if (cap !== null && this.owners.get(cap) !== p.dog) return this.refuse(p.dog, cap, p.t);
+      this.handleFrame(f, p.t);
+    } finally {
+      this.frameSeq = null;
+      this.clk = null;
+    }
+  }
+
+  /**
+   * A Dog said who it is. Each capability is observed by one Dog only, the
+   * first to claim it: one source of truth per signal, and the rules never
+   * need to know which Dog spoke.
+   */
+  private onDogHello(dog: string, f: Extract<DeviceFrame, { type: 'hello' }>, t: number): void {
+    const state = this.dogs.find((d) => d.id === dog)!;
+    const claimed = f.caps ?? [...CAPABILITIES];
+    const kept: Capability[] = [];
+    for (const cap of claimed) {
+      const owner = this.owners.get(cap);
+      if (owner === undefined || owner === dog) {
+        this.owners.set(cap, dog);
+        kept.push(cap);
+      } else {
+        this.log(t, 'SYS', 'FAIL', `${dog} ${f.device}: ${cap} is already observed by ${owner}`, `${dog} ignored for ${cap}`);
+      }
+    }
+    state.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: t - f.t, caps: f.caps ?? null };
+    state.observes = kept;
+    state.lost = false;
+    // The first Dog stands for the pack where one device is expected.
+    if (this.dogs[0]!.id === dog || this.device.id === '--') this.device = { ...state.device, caps: [...this.owners.keys()] };
+    else this.device = { ...this.device, caps: [...this.owners.keys()] };
+    if (f.caps === undefined) this.log(t, 'SYS', 'WARN', `${dog} ${f.device} declares no capabilities`, 'claims every capability not yet observed');
+    this.log(t, 'SYS', 'INFO', `${dog} device ${f.device} rev ${f.rev}`, `fw ${f.fw} / proto ${f.proto} / observes ${kept.join(' ') || 'nothing'}`);
+    this.changed();
+  }
+
+  private refuse(dog: string, cap: Capability, t: number): void {
+    this.frameErrors++;
+    const key = `${dog}/${cap}`;
+    if (this.refusedSaid.has(key)) return;
+    this.refusedSaid.add(key);
+    this.log(t, 'SYS', 'WARN', `${dog}: ${cap} frames ignored`, `${cap} is observed by ${this.owners.get(cap) ?? 'no Dog'}`);
+    this.changed();
+  }
+
+  /** One Dog's link is gone; the pack goes on with the others. */
+  private onDogLost(dog: string, reason: string): void {
+    const t = this.now();
+    const state = this.dogs.find((d) => d.id === dog);
+    if (state) state.lost = true;
+    for (const p of this.pack!.lost(dog, t)) this.place(p);
+    if (this.owners.get('usb') === dog) this.usb.connected = false;
+    if (this.owners.get('power') === dog) this.power.condition = 'NO SIGNAL';
+    this.log(t, 'SYS', 'FAIL', `${dog} link lost`, reason);
+    if (this.dogs.every((d) => d.lost)) this.onLost('every Dog of the pack is gone');
+    this.changed();
+  }
+
+  /** Everything the pack still holds goes on the timeline (end of the session). */
+  private flushPack(): void {
+    if (!this.pack) return;
+    for (const p of this.pack.flush()) this.place(p);
+  }
+
+  /** How well a Dog's clock is aligned now (ms, null: unbounded). */
+  clockError(dog: string): number | null {
+    return this.pack?.clocks.get(dog)?.errAt(this.now()) ?? null;
+  }
+
+  /** The clock of the frame being handled, to stamp the facts it makes. */
+  private stamp(): { clk?: Clk } {
+    return this.clk ? { clk: this.clk } : {};
   }
 
   /**
@@ -432,6 +603,7 @@ export class System {
 
   /** Whether the device declared this capability (no caps declared = everything). */
   observes(cap: string): boolean {
+    if (this.pack) return this.owners.has(cap as Capability);
     return this.device.caps === null || this.device.caps.includes(cap);
   }
 
@@ -440,7 +612,7 @@ export class System {
     return this.frameSeq ?? this.framesReceived;
   }
 
-  private handleFrame(f: DeviceFrame): void {
+  private handleFrame(f: DeviceFrame, placedAt?: number): void {
     this.seenFrames.add(f.type);
     if (f.type === 'hello') {
       this.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: this.now() - f.t, caps: f.caps ?? null };
@@ -450,7 +622,7 @@ export class System {
       this.changed();
       return;
     }
-    const t = this.hostTime(f.t);
+    const t = placedAt ?? this.hostTime(f.t);
     switch (f.type) {
       case 'power':
         this.onPower(t, f.v, f.i);
@@ -495,7 +667,8 @@ export class System {
         this.facts.uart.rxLines++;
         this.facts.uart.rxAtBaud++;
         {
-          const reset = parseResetLine(f.data, t, this.seq);
+          const parsed = parseResetLine(f.data, t, this.seq);
+          const reset = parsed ? { ...parsed, ...this.stamp() } : null;
           if (reset) {
             this.remember(this.facts.uart.resets, reset);
             if (reset.code !== 0x1) this.log(t, 'UART', 'WARN', 'target reset', reset.reason);
@@ -516,7 +689,7 @@ export class System {
           faults: this.bus.faults + 1,
           lastFault: { t, kind: f.kind },
         };
-        this.remember(this.facts.i2c.errors, { seq: this.seq, t, kind: f.kind });
+        this.remember(this.facts.i2c.errors, { seq: this.seq, t, kind: f.kind, ...this.stamp() });
         this.log(t, 'I2C', 'FAIL', `bus fault ${f.kind}`, f.detail ?? undefined);
         break;
       case 'net.status':
@@ -604,13 +777,14 @@ export class System {
     // Rule: undervoltage with hysteresis.
     if (v < s.undervoltageThreshold) {
       this.lastBelowAt = t;
+      this.lastBelowClk = this.clk ?? undefined;
       if (this.dropStartedAt === null) {
         this.dropStartedAt = t;
         this.dropMin = v;
         p.lastDropAt = t;
         p.lastDropVoltage = v;
         p.dropCount++;
-        this.remember(this.facts.drops, { seq: this.seq, start: t, end: null, min: v });
+        this.remember(this.facts.drops, { seq: this.seq, start: t, end: null, min: v, ...this.stamp() });
         this.log(t, 'POWER', 'WARN', 'voltage drop', `${volts(v)} < ${volts(s.undervoltageThreshold)}`);
       } else if (v < this.dropMin) {
         this.dropMin = v;
@@ -701,9 +875,17 @@ export class System {
     // Same device every time: the name says so, it is not a new one.
     this.log(t, 'USB', 'WARN', 'device disconnected', usbName(u.descriptor));
 
-    // Rule: USB / power correlation.
+    // Rule: USB / power correlation. In a pack the drop and the disconnect
+    // may come from two clocks: their alignment is part of the question.
     const window = this.settings.correlationWindowMs;
-    const correlated = this.lastBelowAt !== null && t - this.lastBelowAt <= window && t >= this.lastBelowAt;
+    // The question: did it happen during the latest drop, or within the window after it?
+    const on = this.lastBelowClk ? { clk: this.lastBelowClk } : {};
+    const below: Stamp | null = this.lastBelowAt === null ? null : { t: this.lastBelowAt, ...on };
+    const started: Stamp | null = below === null ? null : { t: this.power.lastDropAt ?? this.lastBelowAt!, ...on };
+    const here: Stamp = { t, ...this.stamp() };
+    const rel = below === null ? 'OUT' : during(started!, below, here, window);
+    const correlated = rel === 'IN';
+    const m = below === null ? 0 : margin(below, here);
     this.remember(this.facts.detaches, {
       seq: this.seq,
       t,
@@ -711,7 +893,18 @@ export class System {
       dropSeq: correlated ? (this.facts.drops.at(-1)?.seq ?? null) : null,
       dropMin: correlated ? this.power.lastDropVoltage : null,
       currentAfter: null,
+      ...this.stamp(),
+      ...(rel === 'UNKNOWN' ? { undetermined: Number.isFinite(m) ? m : null } : {}),
     });
+    if (rel === 'UNKNOWN') {
+      this.log(
+        t,
+        'RULE',
+        'INFO',
+        'disconnect vs voltage drop: undetermined',
+        `${Math.round(t - this.lastBelowAt!)} ms apart, clocks aligned ${Number.isFinite(m) ? `+-${m.toFixed(1)} ms` : 'without a bound'}`,
+      );
+    }
     if (correlated) {
       u.correlatedDisconnects++;
       const dropAt = this.power.lastDropAt ?? this.lastBelowAt!;
@@ -756,7 +949,7 @@ export class System {
       lastScanAt: t,
       devices: f.devices.map((d) => ({ address: d.addr, confirmed: d.ident, method: d.method })),
     };
-    this.remember(this.facts.i2c.scans, { seq: this.seq, t, addresses });
+    this.remember(this.facts.i2c.scans, { seq: this.seq, t, addresses, ...this.stamp() });
     if (!previous || this.bus.watchMs === 0) {
       this.log(t, 'I2C', 'PASS', `scan complete`, `${f.devices.length} device(s)`);
       for (const d of f.devices) {
@@ -777,13 +970,34 @@ export class System {
     if (prevUp && !up) {
       const drop = this.facts.drops.at(-1);
       const reset = this.facts.uart.resets.at(-1);
-      const near = (x: number | undefined) => x !== undefined && t >= x && t - x <= NET_POWER_WINDOW_MS;
-      const cause = near(drop?.start)
-        ? { kind: 'DROP' as const, t: drop!.start, seq: drop!.seq, text: `voltage drop ${volts(drop!.min)}` }
-        : near(reset?.t)
-          ? { kind: 'RESET' as const, t: reset!.t, seq: reset!.seq, text: `target reset ${reset!.reason}` }
-          : null;
-      this.remember(this.facts.outages, { seq: this.seq, t, cause, upAt: null, upSeq: null, dhcpAt: null, dhcpSeq: null, dnsAt: null, dnsSeq: null });
+      const here: Stamp = { t, ...this.stamp() };
+      const rel = (x: Stamp | null) => (x === null ? ('OUT' as const) : relation(x, here, NET_POWER_WINDOW_MS));
+      const dropAt: Stamp | null = drop ? { t: drop.start, ...(drop.clk ? { clk: drop.clk } : {}) } : null;
+      const resetAt: Stamp | null = reset ? { t: reset.t, ...(reset.clk ? { clk: reset.clk } : {}) } : null;
+      const byDrop = rel(dropAt);
+      const byReset = rel(resetAt);
+      const cause =
+        byDrop === 'IN'
+          ? { kind: 'DROP' as const, t: drop!.start, seq: drop!.seq, text: `voltage drop ${volts(drop!.min)}` }
+          : byReset === 'IN'
+            ? { kind: 'RESET' as const, t: reset!.t, seq: reset!.seq, text: `target reset ${reset!.reason}` }
+            : null;
+      const unsure = cause === null && (byDrop === 'UNKNOWN' || byReset === 'UNKNOWN');
+      const m = Math.max(dropAt && byDrop === 'UNKNOWN' ? margin(dropAt, here) : 0, resetAt && byReset === 'UNKNOWN' ? margin(resetAt, here) : 0);
+      this.remember(this.facts.outages, {
+        seq: this.seq,
+        t,
+        cause,
+        ...this.stamp(),
+        ...(unsure ? { undetermined: Number.isFinite(m) ? m : null } : {}),
+        upAt: null,
+        upSeq: null,
+        dhcpAt: null,
+        dhcpSeq: null,
+        dnsAt: null,
+        dnsSeq: null,
+      });
+      if (unsure) this.log(t, 'RULE', 'INFO', 'link down vs drop / reset: undetermined', `clocks aligned ${Number.isFinite(m) ? `+-${m.toFixed(1)} ms` : 'without a bound'}`);
       if (cause) this.log(t, 'RULE', 'WARN', `link down ${ms(t - cause.t)} after ${cause.text}`);
       return;
     }
@@ -845,6 +1059,7 @@ export class System {
         internet: f.internet,
         latency: f.latency,
         loss: f.loss,
+        ...this.stamp(),
       },
       NET_HISTORY,
     );
@@ -862,10 +1077,13 @@ export class System {
     return this.link === 'ONLINE' && this.transport !== null;
   }
 
-  private requireLink(action: string): string | null {
-    if (this.online) return null;
-    if (this.transportKind === 'REPLAY') return `${action}: recorded session, read-only`;
-    const msg = `${action}: no device link (${this.link})`;
+  /** Null when `action` can be sent now; else why not (and it is said). */
+  private requireLink(action: string, cap?: Capability): string | null {
+    if (this.transportKind === 'REPLAY' && !this.online) return `${action}: recorded session, read-only`;
+    let msg: string | null = null;
+    if (!this.online) msg = `${action}: no device link (${this.link})`;
+    else if (this.pack && cap !== undefined && !this.owners.has(cap)) msg = `${action}: no Dog of the pack observes ${cap}`;
+    if (msg === null) return null;
     this.log(this.now(), 'SYS', 'WARN', msg);
     this.changed();
     return msg;
@@ -892,10 +1110,23 @@ export class System {
     this.changed();
   }
 
-  /** Send a command to the device and record it. */
+  /** Send a command to the device and record it. In a pack, to the Dog that observes it. */
   private send(cmd: HostCommand): void {
-    this.transport!.send(cmd);
-    this.recorder?.add({ at: this.now(), cmd });
+    if (!this.pack) {
+      this.transport!.send(cmd);
+      this.recorder?.add({ at: this.now(), cmd });
+      return;
+    }
+    const cap = commandCapability(cmd);
+    const dogs = cap === null ? this.dogs.map((d) => d.id) : [this.owners.get(cap)].filter((d): d is string => d !== undefined);
+    for (const dog of dogs) this.sendTo(dog, cmd);
+  }
+
+  private sendTo(dog: string, cmd: HostCommand): void {
+    const at = this.now();
+    if (cmd.cmd === 'time') this.pack?.sent(dog, cmd.id, at);
+    this.transport!.send(cmd, dog);
+    this.recorder?.add({ at, cmd });
   }
 
   mark(text: string): void {
@@ -906,7 +1137,7 @@ export class System {
 
   /** Returns an error message, or null when the command was sent. */
   enumerateUsb(): string | null {
-    const err = this.requireLink('usb enumerate');
+    const err = this.requireLink('usb enumerate', 'usb');
     if (err) return err;
     this.send({ cmd: 'usb.enumerate' });
     this.log(this.now(), 'USER', 'INFO', 'usb enumerate requested');
@@ -916,7 +1147,7 @@ export class System {
 
   setBaud(baud: number): string | null {
     if (!Number.isInteger(baud) || baud < 300 || baud > 4_000_000) return `invalid baud rate: ${baud}`;
-    const err = this.requireLink('serial config');
+    const err = this.requireLink('serial config', 'uart');
     if (err) return err;
     this.send({ cmd: 'uart.config', baud });
     this.log(this.now(), 'USER', 'INFO', `serial baud -> ${baud}`);
@@ -926,7 +1157,7 @@ export class System {
   }
 
   sendSerial(text: string): string | null {
-    const err = this.requireLink('serial send');
+    const err = this.requireLink('serial send', 'uart');
     if (err) return err;
     const t = this.now();
     this.send({ cmd: 'uart.tx', data: text });
@@ -943,7 +1174,7 @@ export class System {
    * what the reference instrument reads now.
    */
   addCalPoint(refV: number, refI: number): string | null {
-    const err = this.requireLink('meter point');
+    const err = this.requireLink('meter point', 'power');
     if (err) return err;
     if (!this.meter) return 'the device has not declared its meter (power.meter): nothing to calibrate';
     if (!(refV > 0) || !Number.isFinite(refI)) return 'give the reference reading: volts above 0, current in mA';
@@ -961,7 +1192,7 @@ export class System {
 
   /** Fit the points and store the calibration on the device. */
   applyCalibration(reference: string, date: string): string | null {
-    const err = this.requireLink('meter cal');
+    const err = this.requireLink('meter cal', 'power');
     if (err) return err;
     const ref = reference.trim();
     if (!ref || ref.length > 64) return 'name the reference instrument (1 to 64 characters)';
@@ -975,7 +1206,7 @@ export class System {
   }
 
   clearCalibration(): string | null {
-    const err = this.requireLink('meter clear');
+    const err = this.requireLink('meter clear', 'power');
     if (err) return err;
     this.calPoints = [];
     this.send({ cmd: 'meter.clear' });
@@ -987,7 +1218,7 @@ export class System {
   /** ACTIVE: scan the target bus every `seconds` (0 stops). */
   watchI2c(seconds: number): string | null {
     if (!Number.isFinite(seconds) || seconds < 0 || (seconds > 0 && seconds < 1) || seconds > 600) return 'i2c watch: 1 to 600 seconds, or off';
-    const err = this.requireLink('i2c watch');
+    const err = this.requireLink('i2c watch', 'i2c');
     if (err) return err;
     const every = Math.round(seconds * 1000);
     this.bus = { ...this.bus, watchMs: every };
@@ -1002,7 +1233,7 @@ export class System {
     if (!Number.isFinite(seconds) || seconds < 0 || (seconds > 0 && seconds < 2) || seconds > 600) return 'net watch: 2 to 600 seconds, or off';
     const host = /^[A-Za-z0-9.-]{1,253}$/;
     if ((dns && !host.test(dns)) || (upstream && !host.test(upstream))) return 'net watch: host names only (letters, digits, dots, dashes)';
-    const err = this.requireLink('net watch');
+    const err = this.requireLink('net watch', 'net');
     if (err) return err;
     const every = Math.round(seconds * 1000);
     this.netWatch = every ? { everyMs: every, dns: dns ?? null, upstream: upstream ?? null } : null;
@@ -1014,7 +1245,7 @@ export class System {
   }
 
   scanI2c(): string | null {
-    const err = this.requireLink('i2c scan');
+    const err = this.requireLink('i2c scan', 'i2c');
     if (err) return err;
     this.bus.state = 'SCANNING';
     this.send({ cmd: 'i2c.scan' });
@@ -1024,7 +1255,7 @@ export class System {
   }
 
   refreshNet(): string | null {
-    const err = this.requireLink('net refresh');
+    const err = this.requireLink('net refresh', 'net');
     if (err) return err;
     this.send({ cmd: 'net.refresh' });
     this.changed();
@@ -1036,7 +1267,7 @@ export class System {
     const clean = target.trim();
     if (!/^[A-Za-z0-9.-]{1,253}$/.test(clean)) return `invalid target: "${target}"`;
     if (tests.length === 0) return 'no tests selected';
-    const err = this.requireLink('probe');
+    const err = this.requireLink('probe', 'probe');
     if (err) return err;
     const run: ProbeRun = {
       id: `p${++this.probeCounter}`,

@@ -168,6 +168,25 @@ static void test_hello_chip_id(void) {
     CHECK(lines_well_formed());
 }
 
+/* time: the clock now, the same id back, at once; bad ids refused in HDP. */
+static void test_time_command(void) {
+    setup();
+    hdp_start(&D);
+    clear();
+    B.t = 1234;
+    const char *ok = "{\"cmd\":\"time\",\"id\":4294967295}\n";
+    hdp_host_input(&D, ok, strlen(ok));
+    CHECK(has("{\"type\":\"time\",\"t\":1234,\"id\":4294967295}\n"));
+    const char *bad[] = {"{\"cmd\":\"time\"}\n", "{\"cmd\":\"time\",\"id\":-1}\n", "{\"cmd\":\"time\",\"id\":1.5}\n",
+                         "{\"cmd\":\"time\",\"id\":4294967296}\n"};
+    for (int k = 0; k < 4; k++) {
+        clear();
+        hdp_host_input(&D, bad[k], strlen(bad[k]));
+        CHECK(has("command rejected") && !has("\"type\":\"time\""));
+    }
+    CHECK(lines_well_formed());
+}
+
 static void test_calibration(void) {
     float lsb;
     uint16_t cal = hdp_ina226_calibration(0.1f, 0.8f, &lsb);
@@ -488,6 +507,7 @@ int main(void) {
     test_calibration();
     test_boot_and_power();
     test_hello_chip_id();
+    test_time_command();
     test_current_accuracy_through_the_chip_math();
     test_ina_missing_or_wrong();
     test_meter_and_calibration();
