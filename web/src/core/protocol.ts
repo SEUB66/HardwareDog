@@ -66,7 +66,20 @@ export type DeviceFrame =
     }
   | { type: 'probe.result'; t: number; id: string; test: ProbeTest; status: CheckStatus; detail: string }
   | { type: 'probe.done'; t: number; id: string }
-  | { type: 'log'; t: number; level: 'info' | 'warn' | 'error'; message: string };
+  | { type: 'log'; t: number; level: 'info' | 'warn' | 'error'; message: string }
+  /** Answer to the time command: the device clock now, same id. */
+  | { type: 'time'; t: number; id: number };
+
+/** The capability a frame belongs to; null: any Dog may send it (log, hello, time). */
+export function capabilityOf(type: DeviceFrame['type']): Capability | null {
+  if (type === 'power' || type === 'power.meter') return 'power';
+  if (type.startsWith('usb.')) return 'usb';
+  if (type.startsWith('uart.')) return 'uart';
+  if (type.startsWith('i2c.')) return 'i2c';
+  if (type === 'net.status') return 'net';
+  if (type === 'probe.result' || type === 'probe.done') return 'probe';
+  return null;
+}
 
 export type HostCommand =
   | { cmd: 'hello'; proto: number }
@@ -79,7 +92,8 @@ export type HostCommand =
   | { cmd: 'net.watch'; every_ms: number; dns?: string; upstream?: string }
   | ({ cmd: 'meter.cal' } & MeterCalCommand)
   | { cmd: 'meter.clear' }
-  | { cmd: 'probe'; id: string; target: string; tests: ProbeTest[] };
+  | { cmd: 'probe'; id: string; target: string; tests: ProbeTest[] }
+  | { cmd: 'time'; id: number };
 
 /** |error| <= pct % of the reading + abs (unit of the quantity). */
 export interface ErrorBound {
@@ -309,6 +323,11 @@ function parseFrame(o: Obj): DeviceFrame {
       return { type, t, id: str(o, 'id') };
     case 'log':
       return { type, t, level: oneOf(o, 'level', ['INFO', 'WARN', 'ERROR'] as const).toLowerCase() as 'info' | 'warn' | 'error', message: str(o, 'message') };
+    case 'time': {
+      const id = num(o, 'id');
+      if (!Number.isInteger(id) || id < 0 || id > 0xffffffff) throw new FrameError('field "id" must be an integer from 0 to 4294967295');
+      return { type, t, id };
+    }
     default:
       throw new FrameError(`unknown frame type "${type}"`);
   }

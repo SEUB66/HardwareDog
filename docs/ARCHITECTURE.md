@@ -47,9 +47,11 @@ STATUS
 ```text
 web/src/core/        no UI, no DOM rendering, fully unit tested
   protocol.ts        frame types, validating decoder, line splitter
-  transport.ts       Transport interface
+  transport.ts       Transport interface, PackTransport (several Dogs)
+  pack.ts            a pack: Dog clocks, one timeline, IN / OUT / UNKNOWN
   webserial.ts       real device over Web Serial (Chromium)
   simulator.ts       simulated device + simulated target, same protocol
+  simpack.ts         one simulated incident watched by several simulated Dogs
   dogd.ts            transport to dogd on 127.0.0.1, local store
   session.ts         .hdlog writer (seals, footer), reader + verifier, replay
   sha256.ts          SHA-256, synchronous (works on plain HTTP too)
