@@ -138,7 +138,7 @@ HD-T010   USB NOT ENUMERATED            powered, never enumerates (charge-only c
 Run one:
 
 ```sh
-cd web && npm run demo          # then SETUP -> SIMULATOR SCENARIO
+cd web && npm run demo          # DEMO MODE; then SETUP -> SIMULATOR SCENARIO
 ```
 
 or open `?scenario=HD-T004`, or type `sim HD-T004` in the command palette

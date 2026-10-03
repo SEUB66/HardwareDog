@@ -23,6 +23,7 @@ import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Hint } from './components/Hint';
 import { IntegrityTag } from './components/IntegrityTag';
+import { ConnectBanner } from './components/ConnectBanner';
 import { SimBanner } from './components/SimBanner';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
@@ -42,7 +43,8 @@ import { explain } from '../core/glossary';
 
 interface Session {
   system: System;
-  transport: Transport;
+  /** Null: nothing connected yet (no demo starts on its own). */
+  transport: Transport | null;
   key: number;
   /** Streams a live session to the archive. Null for a replay. */
   writer: ArchiveWriter | null;
@@ -53,10 +55,15 @@ const PRIMARY: readonly Screen[] = ['STATUS', 'TRACE', 'POWER', 'PROBE'];
 const DIGIT_SCREENS: readonly Screen[] = ['STATUS', 'TRACE', 'POWER', 'USB', 'SERIAL', 'BUS', 'NET'];
 
 let sessionCounter = 0;
-/** `?scenario=HD-T004` opens the simulator on a given fault scenario. */
-function initialScenario(): ScenarioId {
-  const q = new URLSearchParams(location.search).get('scenario')?.toUpperCase() ?? '';
-  return isScenarioId(q) ? q : DEFAULT_SCENARIO;
+/**
+ * The app opens NOT CONNECTED. The demo starts only when asked: the DEMO
+ * MODE button, or a link that says so (`?demo`, `?scenario=HD-T004`).
+ */
+function requestedDemo(): ScenarioId | null {
+  const params = new URLSearchParams(location.search);
+  const q = params.get('scenario')?.toUpperCase() ?? '';
+  if (isScenarioId(q)) return q;
+  return params.has('demo') ? DEFAULT_SCENARIO : null;
 }
 
 /** How the data reaches this screen, in one short phrase for the header. */
@@ -76,8 +83,12 @@ function viaLabel(system: System): string {
 
 const simulator = (scenario: ScenarioId) => new SimulatedDevice({ seed: Date.now() & 0xffff, scenario });
 
+/** Nothing connected: a system with no source, nothing recorded. */
+const idleSession = (): Session => ({ system: new System(browserStore()), transport: null, key: ++sessionCounter, writer: null });
+
 /** A replay runs on the recording's clock; a live session is recorded. */
-function newSession(transport: Transport, archive: SessionArchive): Session {
+function newSession(transport: Transport | null, archive: SessionArchive): Session {
+  if (transport === null) return idleSession();
   if (transport instanceof ReplayTransport) {
     return { system: new System(browserStore(), () => transport.clock), transport, key: ++sessionCounter, writer: null };
   }
@@ -120,10 +131,13 @@ const isTyping = (el: EventTarget | null) =>
 const hdlogName = (h: SessionHeader) => `hwdog-${h.id}${String(new Date(h.startedAt).getSeconds()).padStart(2, '0')}.hdlog`;
 
 export function App({ archive }: { archive: SessionArchive }) {
-  const [session, setSession] = useState<Session>(() => newSession(simulator(initialScenario()), archive));
+  const [session, setSession] = useState<Session>(() => {
+    const demo = requestedDemo();
+    return newSession(demo ? simulator(demo) : null, archive);
+  });
   const [archived, setArchived] = useState<SessionMeta[]>([]);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
-  const [booting, setBooting] = useState(true);
+  const [booting, setBooting] = useState(() => session.transport !== null);
   const [screen, setScreen] = useState<Screen>('STATUS');
   const [traceOnly, setTraceOnly] = useState<Source[] | null>(null);
   const [palette, setPaletteState] = useState(false);
@@ -211,8 +225,8 @@ export function App({ archive }: { archive: SessionArchive }) {
     download(`hwdog-usb-${d.vid.toString(16)}-${d.pid.toString(16)}.json`, 'application/json', JSON.stringify(d, null, 2));
   };
 
-  /** Every source change is a new session: data never mixes. */
-  const start = async (transport: Transport) => {
+  /** Every source change is a new session: data never mixes. Null: back to NOT CONNECTED. */
+  const start = async (transport: Transport | null) => {
     await system.disconnect();
     await session.writer?.stop();
     // Through dogd, the finished recording also goes to dogd's local store.
@@ -228,7 +242,7 @@ export function App({ archive }: { archive: SessionArchive }) {
     setSession(next);
     setScreen(transport instanceof ReplayTransport ? 'TRACE' : 'STATUS');
     setTraceOnly(null);
-    setBooting(true);
+    setBooting(transport !== null);
     void archive.prune(next.writer ? [next.writer.meta.key] : []).then(refreshSessions, () => {});
   };
 
@@ -393,7 +407,7 @@ export function App({ archive }: { archive: SessionArchive }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (booting) {
+  if (booting && session.transport) {
     return <Boot key={session.key} system={system} transport={session.transport} onReady={() => setBooting(false)} />;
   }
 
@@ -433,6 +447,7 @@ export function App({ archive }: { archive: SessionArchive }) {
             system={system}
             scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario.id : null}
             onSwitch={(k, id) => void switchTransport(k, id)}
+            onDisconnect={session.transport ? () => void start(null) : null}
             recording={session.writer ? { entries: session.writer.meta.entries, bytes: session.writer.meta.bytes } : null}
             sessions={{
               list: archived,
@@ -483,13 +498,13 @@ export function App({ archive }: { archive: SessionArchive }) {
           <Hint text={explain('SESSION', 'HEADER')} class="k">
             SESSION
           </Hint>
-          <span class="v">{duration(now - system.startedAt)}</span>
+          <span class="v">{session.transport ? duration(now - system.startedAt) : '--'}</span>
         </span>
         <span class="field opt wide">
           <Hint text={explain('SESSION ID', 'HEADER')} class="k">
             SESSION ID
           </Hint>
-          <span class="v">{system.replayOf?.id ?? sessionId(system.startedAt)}</span>
+          <span class="v">{system.replayOf?.id ?? (session.transport ? sessionId(system.startedAt) : '--')}</span>
         </span>
         <span class="spacer" />
         {system.trace.paused && <Tag status="WARN" label="TRACE PAUSED" />}
@@ -536,10 +551,19 @@ export function App({ archive }: { archive: SessionArchive }) {
       </nav>
 
       <main class="work" id="workspace">
+        {session.transport === null && (
+          <ConnectBanner
+            onSerial={() => void switchTransport('WEB SERIAL')}
+            onDogd={() => void switchTransport('DOGD')}
+            onOpen={(file) => void openFile(file)}
+            onDemo={() => void switchTransport('SIMULATOR')}
+          />
+        )}
         <SimBanner
           system={system}
           scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario : null}
           onConnect={() => navigate('SETUP')}
+          onStop={session.transport instanceof SimulatedDevice ? () => void start(null) : null}
         />
         {body}
       </main>

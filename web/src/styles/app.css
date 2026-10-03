@@ -177,8 +177,33 @@ select {
   color: var(--amber);
   letter-spacing: 0.08em;
 }
-.sim-banner .btn {
+.sim-banner .actions,
+.connect-banner .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-left: auto;
+}
+
+/* Nothing connected: said plainly, every source one click away. */
+.connect-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-bottom: var(--gap);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+  background: var(--panel);
+  font-size: var(--fs-text);
+}
+.connect-banner b {
+  letter-spacing: 0.08em;
+}
+.connect-banner .demo {
+  border-color: var(--amber);
+  color: var(--amber);
 }
 
 /* Tiny status light: the word next to it carries the meaning. */
