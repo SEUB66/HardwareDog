@@ -13,7 +13,7 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
     "assets": "node scripts/build-brand-assets.mjs",
-    "demo": "vite --open",
+    "demo": "vite --open /diagnostic.html?demo",
     "cases": "UPDATE_CASES=1 vitest run test/cases.test.ts",
     "cli": "vite build --config vite.cli.config.ts",
     "test:cases": "npm run cli && node dist-cli/hwdog.mjs test ../cases"
