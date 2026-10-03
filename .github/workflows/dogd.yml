@@ -53,6 +53,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # The recordings must arrive byte for byte (LF, as sealed).
+      - name: evidence is checked out unchanged
+        shell: bash
+        run: |
+          git ls-files --eol cases/HD-C001.hdlog
+          ! grep -q $'\r' cases/*.hdlog
       - name: lint
         working-directory: dogd
         run: cargo clippy --all-targets -- -D warnings
