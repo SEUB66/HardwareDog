@@ -20,7 +20,7 @@ interface SetupProps {
   system: System;
   /** Active simulator scenario, or null on real hardware. */
   scenario: ScenarioId | null;
-  onSwitch: (kind: Exclude<TransportKind, 'REPLAY'>, scenario?: ScenarioId) => void;
+  onSwitch: (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario?: ScenarioId) => void;
   /** End this session and go back to NOT CONNECTED; null when nothing is connected. */
   onDisconnect: (() => void) | null;
   sessions: SessionsPanelProps;

@@ -48,7 +48,7 @@ export interface Transport {
  * same live and in a replay.
  */
 export class PackTransport implements Transport {
-  readonly kind: TransportKind;
+  readonly kind = 'PACK' as const;
   readonly origin: Origin;
   readonly dogs: readonly string[];
 
@@ -57,10 +57,14 @@ export class PackTransport implements Transport {
     const ids = members.map((m) => m.dog);
     if (new Set(ids).size !== ids.length) throw new Error('every Dog of a pack needs its own id');
     this.dogs = ids;
-    const kinds = [...new Set(members.map((m) => m.link.kind))];
-    this.kind = kinds.length === 1 ? kinds[0]! : 'SIMULATOR';
+    if (members.some((m) => m.link.kind === 'PACK' || m.link.kind === 'REPLAY')) throw new Error('a Dog of a pack is one live link');
     // Evidence is physical only if every Dog is real hardware.
     this.origin = members.every((m) => m.link.origin === 'PHYSICAL') ? 'PHYSICAL' : 'SIMULATED';
+  }
+
+  /** Each Dog's link, as a recording header lists it. */
+  get links(): { dog: string; kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>; label: string; origin: Origin }[] {
+    return this.members.map((m) => ({ dog: m.dog, kind: m.link.kind as Exclude<TransportKind, 'REPLAY' | 'PACK'>, label: m.link.label, origin: m.link.origin }));
   }
 
   get label(): string {

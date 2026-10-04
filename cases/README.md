@@ -27,6 +27,8 @@ HD-C014   simulator HD-T013, 40 s       SUPPLY SAG, MEDIUM (its ceiling)
 HD-C015   simulator HD-T014, 45 s       I2C DEVICE DISAPPEARED, HIGH
 HD-C016   simulator HD-T015, 30 s       I2C BUS FAULT, HIGH
 HD-C017   simulator HD-T016, 45 s       POWER INSTABILITY + NETWORK LOST WITH POWER, HIGH
+HD-C018   simulator HD-T016, 45 s,      same incident seen by a pack of three Dogs
+          pack (hdlog v3)               (three clocks): same facts and diagnosis as HD-C017
 ```
 
 Every diagnosis of the engine has at least one case (checked by

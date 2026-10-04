@@ -5,6 +5,7 @@ import { SCENARIOS, type ScenarioId } from '../src/core/scenarios';
 import { SessionRecorder, newHeader, parseHdlog, toHdlog } from '../src/core/session';
 import { sha256 } from '../src/core/sha256';
 import { SimulatedDevice } from '../src/core/simulator';
+import { SimulatedPack } from '../src/core/simpack';
 import { System, memoryStore } from '../src/core/system';
 import { thresholdsOf } from '../src/core/types';
 import { DIAGNOSIS_IDS } from '../src/core/diagnostics';
@@ -18,7 +19,7 @@ import { DIAGNOSIS_IDS } from '../src/core/diagnostics';
  *   npm run cases
  */
 
-const SEEDS: { id: string; scenario: ScenarioId; seed: number; seconds: number }[] = [
+const SEEDS: { id: string; scenario: ScenarioId; seed: number; seconds: number; pack?: true }[] = [
   { id: 'HD-C001', scenario: 'HD-T000', seed: 1, seconds: 30 },
   { id: 'HD-C002', scenario: 'HD-T001', seed: 1, seconds: 30 },
   { id: 'HD-C003', scenario: 'HD-T005', seed: 1, seconds: 30 },
@@ -38,6 +39,8 @@ const SEEDS: { id: string; scenario: ScenarioId; seed: number; seconds: number }
   { id: 'HD-C015', scenario: 'HD-T014', seed: 1, seconds: 45 },
   { id: 'HD-C016', scenario: 'HD-T015', seed: 1, seconds: 30 },
   { id: 'HD-C017', scenario: 'HD-T016', seed: 1, seconds: 45 },
+  // LVL 90: the same incident seen by a pack of three Dogs, three clocks (hdlog v3).
+  { id: 'HD-C018', scenario: 'HD-T016', seed: 1, seconds: 45, pack: true },
 ];
 
 /** 2026-09-30 14:21:00 UTC, the date in the design spec. */
@@ -49,6 +52,7 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
 const UPDATE = env['UPDATE_CASES'] === '1';
 
 async function recordSeed(s: (typeof SEEDS)[number]): Promise<string> {
+  if (s.pack) return recordPackSeed(s);
   let now = STARTED_AT;
   const sys = new System(memoryStore(), () => now);
   const sim = new SimulatedDevice({ seed: s.seed, manual: true, scenario: s.scenario });
@@ -73,6 +77,30 @@ async function recordSeed(s: (typeof SEEDS)[number]): Promise<string> {
   return toHdlog(sys.recorder.recording);
 }
 
+/** A pack seed: one simulated incident, the bench pack (simpack.ts), 10 ms host steps. */
+async function recordPackSeed(s: (typeof SEEDS)[number]): Promise<string> {
+  let now = STARTED_AT;
+  const sys = new System(memoryStore(), () => now);
+  const pack = new SimulatedPack({ seed: s.seed, manual: true, scenario: s.scenario });
+  sys.recorder = new SessionRecorder(
+    newHeader({
+      recording: sha256(`${s.id}/${s.scenario}/${s.seed}/pack`).slice(0, 32),
+      id: 'HD-20260930-1421',
+      startedAt: STARTED_AT,
+      source: 'PACK',
+      endpoint: pack.label,
+      scenario: s.scenario,
+      app: BUILD,
+      thresholds: thresholdsOf(sys.settings),
+      dogs: pack.links.map((l) => ({ id: l.dog, source: l.kind, endpoint: l.label, origin: l.origin })),
+    }),
+  );
+  await sys.boot(pack, () => {}, 0);
+  for (let k = 0; k < s.seconds * 100; k++) pack.advance(10, (t) => (now = STARTED_AT + t));
+  await sys.disconnect();
+  return toHdlog(sys.recorder.recording);
+}
+
 describe('cases', () => {
   it.runIf(UPDATE)('writes the seed cases that do not exist yet', async () => {
     const fs = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { writeFileSync(path: URL, data: string): void; existsSync(path: URL): boolean };
@@ -84,9 +112,14 @@ describe('cases', () => {
       const sys = await replayRecording(recording);
       const c = caseFrom(sys, recording, {
         id: s.id,
-        title: `${SCENARIOS[s.scenario].title} (simulator ${s.scenario})`,
+        title: `${SCENARIOS[s.scenario].title} (simulator ${s.scenario}${s.pack ? ', pack of three Dogs' : ''})`,
         file: `${s.id}.hdlog`,
-        context: { description: SCENARIOS[s.scenario].fault, hardware: `None: built-in simulator, scenario ${s.scenario}, seed ${s.seed}, ${s.seconds} s. Origin SIMULATED.` },
+        context: {
+          description: SCENARIOS[s.scenario].fault,
+          hardware: s.pack
+            ? `None: built-in simulator, scenario ${s.scenario}, seed ${s.seed}, ${s.seconds} s, watched by a simulated pack of three Dogs (supply, target, network), each on its own clock. Origin SIMULATED.`
+            : `None: built-in simulator, scenario ${s.scenario}, seed ${s.seed}, ${s.seconds} s. Origin SIMULATED.`,
+        },
       });
       fs.writeFileSync(new URL(`../../cases/${s.id}.hdlog`, import.meta.url), text);
       fs.writeFileSync(new URL(`../../cases/${s.id}.case.json`, import.meta.url), JSON.stringify(c, null, 2) + '\n');

@@ -1,0 +1,70 @@
+{
+  "case": 1,
+  "id": "HD-C018",
+  "title": "ROUTER LOSES POWER (simulator HD-T016, pack of three Dogs)",
+  "recording": {
+    "file": "HD-C018.hdlog",
+    "sha256": "ec7001c41d309a4763a2f631cdec5b6b6f8e3db8a8c8596a4901293db2d923b3",
+    "recording": "9b8deae4e0f1f8c0b318341d1f4c0829",
+    "origin": "SIMULATED"
+  },
+  "context": {
+    "description": "A USB-powered travel router on a thin cable: load bursts brown it out, it reboots, the network drops and comes back.",
+    "hardware": "None: built-in simulator, scenario HD-T016, seed 1, 45 s, watched by a simulated pack of three Dogs (supply, target, network), each on its own clock. Origin SIMULATED."
+  },
+  "ruleset": 3,
+  "expect": {
+    "facts": {
+      "undervoltage": 4,
+      "overcurrent": 0,
+      "usbAttaches": 5,
+      "usbDisconnects": 4,
+      "disconnectsAfterDrop": 4,
+      "targetResets": 5,
+      "framingErrors": 0,
+      "rejectedLines": 0
+    },
+    "diagnoses": [
+      {
+        "id": "POWER_INSTABILITY",
+        "confidence": "HIGH",
+        "evidence": [
+          479,
+          484,
+          1019,
+          1024,
+          1512,
+          1516,
+          2021,
+          2024
+        ]
+      },
+      {
+        "id": "NETWORK_POWER_LOSS",
+        "confidence": "HIGH",
+        "evidence": [
+          479,
+          497,
+          667,
+          730,
+          761,
+          1019,
+          1034,
+          1200,
+          1275,
+          1301,
+          1512,
+          1523,
+          1735,
+          1819,
+          1843,
+          2021,
+          2037,
+          2211,
+          2298,
+          2324
+        ]
+      }
+    ]
+  }
+}

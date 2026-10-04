@@ -10,6 +10,7 @@
  *   {"at":1759242061200,"mark":"device reboot"}                  operator note
  *   {"at":1759242061250,"thresholds":{...}}                      operator changed a threshold
  *   {"at":1759242061300,"lost":"serial stream ended"}            link lost
+ *   {"at":1759242061400,"dog":"D2","frame":{...}}               v3: a pack, one Dog per line
  *   {"seal":{"n":1,"lines":5,"sha256":"..."}}                    hash chain over the lines above
  *   {"end":{"closed":"NORMAL","entries":5,...,"sha256":"..."}}   footer, written once, last
  *
@@ -37,7 +38,21 @@ import type { Transport, TransportSink } from './transport';
 import { createLineDecoder } from './transport';
 import type { Origin, Thresholds, TransportKind } from './types';
 
-export const HDLOG_VERSION = 2;
+/**
+ * 3: a pack (several Dogs, core/pack.ts). The header lists the Dogs, and
+ * every frame, reject, command and lost line names its Dog. One device is
+ * still written as v2, byte for byte as before.
+ */
+export const HDLOG_VERSION = 3;
+
+/** One Dog of a recorded pack: where its frames came from. */
+export interface DogHeader {
+  /** Its place in the pack: D1, D2... */
+  id: string;
+  source: Exclude<TransportKind, 'REPLAY' | 'PACK'>;
+  endpoint: string;
+  origin: Origin;
+}
 
 export type { Origin };
 
@@ -62,15 +77,18 @@ export interface SessionHeader {
   ruleset: number;
   /** Diagnostic thresholds in force when recording started. */
   thresholds?: Thresholds;
+  /** v3: the Dogs of the pack, in order. `source` is then PACK. */
+  dogs?: DogHeader[];
 }
 
+/** In a v3 file, frame, reject, cmd and lost lines name their Dog. */
 export type SessionEntry =
-  | { at: number; frame: DeviceFrame }
-  | { at: number; reject: string; raw?: string }
-  | { at: number; cmd: HostCommand }
+  | { at: number; dog?: string; frame: DeviceFrame }
+  | { at: number; dog?: string; reject: string; raw?: string }
+  | { at: number; dog?: string; cmd: HostCommand }
   | { at: number; mark: string }
   | { at: number; thresholds: Thresholds }
-  | { at: number; lost: string };
+  | { at: number; dog?: string; lost: string };
 
 export interface Seal {
   /** 1, 2, 3... */
@@ -100,6 +118,8 @@ export interface Footer {
   seals: number;
   /** From the last hello frame, if the device sent one. */
   device: { id: string; rev: string; fw: string } | null;
+  /** v3: each Dog's last hello (null: it never said hello). */
+  dogs?: Record<string, { id: string; rev: string; fw: string } | null>;
   /** sha256 of every byte of the file before this line, hex. */
   sha256: string;
 }
@@ -144,28 +164,32 @@ export function newRecordingId(): string {
 }
 
 /** Origin a source implies; dogd says it per link (a TCP source can be a simulator). */
-function originOf(source: SessionHeader['source'], declared?: Origin): Origin {
+function originOf(source: DogHeader['source'], declared?: Origin): Origin {
   if (source === 'SIMULATOR') return 'SIMULATED';
   if (source === 'WEB SERIAL') return 'PHYSICAL';
   if (!declared) throw new Error('a DOGD recording needs the origin dogd reports');
   return declared;
 }
 
+/** A pack is physical evidence only if every Dog is real hardware. */
+const packOrigin = (dogs: readonly DogHeader[]): Origin => (dogs.every((d) => d.origin === 'PHYSICAL') ? 'PHYSICAL' : 'SIMULATED');
+
 export const newHeader = (
   fields: Omit<SessionHeader, 'hdlog' | 'proto' | 'recording' | 'origin' | 'ruleset'> & { recording?: string; origin?: Origin },
 ): SessionHeader => ({
-  hdlog: HDLOG_VERSION,
+  hdlog: fields.dogs ? 3 : 2,
   proto: PROTOCOL_VERSION,
   recording: fields.recording ?? newRecordingId(),
   id: fields.id,
   startedAt: fields.startedAt,
-  origin: originOf(fields.source, fields.origin),
+  origin: fields.dogs ? packOrigin(fields.dogs) : originOf(fields.source as DogHeader['source'], fields.origin),
   source: fields.source,
   endpoint: fields.endpoint,
   scenario: fields.scenario,
   app: fields.app,
   ruleset: RULESET_VERSION,
   ...(fields.thresholds ? { thresholds: fields.thresholds } : {}),
+  ...(fields.dogs ? { dogs: fields.dogs.map((d) => ({ id: d.id, source: d.source, endpoint: d.endpoint, origin: originOf(d.source, d.origin) })) } : {}),
 });
 
 // ------------------------------------------------------------------ recorder
@@ -207,7 +231,7 @@ export class SessionRecorder {
 
 export const encodeEntry = (e: SessionEntry): string => JSON.stringify(e);
 
-type Counts = Omit<Footer, 'closed' | 'startedAt' | 'endedAt' | 'seals' | 'device' | 'sha256'>;
+type Counts = Omit<Footer, 'closed' | 'startedAt' | 'endedAt' | 'seals' | 'device' | 'dogs' | 'sha256'>;
 
 const emptyCounts = (): Counts => ({ entries: 0, frames: 0, rejects: 0, commands: 0, marks: 0, thresholds: 0, lost: 0 });
 
@@ -237,6 +261,8 @@ export class HdlogSealer {
   private readonly counts = emptyCounts();
   private lastAt: number;
   private device: Footer['device'] = null;
+  /** v3: each Dog's last hello. */
+  private readonly dogs: Record<string, Footer['device']> | null;
   private finished = false;
 
   constructor(readonly header: SessionHeader) {
@@ -244,6 +270,7 @@ export class HdlogSealer {
     this.payload.update(this.headerLine);
     this.chain = sha256(this.headerLine);
     this.lastAt = header.startedAt;
+    this.dogs = header.dogs ? Object.fromEntries(header.dogs.map((d) => [d.id, null])) : null;
   }
 
   /** Encode one entry; it is written at the next seal(). Returns its line. */
@@ -253,7 +280,12 @@ export class HdlogSealer {
     this.pending.push(line);
     count(this.counts, e);
     this.lastAt = e.at;
-    this.device = helloOf(e) ?? this.device;
+    const hello = helloOf(e);
+    if (hello) {
+      this.device = hello;
+      const dog = 'dog' in e ? e.dog : undefined;
+      if (this.dogs && dog !== undefined && dog in this.dogs) this.dogs[dog] = hello;
+    }
     return line;
   }
 
@@ -293,6 +325,7 @@ export class HdlogSealer {
       ...this.counts,
       seals: this.seals,
       device: this.device,
+      ...(this.dogs ? { dogs: { ...this.dogs } } : {}),
       sha256: this.payload.clone().hex(),
     };
     return JSON.stringify({ end }) + '\n';
@@ -342,7 +375,12 @@ function checkThresholds(t: unknown, where: string): void {
 const isText = (v: unknown, max: number = HDLOG_LIMITS.maxText): v is string => typeof v === 'string' && v.length <= max;
 
 /** What each entry kind must carry. The frame itself is checked by the HDP decoder at replay. */
-function checkEntry(e: Record<string, unknown>, where: string): void {
+function checkEntry(e: Record<string, unknown>, where: string, dogs: readonly string[] | null): void {
+  if (dogs) {
+    const tagged = 'frame' in e || 'reject' in e || 'cmd' in e || 'lost' in e;
+    if (tagged && (typeof e['dog'] !== 'string' || !dogs.includes(e['dog']))) throw new HdlogError(`${where}: names no Dog of the pack (${dogs.join(' ')})`);
+    if (!tagged && 'dog' in e) throw new HdlogError(`${where}: a mark or a threshold change belongs to the pack, not to a Dog`);
+  }
   if ('frame' in e && !isObj(e['frame'])) throw new HdlogError(`${where}: frame must be an object`);
   if ('reject' in e && (!isText(e['reject']) || ('raw' in e && !isText(e['raw'], HDLOG_LIMITS.maxLine)))) throw new HdlogError(`${where}: malformed reject`);
   if ('cmd' in e && !isObj(e['cmd'])) throw new HdlogError(`${where}: cmd must be an object`);
@@ -362,7 +400,7 @@ function readHeader(line: string): SessionHeader {
   if (header['hdlog'] > HDLOG_VERSION) {
     throw new HdlogError(`line 1: hdlog v${header['hdlog']} was written by a newer Hardware Dog; this build reads v1 to v${HDLOG_VERSION}`);
   }
-  if (header['hdlog'] !== 1 && header['hdlog'] !== 2) throw new HdlogError(`line 1: unknown hdlog version ${String(header['hdlog'])}`);
+  if (header['hdlog'] !== 1 && header['hdlog'] !== 2 && header['hdlog'] !== 3) throw new HdlogError(`line 1: unknown hdlog version ${String(header['hdlog'])}`);
   for (const k of ['id', 'source', 'endpoint', 'app'] as const) {
     if (!isText(header[k], 256)) throw new HdlogError(`line 1: header field "${k}" missing or too long`);
   }
@@ -370,6 +408,7 @@ function readHeader(line: string): SessionHeader {
   if (typeof header['startedAt'] !== 'number' || !Number.isFinite(header['startedAt']) || header['startedAt'] < 0) throw new HdlogError('line 1: header field "startedAt" missing');
   if (header['proto'] !== undefined && !Number.isInteger(header['proto'])) throw new HdlogError('line 1: header field "proto" malformed');
   if (header['thresholds'] !== undefined) checkThresholds(header['thresholds'], 'line 1');
+  if (header['hdlog'] === 3) return readPackHeader(header);
   if (header['source'] !== 'SIMULATOR' && header['source'] !== 'WEB SERIAL' && header['source'] !== 'DOGD') throw new HdlogError('line 1: unknown source');
   // Through dogd either origin is possible: dogd reports it per link.
   const derived: Origin = header['source'] === 'SIMULATOR' ? 'SIMULATED' : header['source'] === 'DOGD' ? (header['origin'] as Origin) : 'PHYSICAL';
@@ -384,8 +423,33 @@ function readHeader(line: string): SessionHeader {
   return header as unknown as SessionHeader;
 }
 
+const DOG_SOURCES = ['SIMULATOR', 'WEB SERIAL', 'DOGD'] as const;
+/** Packs are small: a bench, not a fleet. */
+const MAX_DOGS = 16;
+
+/** v3: a pack. Every Dog's origin follows from its source, and the pack's from its Dogs. */
+function readPackHeader(header: Record<string, unknown>): SessionHeader {
+  if (header['source'] !== 'PACK') throw new HdlogError('line 1: an hdlog v3 file is a pack: source must be PACK');
+  if (typeof header['recording'] !== 'string' || !/^[0-9a-f]{32}$/.test(header['recording'])) throw new HdlogError('line 1: header field "recording" missing');
+  if (typeof header['ruleset'] !== 'number') throw new HdlogError('line 1: header field "ruleset" missing');
+  const dogs = header['dogs'];
+  if (!Array.isArray(dogs) || dogs.length < 2 || dogs.length > MAX_DOGS) throw new HdlogError(`line 1: a pack lists 2 to ${MAX_DOGS} Dogs`);
+  const ids = new Set<string>();
+  for (const d of dogs as unknown[]) {
+    if (!isObj(d) || typeof d['id'] !== 'string' || !/^D[1-9][0-9]?$/.test(d['id'])) throw new HdlogError('line 1: every Dog needs an id D1, D2...');
+    if (ids.has(d['id'])) throw new HdlogError(`line 1: Dog ${d['id']} listed twice`);
+    ids.add(d['id']);
+    if (!DOG_SOURCES.includes(d['source'] as (typeof DOG_SOURCES)[number])) throw new HdlogError(`line 1: Dog ${d['id']}: unknown source`);
+    if (!isText(d['endpoint'], 256)) throw new HdlogError(`line 1: Dog ${d['id']}: endpoint missing or too long`);
+    const derived = d['source'] === 'SIMULATOR' ? 'SIMULATED' : d['source'] === 'WEB SERIAL' ? 'PHYSICAL' : d['origin'];
+    if ((d['origin'] !== 'PHYSICAL' && d['origin'] !== 'SIMULATED') || d['origin'] !== derived) throw new HdlogError(`line 1: Dog ${d['id']}: origin contradicts its source`);
+  }
+  if (header['origin'] !== packOrigin(dogs as DogHeader[])) throw new HdlogError('line 1: the pack origin contradicts its Dogs (PHYSICAL only if every Dog is)');
+  return header as unknown as SessionHeader;
+}
+
 /**
- * Parse an .hdlog file (v1 or v2) and check its integrity. Structure
+ * Parse an .hdlog file (v1, v2 or v3) and check its integrity. Structure
  * errors throw HdlogError with a line number. Integrity problems do not
  * throw: the file stays readable, and Integrity says what changed. Frame
  * CONTENT is validated later by the real decoder during replay.
@@ -398,7 +462,10 @@ export function parseHdlog(text: string): Recording {
   if (long >= 0) throw new HdlogError(`line ${long + 1}: longer than ${HDLOG_LIMITS.maxLine / 1024} KiB`);
   if (raw.length === 0 || raw[0]!.trim() === '') throw new HdlogError('empty file');
   const header = readHeader(raw[0]!);
-  const v2 = header.hdlog === 2;
+  // v2 and v3 are sealed alike; v3 adds the Dogs.
+  const v2 = header.hdlog >= 2;
+  const dogIds = header.dogs?.map((d) => d.id) ?? null;
+  const dogHellos: Record<string, Footer['device']> | null = dogIds ? Object.fromEntries(dogIds.map((d) => [d, null])) : null;
   const problems: string[] = [];
   const entries: SessionEntry[] = [];
   let footer: Footer | null = null;
@@ -455,11 +522,15 @@ export function parseHdlog(text: string): Recording {
     last = e['at'];
     const kinds = ENTRY_KINDS.filter((k) => k in e);
     if (kinds.length !== 1) throw new HdlogError(`${where}: entry must have exactly one of ${ENTRY_KINDS.join(' / ')}`);
-    checkEntry(e, where);
+    checkEntry(e, where, dogIds);
     const entry = e as SessionEntry;
     entries.push(entry);
     count(counts, entry);
-    device = helloOf(entry) ?? device;
+    const hello = helloOf(entry);
+    if (hello) {
+      device = hello;
+      if (dogHellos && typeof e['dog'] === 'string') dogHellos[e['dog']] = hello;
+    }
     blockText.push(line + '\n');
     blockLines++;
     payload.update(line + '\n');
@@ -478,6 +549,7 @@ export function parseHdlog(text: string): Recording {
       if (footer[k as keyof Footer] !== v) problems.push(`${where}: footer says ${k} = ${String(footer[k as keyof Footer])}, file has ${String(v)}`);
     }
     if (JSON.stringify(footer.device) !== JSON.stringify(device)) problems.push(`${where}: footer device does not match the hello frame`);
+    if (dogHellos && JSON.stringify(footer.dogs ?? null) !== JSON.stringify(dogHellos)) problems.push(`${where}: footer Dogs do not match their hello frames`);
   }
   const status: IntegrityStatus =
     problems.length > 0 ? 'MODIFIED' : !footer ? 'INCOMPLETE' : footer.closed === 'RECOVERED' ? 'RECOVERED' : 'VERIFIED';
@@ -542,6 +614,8 @@ export class ReplayTransport implements Transport {
 
   private sink: TransportSink | null = null;
   private lines: ReturnType<typeof createLineDecoder> | null = null;
+  /** v3: one decoder per Dog, each tagging what it decodes. */
+  private dogLines = new Map<string, ReturnType<typeof createLineDecoder>>();
   private next = 0;
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -552,6 +626,11 @@ export class ReplayTransport implements Transport {
     const h = recording.header;
     this.label = `REPLAY ${h.id} / ${h.source}${h.scenario ? ` ${h.scenario}` : ''}`;
     this.clock = h.startedAt;
+  }
+
+  /** A recorded pack is replayed as a pack. */
+  get dogs(): readonly string[] | undefined {
+    return this.recording.header.dogs?.map((d) => d.id);
   }
 
   get done(): boolean {
@@ -566,6 +645,16 @@ export class ReplayTransport implements Transport {
   async open(sink: TransportSink): Promise<void> {
     this.sink = sink;
     this.lines = createLineDecoder(sink);
+    for (const dog of this.dogs ?? []) {
+      this.dogLines.set(
+        dog,
+        createLineDecoder({
+          frame: (f) => sink.frame(f, dog),
+          error: (message, raw) => sink.error(message, raw, dog),
+          lost: (reason) => sink.lost(reason, dog),
+        }),
+      );
+    }
     const speed = this.options.speed ?? 'instant';
     if (this.options.manual) return;
     if (speed === 'instant') {
@@ -588,15 +677,19 @@ export class ReplayTransport implements Transport {
     while (this.sink && fed++ < max && this.next < entries.length && entries[this.next]!.at <= t) {
       const e = entries[this.next++]!;
       this.clock = e.at;
-      if ('frame' in e) this.lines!.push(JSON.stringify(e.frame) + '\n');
+      const dog = 'dog' in e ? e.dog : undefined;
+      const lines = (dog !== undefined && this.dogLines.get(dog)) || this.lines!;
+      if ('frame' in e) lines.push(JSON.stringify(e.frame) + '\n');
       else if ('reject' in e) {
         // Give the decoder the same bytes: it must reject them again.
-        if (e.raw !== undefined) this.lines!.push(e.raw.replace(/\n/g, ' ') + '\n');
-        else this.sink.error(e.reject);
+        if (e.raw !== undefined) lines.push(e.raw.replace(/\n/g, ' ') + '\n');
+        else this.sink.error(e.reject, undefined, dog);
       } else if ('mark' in e) this.sink.annotate?.(e.mark);
       else if ('thresholds' in e) this.sink.configure?.(e.thresholds);
-      else if ('lost' in e) this.sink.lost(e.lost);
-      // 'cmd' entries document what was sent; a recording cannot be re-driven.
+      else if ('lost' in e) this.sink.lost(e.lost, dog);
+      // A command is never sent again: a recording cannot be re-driven. The
+      // pack still needs to know when a time sample was asked for.
+      else if ('cmd' in e && dog !== undefined) this.sink.sent?.(e.cmd, dog);
     }
     if (this.done && this.sink) {
       this.stop();
