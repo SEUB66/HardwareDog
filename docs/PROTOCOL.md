@@ -245,7 +245,8 @@ the interface always states what they will do before sending them.
 ## SESSION FILES (.hdlog)
 
 ```text
-VERSION        2 (v1 files are still read, marked UNVERIFIED)
+VERSION        2 for one device, 3 for a pack of Dogs (v1 files are still
+               read, marked UNVERIFIED)
 FORMAT         newline-delimited JSON, UTF-8, LF line endings
 LINE 1         header: provenance, never rewritten
 THEN           entries in arrival order, sealed in blocks by seal lines
@@ -301,6 +302,44 @@ The device identity (id, hardware revision, firmware) is known only when
 the device says hello: it is in the `hello` frame and repeated in the
 footer.
 
+### a pack (hdlog v3)
+
+Several Dogs watching one incident ([`PACK.md`](PACK.md)) are recorded in
+one file, version 3. One device is still written as version 2, byte for
+byte as before.
+
+```json
+{"hdlog":3,"proto":1,"recording":"9b8deae4e0f1f8c0b318341d1f4c0829",
+ "id":"HD-20260930-1421","startedAt":1790778060000,"origin":"SIMULATED",
+ "source":"PACK","endpoint":"PACK D1 ... + D2 ... + D3 ...","scenario":"HD-T016",
+ "app":"0.1.0","ruleset":3,"thresholds":{...},
+ "dogs":[{"id":"D1","source":"SIMULATOR","endpoint":"SIMULATED DOG HD-P0WER (power)","origin":"SIMULATED"},
+         {"id":"D2","source":"SIMULATOR","endpoint":"SIMULATED DOG HD-TARGET (usb uart i2c)","origin":"SIMULATED"},
+         {"id":"D3","source":"SIMULATOR","endpoint":"SIMULATED DOG HD-NET (net probe)","origin":"SIMULATED"}]}
+{"at":1790778060010,"dog":"D2","frame":{"type":"hello","t":777,...}}
+{"at":1790778060010,"dog":"D2","cmd":{"cmd":"time","id":1}}
+{"at":1790778060013,"dog":"D2","frame":{"type":"time","t":779,"id":1}}
+```
+
+```text
+source       PACK
+dogs         2 to 16 Dogs, in the pack's order: id (D1, D2...), source
+             (WEB SERIAL | SIMULATOR | DOGD), endpoint, origin. Each Dog's
+             origin follows from its source as for one device
+origin       PHYSICAL only if every Dog is PHYSICAL
+dog          on every frame, reject, cmd and lost line: the Dog it
+             belongs to. Marks and threshold changes belong to the pack
+             and name no Dog
+footer       adds "dogs": each Dog's last hello (null if it never said hello)
+```
+
+Every `time` command is in the file, before its answer: a replay
+recomputes each Dog's clock from the same round trips and puts the frames
+on the timeline in the same order, so the replay of a pack is the session
+again. A reader refuses a pack header that lists no Dogs, a Dog twice, an
+origin its Dogs contradict, or a line that names a Dog the pack does not
+have.
+
 ### entries
 
 ```json
@@ -324,7 +363,7 @@ thresholds   the operator changed a threshold at this moment
 lost         the link went away
 ```
 
-Each entry has `at` and exactly one of these keys.
+Each entry has `at` and exactly one of these keys (and, in a pack, `dog`).
 
 ### seals
 

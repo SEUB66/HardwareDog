@@ -13,6 +13,7 @@ The laws still hold: one event model (every Dog speaks HDP v1), one clock,
 one timeline, and the rules never know which Dog spoke.
 
 Code: `web/src/core/pack.ts` (clocks and merge, pure),
+`web/src/core/session.ts` (hdlog v3, a pack recorded and replayed),
 `web/src/core/system.ts` (the pack in the System),
 `web/src/core/transport.ts` (`PackTransport`),
 `web/src/core/simpack.ts` (a simulated pack).
@@ -135,6 +136,15 @@ CONTRACT                       PASS  every pack frame (time included)
 FIRMWARE                       PASS  the core answers time (C tests, host
                                      build in firmware.test.ts)
 ONE DEVICE UNCHANGED           PASS  every earlier test and case, same result
+RECORDED (hdlog v3)            PASS  the Dogs in the header, one on every
+                                     line, every time command before its
+                                     answer (PROTOCOL.md, a pack)
+REPLAY == SESSION              PASS  same timeline (times included), clocks,
+                                     facts and diagnosis (pack-hdlog.test.ts)
+A PACK IS A CASE               PASS  HD-C018: the router incident (HD-T016)
+                                     seen by three Dogs; same facts and
+                                     diagnosis as HD-C017, one Dog
+DOGD STORES IT                 PASS  dogd verifies a v3 file like a v2 one
 ```
 
 ---
@@ -142,9 +152,6 @@ ONE DEVICE UNCHANGED           PASS  every earlier test and case, same result
 ## NOT YET
 
 ```text
-[ -- ] recording a pack: hdlog v3 (Dogs in the header, a Dog on every
-       line, time commands replayed). Until then a pack session is not
-       recorded, and the timeline says so.            LVL 90.2
 [ -- ] dogd with several sources, and two firmware processes through it
        on one timeline (hwdog-host --caps)            LVL 90.3
 [ -- ] the interface: build a pack, show its Dogs, their clocks and who

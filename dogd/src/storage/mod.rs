@@ -168,9 +168,9 @@ impl Store {
             ));
         }
         let i: Inspection = inspect(data).map_err(PutError::Invalid)?;
-        if i.hdlog != 2 {
+        if i.hdlog < 2 {
             return Err(PutError::Invalid(
-                "dogd stores hdlog v2 files (with a recording id)".into(),
+                "dogd stores hdlog v2 and v3 files (with a recording id)".into(),
             ));
         }
         if i.recording != recording_id {
