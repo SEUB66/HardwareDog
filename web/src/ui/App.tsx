@@ -11,7 +11,7 @@ import { SimulatedDevice } from '../core/simulator';
 import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
 import { HDLOG_LIMITS, ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
 import { System, browserStore } from '../core/system';
-import type { Transport } from '../core/transport';
+import { PackTransport, type Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
@@ -76,6 +76,8 @@ function viaLabel(system: System): string {
       return system.transportLabel;
     case 'DOGD':
       return system.origin === 'SIMULATED' ? 'DOGD (SIMULATED)' : `DOGD ${system.transportLabel}`;
+    case 'PACK':
+      return `PACK OF ${system.dogs.length}${system.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}`;
     default:
       return 'NOT CONNECTED';
   }
@@ -103,6 +105,10 @@ function newSession(transport: Transport | null, archive: SessionArchive): Sessi
       scenario: transport instanceof SimulatedDevice ? transport.scenario.id : null,
       app: BUILD,
       thresholds: thresholdsOf(system.settings),
+      // A pack is recorded as hdlog v3: its Dogs in the header, one on every line.
+      ...(transport instanceof PackTransport
+        ? { dogs: transport.links.map((l) => ({ id: l.dog, source: l.kind, endpoint: l.label, origin: l.origin })) }
+        : {}),
     }),
     { keep: false }, // the archive holds it; memory stays flat on long sessions
   );
@@ -246,7 +252,7 @@ export function App({ archive }: { archive: SessionArchive }) {
     void archive.prune(next.writer ? [next.writer.meta.key] : []).then(refreshSessions, () => {});
   };
 
-  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY'>, scenario: ScenarioId = DEFAULT_SCENARIO) => {
+  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario: ScenarioId = DEFAULT_SCENARIO) => {
     let transport: Transport;
     if (kind === 'WEB SERIAL') {
       try {

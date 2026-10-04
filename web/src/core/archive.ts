@@ -220,7 +220,7 @@ export class SessionArchive {
   async recover(active: readonly string[] = []): Promise<string[]> {
     const done: string[] = [];
     for (const m of await this.backend.list()) {
-      if (active.includes(m.key) || m.header.hdlog !== 2 || m.closed) continue;
+      if (active.includes(m.key) || m.header.hdlog < 2 || m.closed) continue;
       const stored = await this.text(m.key);
       const recovered = recoverHdlog(stored);
       if (recovered === null) continue;

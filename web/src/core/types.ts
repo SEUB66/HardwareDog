@@ -29,7 +29,8 @@ export type CheckStatus = 'PASS' | 'WARN' | 'FAIL' | 'PENDING' | 'UNKNOWN';
 
 export type LinkState = 'OFFLINE' | 'CONNECTING' | 'ONLINE' | 'LOST';
 
-export type TransportKind = 'SIMULATOR' | 'WEB SERIAL' | 'REPLAY' | 'DOGD';
+/** PACK: several Dogs at once (core/pack.ts). */
+export type TransportKind = 'SIMULATOR' | 'WEB SERIAL' | 'REPLAY' | 'DOGD' | 'PACK';
 
 /** Where evidence comes from: real hardware or the simulator. Never a transport. */
 export type Origin = 'PHYSICAL' | 'SIMULATED';
