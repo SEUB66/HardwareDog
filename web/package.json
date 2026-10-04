@@ -15,6 +15,7 @@
     "assets": "node scripts/build-brand-assets.mjs",
     "demo": "vite --open /diagnostic.html?demo",
     "cases": "UPDATE_CASES=1 vitest run test/cases.test.ts",
+    "docs:sync": "node scripts/sync-raw-docs.mjs",
     "cli": "vite build --config vite.cli.config.ts",
     "test:cases": "npm run cli && node dist-cli/hwdog.mjs test ../cases"
   },

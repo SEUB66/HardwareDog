@@ -371,10 +371,10 @@ export class System {
     this.owners.clear();
     this.refusedSaid.clear();
     this.lastSync.clear();
-    if (this.pack && this.recorder) {
-      // hdlog v2 has no Dog on its lines: a pack in it could not be replayed.
+    if (this.pack && this.recorder && !this.recorder.header.dogs) {
+      // A pack goes in hdlog v3: a v2 file has no Dog on its lines and could not be replayed.
       this.recorder = null;
-      this.recordingStopped('a pack is recorded from hdlog v3 on (LVL 90.2): this session is not recorded');
+      this.recordingStopped('a pack needs an hdlog v3 recording (Dogs in the header): this session is not recorded');
     }
     // Same thresholds as when it was recorded, or the diagnosis could differ.
     if (this.replayOf?.thresholds) this.settings = { ...this.settings, ...this.replayOf.thresholds };
@@ -382,16 +382,17 @@ export class System {
     try {
       await transport.open({
         frame: (f, dog) => {
-          this.recorder?.add({ at: this.now(), frame: f });
+          this.recorder?.add(dog === undefined ? { at: this.now(), frame: f } : { at: this.now(), dog, frame: f });
           if (this.pack && dog !== undefined) this.onPackFrame(dog, f);
           else this.onFrame(f);
         },
         error: (message, raw, dog) => {
-          this.recorder?.add(raw === undefined ? { at: this.now(), reject: message } : { at: this.now(), reject: message, raw });
+          const on = dog === undefined ? {} : { dog };
+          this.recorder?.add(raw === undefined ? { at: this.now(), ...on, reject: message } : { at: this.now(), ...on, reject: message, raw });
           this.onFrameError(dog === undefined ? message : `${dog}: ${message}`, raw);
         },
         lost: (reason, dog) => {
-          this.recorder?.add({ at: this.now(), lost: reason });
+          this.recorder?.add(dog === undefined ? { at: this.now(), lost: reason } : { at: this.now(), dog, lost: reason });
           if (this.pack && dog !== undefined) this.onDogLost(dog, reason);
           else this.onLost(reason);
         },
@@ -1124,9 +1125,11 @@ export class System {
 
   private sendTo(dog: string, cmd: HostCommand): void {
     const at = this.now();
+    // Recorded before it is sent: a Dog may answer at once, and the answer
+    // must follow its command in the file, as it did here.
+    this.recorder?.add({ at, dog, cmd });
     if (cmd.cmd === 'time') this.pack?.sent(dog, cmd.id, at);
     this.transport!.send(cmd, dog);
-    this.recorder?.add({ at, cmd });
   }
 
   mark(text: string): void {

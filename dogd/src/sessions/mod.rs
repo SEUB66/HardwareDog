@@ -58,7 +58,8 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
         .get("hdlog")
         .and_then(Value::as_u64)
         .ok_or("line 1: not an .hdlog file")?;
-    if hdlog != 1 && hdlog != 2 {
+    // v3 is a pack (several Dogs): sealed exactly like v2.
+    if !(1..=3).contains(&hdlog) {
         return Err(format!("line 1: unknown hdlog version {hdlog}"));
     }
     let text = |k: &str| header.get(k).and_then(Value::as_str).map(str::to_string);
@@ -109,13 +110,13 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
             break;
         }
         if line.iter().all(u8::is_ascii_whitespace) {
-            if hdlog == 2 {
+            if hdlog >= 2 {
                 out.problems.push(format!("line {at}: blank line inserted"));
             }
             continue;
         }
         let e: Value = serde_json::from_slice(line).map_err(|_| format!("line {at}: not JSON"))?;
-        if hdlog == 2 {
+        if hdlog >= 2 {
             if let Some(seal) = e.get("seal") {
                 let claimed = seal
                     .get("sha256")
@@ -259,6 +260,19 @@ mod tests {
             assert_eq!(i.device_id.as_deref(), Some("HD-001"));
             assert_eq!(i.recording.len(), 32);
         }
+    }
+
+    /// hdlog v3: a pack of three Dogs, sealed like v2, stored like v2.
+    #[test]
+    fn verifies_a_recorded_pack() {
+        let i = inspect(&case("HD-C018.hdlog")).unwrap();
+        assert_eq!(i.hdlog, 3);
+        assert_eq!(i.integrity, "VERIFIED", "{:?}", i.problems);
+        assert_eq!(i.source, "PACK");
+        assert_eq!(i.origin, "SIMULATED");
+        let mut tampered = String::from_utf8(case("HD-C018.hdlog")).unwrap();
+        tampered = tampered.replacen("\"dog\":\"D1\"", "\"dog\":\"D3\"", 1);
+        assert_eq!(inspect(tampered.as_bytes()).unwrap().integrity, "MODIFIED");
     }
 
     #[test]

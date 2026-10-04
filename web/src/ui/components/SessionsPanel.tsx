@@ -22,7 +22,7 @@ export interface SessionsPanelProps {
 
 /** How the file stands: still recording, finalized (with its hash), or not. */
 function sealState(m: SessionMeta, active: boolean): string {
-  if (m.header.hdlog !== 2) return 'HDLOG V1 / NO INTEGRITY DATA';
+  if (m.header.hdlog === 1) return 'HDLOG V1 / NO INTEGRITY DATA';
   if (active) return 'RECORDING / SEALED EVERY 2 S';
   if (m.closed && m.fileSha256) return `${m.closed === 'NORMAL' ? 'FINALIZED' : 'RECOVERED'} / SHA-256 ${m.fileSha256.slice(0, 16)}…`;
   return 'NOT CLOSED / RECOVERED ON NEXT START';

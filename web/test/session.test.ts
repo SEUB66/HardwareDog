@@ -277,7 +277,7 @@ describe('.hdlog files from anyone', () => {
   });
 
   it('says plainly when a file comes from a newer Hardware Dog', () => {
-    expect(() => parseHdlog(header.replace('"hdlog":2', '"hdlog":3'))).toThrow(/written by a newer Hardware Dog; this build reads v1 to v2/);
+    expect(() => parseHdlog(header.replace('"hdlog":2', '"hdlog":4'))).toThrow(/written by a newer Hardware Dog; this build reads v1 to v3/);
   });
 
   it('opens a v1 file recorded by an earlier build, and replays it to the same diagnosis', async () => {
