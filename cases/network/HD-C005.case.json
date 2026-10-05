@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C005",
   "title": "DNS FAILURE (simulator HD-T003)",
+  "category": "network",
   "recording": {
     "file": "HD-C005.hdlog",
     "sha256": "805b446b63b40ab2ccdd44b406cf1f48bd587f1c0764dee824134b6d4853d1d0",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "The configured DNS server does not answer; the Internet is reachable by IP.",
-    "hardware": "None: built-in simulator, scenario HD-T003, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T003, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "Names resolve through the configured DNS server."
   },
   "ruleset": 2,
   "expect": {

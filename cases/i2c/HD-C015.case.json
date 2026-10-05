@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C015",
   "title": "I2C INTERMITTENT (simulator HD-T014)",
+  "category": "i2c",
   "recording": {
     "file": "HD-C015.hdlog",
     "sha256": "6590dd09031864f73927fd1f558f9f040f2482b44f3aa90646fb9978b3a74ece",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "A sensor on long loose jumper wires drops off the I2C bus and comes back.",
-    "hardware": "None: built-in simulator, scenario HD-T014, seed 1, 45 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T014, seed 1, 45 s. Origin SIMULATED.",
+    "expected": "Every device that answered the first I2C scan answers every later one."
   },
   "ruleset": 3,
   "expect": {

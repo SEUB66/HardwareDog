@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C002",
   "title": "USB UNDERVOLTAGE (simulator HD-T001)",
+  "category": "power",
   "recording": {
     "file": "HD-C002.hdlog",
     "sha256": "0925e8618624e147c2c59876bdb237e0ffd46b0bd224d31050843c4786484b4c",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "Thin cable on a weak port: load bursts sag the rail and the target browns out.",
-    "hardware": "None: built-in simulator, scenario HD-T001, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T001, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "The rail holds about 5 V under load bursts and the target stays connected over USB."
   },
   "ruleset": 1,
   "expect": {

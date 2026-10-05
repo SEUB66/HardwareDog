@@ -9,12 +9,14 @@ interface ReportProps {
   onExport: (format: ReportFormat) => void;
   onExportSession: () => void;
   onSaveCase: () => void;
+  /** Anonymized, its case drafted: for the community incident library. */
+  onSaveForLibrary: () => void;
   /** Why SAVE AS CASE is not available, or null. */
   caseBlocker: string | null;
 }
 
 /** A report reads like engineering documentation (spec 21). */
-export function Report({ system, onExport, onExportSession, onSaveCase, caseBlocker }: ReportProps) {
+export function Report({ system, onExport, onExportSession, onSaveCase, onSaveForLibrary, caseBlocker }: ReportProps) {
   const now = useClock(system, 2000);
   const text = reportToText(buildReport(system, now), { banner: false });
   return (
@@ -40,6 +42,14 @@ export function Report({ system, onExport, onExportSession, onSaveCase, caseBloc
         </button>
         <button class="btn" onClick={onSaveCase} disabled={caseBlocker !== null} title={caseBlocker ?? 'This incident as a regression case: case.json + the untouched .hdlog'}>
           SAVE AS CASE
+        </button>
+        <button
+          class="btn"
+          onClick={onSaveForLibrary}
+          disabled={caseBlocker !== null}
+          title={caseBlocker ?? 'For the community incident library: an anonymized copy and its case, ready for a pull request (docs/LIBRARY.md)'}
+        >
+          SHARE WITH THE LIBRARY
         </button>
       </div>
       {caseBlocker && system.replayOf && <p class="note warn">{caseBlocker}</p>}

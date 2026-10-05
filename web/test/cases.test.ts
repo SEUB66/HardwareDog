@@ -9,9 +9,10 @@ import { SimulatedPack } from '../src/core/simpack';
 import { System, memoryStore } from '../src/core/system';
 import { thresholdsOf } from '../src/core/types';
 import { DIAGNOSIS_IDS } from '../src/core/diagnostics';
+import { categoryOf } from '../src/core/library';
 
 /**
- * cases/*.hdlog + cases/*.case.json: recorded incidents kept as regression
+ * cases/<shelf>/*.hdlog + *.case.json: recorded incidents kept as regression
  * tests. Each recording must be the exact file its case names (SHA-256),
  * intact, and must replay to the facts and diagnosis the case states.
  *
@@ -46,8 +47,8 @@ const SEEDS: { id: string; scenario: ScenarioId; seed: number; seconds: number; 
 /** 2026-09-30 14:21:00 UTC, the date in the design spec. */
 const STARTED_AT = Date.UTC(2026, 8, 30, 14, 21, 0);
 
-const hdlogs = import.meta.glob('../../cases/*.hdlog', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-const cases = import.meta.glob('../../cases/*.case.json', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const hdlogs = import.meta.glob('../../cases/**/*.hdlog', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+const cases = import.meta.glob('../../cases/**/*.case.json', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
 const UPDATE = env['UPDATE_CASES'] === '1';
 
@@ -105,12 +106,15 @@ describe('cases', () => {
   it.runIf(UPDATE)('writes the seed cases that do not exist yet', async () => {
     const fs = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { writeFileSync(path: URL, data: string): void; existsSync(path: URL): boolean };
     for (const s of SEEDS) {
-      // A recording is evidence: once written, never rewritten (PROTOCOL.md, compatibility).
-      if (fs.existsSync(new URL(`../../cases/${s.id}.hdlog`, import.meta.url))) continue;
       const text = await recordSeed(s);
       const recording = parseHdlog(text);
       const sys = await replayRecording(recording);
+      // Its shelf in the library: the domain of its first diagnosis.
+      const shelf = categoryOf(sys.diagnoses);
+      // A recording is evidence: once written, never rewritten (PROTOCOL.md, compatibility).
+      if (fs.existsSync(new URL(`../../cases/${shelf}/${s.id}.hdlog`, import.meta.url))) continue;
       const c = caseFrom(sys, recording, {
+        category: shelf,
         id: s.id,
         title: `${SCENARIOS[s.scenario].title} (simulator ${s.scenario}${s.pack ? ', pack of three Dogs' : ''})`,
         file: `${s.id}.hdlog`,
@@ -119,10 +123,12 @@ describe('cases', () => {
           hardware: s.pack
             ? `None: built-in simulator, scenario ${s.scenario}, seed ${s.seed}, ${s.seconds} s, watched by a simulated pack of three Dogs (supply, target, network), each on its own clock. Origin SIMULATED.`
             : `None: built-in simulator, scenario ${s.scenario}, seed ${s.seed}, ${s.seconds} s. Origin SIMULATED.`,
+          // Written by a person: the library refuses the case until it is.
+          expected: 'TODO: what the hardware should have done',
         },
       });
-      fs.writeFileSync(new URL(`../../cases/${s.id}.hdlog`, import.meta.url), text);
-      fs.writeFileSync(new URL(`../../cases/${s.id}.case.json`, import.meta.url), JSON.stringify(c, null, 2) + '\n');
+      fs.writeFileSync(new URL(`../../cases/${shelf}/${s.id}.hdlog`, import.meta.url), text);
+      fs.writeFileSync(new URL(`../../cases/${shelf}/${s.id}.case.json`, import.meta.url), JSON.stringify(c, null, 2) + '\n');
     }
   });
 

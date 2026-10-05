@@ -258,7 +258,7 @@ THEN           entries in arrival order, sealed in blocks by seal lines
 LAST           footer: counts + SHA-256 of everything before it
 CLOCK          "at" = host wall-clock time in ms, never goes backwards
 REFERENCE      web/src/core/session.ts (writer, reader, verifier, replay)
-CASES          cases/*.hdlog + cases/*.case.json
+CASES          cases/<category>/*.hdlog + *.case.json (LIBRARY.md)
 ```
 
 A session file is what Hardware Dog received, kept as received. Frames are
@@ -293,6 +293,9 @@ scenario     simulator fault scenario, or null
 app          interface build that recorded it
 ruleset      diagnostic ruleset version in force while recording
 thresholds   diagnostic thresholds in force when recording started
+anonymized   only in a shareable copy: {"from": sha256 of the original
+             file, "version": 1}; the endpoint then reads "<source>
+             (anonymized)" (LIBRARY.md)
 ```
 
 `origin` must agree with `source` (a reader refuses a file where it does
@@ -479,15 +482,22 @@ ENTRIES      frame / cmd are objects, reject / mark / lost are text;
 A case is a recorded incident turned into a regression test:
 
 ```text
-cases/HD-C002.hdlog        the recording, untouched
-cases/HD-C002.case.json    what replaying it must produce
+cases/power/HD-C002.hdlog        the recording, untouched
+cases/power/HD-C002.case.json    what replaying it must produce
 ```
+
+Cases sit on shelves by domain (`baseline`, `power`, `usb`, `uart`,
+`network`, `i2c`): the community incident library
+([`LIBRARY.md`](LIBRARY.md)). `category` names the shelf, and `context`
+says the incident in words: `description`, `hardware`, `expected` (what
+the hardware should have done), `notes`.
 
 ```json
 {
   "case": 1,
   "id": "HD-C002",
   "title": "USB UNDERVOLTAGE (simulator HD-T001)",
+  "category": "power",
   "recording": {"file": "HD-C002.hdlog", "sha256": "0925e861...",
                 "recording": "f5db768b...", "origin": "SIMULATED"},
   "ruleset": 1,
@@ -504,9 +514,10 @@ The case names its recording by SHA-256. A case passes when the file is that
 exact file, intact (VERIFIED or RECOVERED), and replays to the stated facts
 and diagnosis (`web/test/cases.test.ts`).
 
-In the interface: replay a recording, then **REPORT → SAVE AS CASE**. It
-saves `HD-C-xxxxxxxx.case.json` and the untouched `.hdlog`. Rename both to
-the next `HD-C` number when adding them to `cases/`.
+In the interface: replay a recording, then **REPORT → SAVE AS CASE** (the
+untouched `.hdlog`, for your own regression tests) or **SHARE WITH THE
+LIBRARY** (an anonymized copy and its drafted case, for a pull request).
+Rename both to the next `HD-C` number when adding them to `cases/`.
 
 Every interesting real fault can become a case without one line of special
 code: the engine either still explains it the same way, or the test says
