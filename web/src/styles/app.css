@@ -956,6 +956,81 @@ select {
   max-width: 760px;
 }
 
+/* ------------------------------------------------------------------ tour */
+
+/* A word that acts: looks like a link, is a button. */
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.head .tour-btn {
+  padding: 1px 8px;
+  font-size: var(--fs-meta);
+}
+
+/* One part lit, the rest dimmed: the shadow is the dimming. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.tour-light {
+  position: fixed;
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.62);
+  pointer-events: none;
+  transition:
+    top 0.18s ease,
+    left 0.18s ease,
+    width 0.18s ease,
+    height 0.18s ease;
+}
+.tour-card {
+  position: fixed;
+  width: min(420px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid var(--cyan);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-text);
+}
+.tour-card.docked {
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: auto;
+}
+.tour-card.docked.top {
+  top: 12px;
+  bottom: auto;
+}
+.tour-card p {
+  margin: 8px 0 10px;
+}
+.tour-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  letter-spacing: 0.08em;
+}
+.tour-head b {
+  color: var(--cyan);
+}
+.tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tour-actions .spacer {
+  flex: 1;
+}
+
 /* ------------------------------------------------------------------ boot */
 
 .boot {
