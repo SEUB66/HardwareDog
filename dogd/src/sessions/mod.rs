@@ -245,8 +245,15 @@ mod tests {
     use super::*;
 
     /// Files written by the interface (web/src/core/session.ts).
+    /// The library keeps cases on shelves (cases/power/...): found by name.
     fn case(name: &str) -> Vec<u8> {
-        std::fs::read(format!("{}/../cases/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+        let root = format!("{}/../cases", env!("CARGO_MANIFEST_DIR"));
+        for shelf in ["baseline", "power", "usb", "uart", "network", "i2c"] {
+            if let Ok(data) = std::fs::read(format!("{root}/{shelf}/{name}")) {
+                return data;
+            }
+        }
+        panic!("no case {name} in {root}")
     }
 
     #[test]

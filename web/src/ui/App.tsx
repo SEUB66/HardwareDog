@@ -10,6 +10,7 @@ import type { ReportFormat } from '../core/commands';
 import { SimulatedDevice } from '../core/simulator';
 import { SimulatedPack } from '../core/simpack';
 import { PackBuilder } from '../core/packbuilder';
+import { prepareForLibrary } from '../core/library';
 import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
 import { HDLOG_LIMITS, ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
 import { System, browserStore } from '../core/system';
@@ -389,6 +390,21 @@ export function App({ archive }: { archive: SessionArchive }) {
     system.mark(`case saved: ${id}`);
   };
 
+  /** The replayed incident for the community library: anonymized, its case drafted. */
+  const saveForLibrary = async () => {
+    const t = session.transport;
+    if (!(t instanceof ReplayTransport) || caseBlocker) return;
+    try {
+      const p = await prepareForLibrary(toHdlog(t.recording));
+      download(`${p.file}.case.json`, 'application/json', JSON.stringify(p.case, null, 2) + '\n');
+      download(`${p.file}.hdlog`, 'application/x-ndjson', p.hdlog);
+      const kinds = Object.entries(p.summary.replaced).map(([k, n]) => `${n} ${k}`).join(', ') || 'nothing to replace';
+      system.mark(`for the library: ${p.file} (${p.case.category}), anonymized: ${kinds}; ${p.summary.textLines} text line(s) changed, read them`);
+    } catch (e) {
+      system.mark(`library: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const context: CommandContext = useMemo(
     () => ({
       system,
@@ -490,7 +506,7 @@ export function App({ archive }: { archive: SessionArchive }) {
       case 'PROBE':
         return <Probe system={system} />;
       case 'REPORT':
-        return <Report system={system} onExport={exportReport} onExportSession={exportSession} onSaveCase={saveCase} caseBlocker={caseBlocker} />;
+        return <Report system={system} onExport={exportReport} onExportSession={exportSession} onSaveCase={saveCase} onSaveForLibrary={() => void saveForLibrary()} caseBlocker={caseBlocker} />;
       case 'SETUP':
         return (
           <Setup

@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C014",
   "title": "SUPPLY SAG (simulator HD-T013)",
+  "category": "power",
   "recording": {
     "file": "HD-C014.hdlog",
     "sha256": "14cb4eec24ea6b3f33f43bac7a3dede9e61e27c6d99b63a3b068b969bc85c01a",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "Long thin cable: the rail sags under each load burst, but the target survives (for now).",
-    "hardware": "None: built-in simulator, scenario HD-T013, seed 1, 40 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T013, seed 1, 40 s. Origin SIMULATED.",
+    "expected": "The rail stays above the undervoltage threshold (4.75 V by default) during load bursts."
   },
   "ruleset": 2,
   "expect": {
