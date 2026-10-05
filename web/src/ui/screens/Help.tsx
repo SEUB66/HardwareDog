@@ -1,5 +1,5 @@
-import { DESCRIPTOR, DOG_TEXT, TAGLINE } from '../../core/ascii';
-import { AsciiBanner } from '../components/AsciiBanner';
+import { DESCRIPTOR, TAGLINE } from '../../core/ascii';
+import { Brand } from '../components/Brand';
 import { COMMANDS } from '../../core/commands';
 import { Panel } from '../components/Panel';
 
@@ -63,10 +63,10 @@ export function Help() {
         </Panel>
       </div>
       <div style={{ marginTop: 24 }}>
-        <AsciiBanner scale={0.8} />
-        <pre class="dim" style={{ margin: '12px 0 0' }} aria-hidden="true">
-          {`${DOG_TEXT}\n\n${DESCRIPTOR} // ${TAGLINE}`}
-        </pre>
+        <Brand size={64} />
+        <p class="dim" style={{ margin: '12px 0 0' }}>
+          {`${DESCRIPTOR} // ${TAGLINE}`}
+        </p>
       </div>
     </div>
   );

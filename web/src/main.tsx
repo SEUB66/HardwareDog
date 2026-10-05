@@ -6,6 +6,7 @@ import '@fontsource/ibm-plex-mono/latin-600.css';
 import '@fontsource/ibm-plex-sans-condensed/latin-600.css';
 import './styles/tokens.css';
 import './styles/app.css';
+import './styles/glass.css';
 import { SessionArchive } from './core/archive';
 import { App } from './ui/App';
 
