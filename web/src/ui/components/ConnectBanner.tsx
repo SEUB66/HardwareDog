@@ -11,7 +11,7 @@ interface ConnectBannerProps {
 }
 
 const WHY =
-  'Hardware Dog reads ONE device: the Hardware Dog you connect (Web Serial, or dogd on this machine). It never lists or measures the USB ports of this computer. Nothing runs until you choose a source: no data is invented while you look around.';
+  'Hardware Dog reads the Hardware Dogs you connect (Web Serial, or dogd on this machine): one, or several as a pack. It never lists or measures the USB ports of this computer. Nothing runs until you choose a source: no data is invented while you look around.';
 
 /**
  * Nothing is connected: say it, and offer every source. The demo is one of

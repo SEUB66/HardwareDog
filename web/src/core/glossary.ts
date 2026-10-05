@@ -86,6 +86,13 @@ const TERMS: Record<string, string> = {
   'BUS/STATE': 'What the I2C bus is doing: ACTIVE, SCANNING, IDLE or FAULT.',
   'BUS/LAST SCAN': 'When the bus was last scanned for responding addresses.',
 
+  // PACK: several Dogs watching one incident
+  'PACK/DOG': 'Its place in the pack: D1, D2... in the order the sources were given. Every frame and command is tagged with it.',
+  'PACK/DEVICE': 'Who the Dog is, from its hello frame: id, hardware revision, firmware.',
+  'PACK/LINK': 'This Dog\'s link. ONLINE: it said hello and frames arrive. WAITING: no hello yet. LOST: it dropped; the pack goes on without it.',
+  'PACK/OBSERVES': 'The signals this Dog is the source for. One signal, one source: a capability claimed by a second Dog is refused for it.',
+  'PACK/CLOCK': 'How well this Dog\'s times are known on the host clock: half the round trip of a time sample, plus drift. UNBOUNDED: hello only, not yet sampled.',
+
   // LOCAL: where the data lives
   'LOCAL/MODE': 'Hardware Dog runs entirely on this machine. Nothing needs the Internet.',
   'LOCAL/CLOUD': 'No cloud service is used. Your data never leaves this machine.',
@@ -191,6 +198,8 @@ const STATUS: Record<string, string> = {
   UNDERVOLTAGE: `The rail is below the undervoltage threshold (${UV} by default).`,
   OVERCURRENT: `The target draws more than the current limit (${OC} by default).`,
   'NO SIGNAL': 'No measurement received yet. Nothing to judge.',
+  WAITING: 'Connected, but this Dog has not said hello yet: nothing it sends is used before it does.',
+  UNBOUNDED: 'The error of this clock is not known yet (hello only). Times from it are never compared finely with another Dog.',
   ONLINE: 'Frames are arriving from the device.',
   OFFLINE: 'No device connected.',
   CONNECTING: 'Waiting for the device to answer.',
@@ -263,6 +272,7 @@ const PANELS: Record<string, string> = {
   MEASUREMENT: 'What the power numbers are worth: sensor, range, resolution, rate and expected error. Diagnostic measurement, not certified metrology.',
   WATCH: 'Periodic network checks by the device (ACTIVE): ping the gateway, resolve a name, reach a host beyond the gateway. Nothing runs until you start it.',
   OUTAGES: 'Every loss of the network link this session, what came just before it (a voltage drop, a target reset), and how long the way back took: link, DHCP, DNS.',
+  PACK: 'Several Hardware Dogs watching one incident: one timeline, one clock with a known error, one source per signal.',
   'SIMULATOR SCENARIO': 'Made-up data to try the interface without hardware. Always labeled SIMULATED.',
 };
 

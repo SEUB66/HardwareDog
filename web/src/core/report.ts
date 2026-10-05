@@ -10,7 +10,7 @@ const CLOSED_TEXT: Record<Footer['closed'], string> = {
   RECOVERED: 'RECOVERED after an unclean stop',
   SNAPSHOT: 'SNAPSHOT, exported while recording',
 };
-import { clock, duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
+import { clock, clockText, duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
 import type { TraceEvent } from './types';
 
 /**
@@ -169,6 +169,27 @@ export function buildReport(sys: System, now = sys.now()): Report {
     { kind: 'NEXT CHECK', text: d.next, diagnosis: d.id },
   ]);
 
+  // PACK: which Dog observed what, and how well their clocks agreed
+  if (sys.pack) {
+    const dogs = sys.packView(now);
+    const notes: string[] = [];
+    for (const d of dogs) {
+      if (d.refused.length) notes.push(`${d.id} also claimed ${d.refused.join(' ')}: refused, one signal has one source.`);
+      if (d.link === 'LOST') notes.push(`${d.id} was lost during the session: its signals stopped there.`);
+      if (d.clock.state === 'UNBOUNDED') notes.push(`${d.id} clock never sampled: its times are not compared finely with the other Dogs.`);
+    }
+    notes.push('Times from two Dogs are compared with their clock errors added as a margin; a correlation inside that margin is said UNKNOWN.');
+    sections.push({
+      title: 'PACK',
+      result: notes.length > 1 ? 'WARNING' : 'PASS',
+      notes,
+      rows: dogs.map((d): [string, string] => [
+        d.id,
+        `${d.device ? `${d.device.id} rev ${d.device.rev} fw ${d.device.firmware}` : 'no hello'} / observes ${d.observes.join(' ') || 'nothing'} / clock ${clockText(d.clock)} / ${d.link}`,
+      ]),
+    });
+  }
+
   // POWER
   const avgV = p.sampleCount ? p.voltageSum / p.sampleCount : null;
   const avgI = p.sampleCount ? p.currentSum / p.sampleCount : null;
@@ -269,8 +290,8 @@ export function buildReport(sys: System, now = sys.now()): Report {
 
   return {
     session: sys.replayOf?.id ?? sessionId(sys.startedAt),
-    device: sys.device.id,
-    firmware: sys.device.firmware,
+    device: sys.pack ? `PACK OF ${sys.dogs.length} (${sys.dogs.map((d) => d.device?.id ?? d.id).join(' ')})` : sys.device.id,
+    firmware: sys.pack ? [...new Set(sys.dogs.map((d) => d.device?.firmware ?? '--'))].join(' / ') : sys.device.firmware,
     source: reportSource(sys),
     simulated: sys.origin === 'SIMULATED',
     recording: recordingRef(sys),

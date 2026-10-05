@@ -56,6 +56,20 @@ export interface DogState {
   lost: boolean;
 }
 
+/** One Dog of a pack, as the interface shows it. */
+export interface DogView {
+  id: string;
+  /** From its hello; null until it says hello. */
+  device: DeviceInfo | null;
+  link: 'WAITING' | 'ONLINE' | 'LOST';
+  /** Capabilities it is the source for. */
+  observes: string[];
+  /** Capabilities it claimed that another Dog already observes: its frames for them are ignored. */
+  refused: string[];
+  /** Its clock against the host clock. UNBOUNDED: hello only, the error is not known. */
+  clock: { state: 'NONE' | 'UNBOUNDED' | 'ALIGNED'; errMs: number | null };
+}
+
 export interface PowerSample {
   t: number;
   voltage: number;
