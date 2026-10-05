@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C009",
   "title": "UPSTREAM DOWN (simulator HD-T008)",
+  "category": "network",
   "recording": {
     "file": "HD-C009.hdlog",
     "sha256": "ba2f489532c63cbad040688b5766127fd695822201caff611f8953011b545c35",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "LAN and gateway are fine; the Internet connection beyond the gateway is down.",
-    "hardware": "None: built-in simulator, scenario HD-T008, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T008, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "Hosts beyond the gateway answer: the Internet connection is up."
   },
   "ruleset": 2,
   "expect": {

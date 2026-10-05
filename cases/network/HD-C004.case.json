@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C004",
   "title": "DHCP FAILURE (simulator HD-T002)",
+  "category": "network",
   "recording": {
     "file": "HD-C004.hdlog",
     "sha256": "4df376a624e9fc0388d2d86ed85f2d84b29a927489696cee0efc2c47cbcd41b6",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "Link is up but no DHCP server answers (wrong VLAN, server down).",
-    "hardware": "None: built-in simulator, scenario HD-T002, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T002, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "Once the link is up, a DHCP server hands out an address within a few seconds."
   },
   "ruleset": 2,
   "expect": {

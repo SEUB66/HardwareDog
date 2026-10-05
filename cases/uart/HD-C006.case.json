@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C006",
   "title": "SERIAL FRAMING MISMATCH (simulator HD-T004)",
+  "category": "uart",
   "recording": {
     "file": "HD-C006.hdlog",
     "sha256": "661266d7be612441fdf657e3cd4aa8c328e8589821efd9e8c3f6b837d5ec10f6",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "The target UART runs at 9600 baud; the monitor listens at 115200.",
-    "hardware": "None: built-in simulator, scenario HD-T004, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T004, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "The monitor and the target agree on the baud rate: console lines arrive readable, no framing errors."
   },
   "ruleset": 2,
   "expect": {

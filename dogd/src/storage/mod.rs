@@ -938,7 +938,7 @@ mod tests {
 
     fn case() -> (String, Vec<u8>) {
         let data = std::fs::read(format!(
-            "{}/../cases/HD-C002.hdlog",
+            "{}/../cases/power/HD-C002.hdlog",
             env!("CARGO_MANIFEST_DIR")
         ))
         .unwrap();
