@@ -16,7 +16,8 @@ Code: `web/src/core/pack.ts` (clocks and merge, pure),
 `web/src/core/session.ts` (hdlog v3, a pack recorded and replayed),
 `web/src/core/system.ts` (the pack in the System),
 `web/src/core/transport.ts` (`PackTransport`),
-`web/src/core/simpack.ts` (a simulated pack).
+`web/src/core/simpack.ts` (a simulated pack),
+`web/src/core/dogd.ts` (a pack through dogd: one stream per Dog).
 
 ---
 
@@ -145,6 +146,23 @@ A PACK IS A CASE               PASS  HD-C018: the router incident (HD-T016)
                                      seen by three Dogs; same facts and
                                      diagnosis as HD-C017, one Dog
 DOGD STORES IT                 PASS  dogd verifies a v3 file like a v2 one
+DOGD, SEVERAL SOURCES          PASS  one link per --source, D1..D8, each on
+                                     its own stream (/v1/hdp/D2), bridged
+                                     unchanged; CONNECT DOGD opens the pack
+A DOG SAYS WHAT IT OBSERVES    PASS  the firmware core sends frames only for
+                                     its caps, rejects commands for others
+                                     (C tests; hwdog-host --caps)
+TWO FIRMWARES, ONE PACK        PASS  two firmware processes (supply: power
+                                     uart i2c; network: net probe) through
+                                     one dogd, in real time: the router
+                                     chain on one timeline, clocks to a few
+                                     ms, the same diagnosis as one board,
+                                     recorded and replayed the same
+                                     (firmware.test.ts)
+ONE READING PER ARRIVAL        PASS  the time a frame is recorded at is the
+                                     time it is handled at, so the replay
+                                     agrees to the last digit (found with
+                                     the real-time test; pack-hdlog.test.ts)
 ```
 
 ---
@@ -152,8 +170,6 @@ DOGD STORES IT                 PASS  dogd verifies a v3 file like a v2 one
 ## NOT YET
 
 ```text
-[ -- ] dogd with several sources, and two firmware processes through it
-       on one timeline (hwdog-host --caps)            LVL 90.3
 [ -- ] the interface: build a pack, show its Dogs, their clocks and who
        observes what                                    LVL 90.4
 [ -- ] two real boards on one bench, recorded as a PHYSICAL case

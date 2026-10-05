@@ -125,6 +125,44 @@ describe('hdlog v3: a pack recorded and replayed', () => {
     expect(replayed.facts).toEqual(sys.facts);
   });
 
+  it('a clock that moves while a frame is handled: the replay still sees the times recorded', async () => {
+    // Found with two firmware processes in real time: the time an arrival was recorded at and
+    // the time it was handled at could be 1 ms apart, and the replay disagreed on a clock error.
+    // Here every reading of the clock moves it on by 1 ms.
+    let now = T0;
+    const sys = new System(memoryStore(), () => now++);
+    const a = new FakeTransport();
+    const b = new FakeTransport();
+    for (const [link, t0] of [
+      [a, 0],
+      [b, 5000],
+    ] as const) {
+      link.send = (cmd) => {
+        link.sent.push(cmd);
+        if (cmd.cmd === 'time') link.push({ type: 'time', t: now - T0 + t0, id: cmd.id });
+      };
+    }
+    const pack = new PackTransport([
+      { dog: 'D1', link: a },
+      { dog: 'D2', link: b },
+    ]);
+    sys.recorder = new SessionRecorder(headerFor(pack, sys, null));
+    await sys.connect(pack);
+    a.push({ type: 'hello', t: 0, proto: 1, device: 'HD-A', rev: 'A', fw: '1', caps: ['power', 'uart'] });
+    b.push({ type: 'hello', t: 5000, proto: 1, device: 'HD-B', rev: 'A', fw: '1', caps: ['net'] });
+    a.push({ type: 'uart.rx', t: 40, data: 'rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)' });
+    for (let k = 0; k < 40; k++) a.push({ type: 'power', t: 50 + k * 20, v: k > 20 && k < 30 ? 4.4 : 5.0, i: 0.1 });
+    now += 2000;
+    a.push({ type: 'power', t: 2000, v: 5.0, i: 0.1 });
+    b.push({ type: 'usb.detach', t: 7000 });
+    await sys.disconnect();
+    const replayed = await replay(toHdlog(sys.recorder.recording));
+    expect(sys.facts.drops.length).toBeGreaterThan(0);
+    expect(sys.facts.uart.resets.length).toBe(1);
+    expect(replayed.facts).toEqual(sys.facts);
+    expect(timeline(replayed)).toEqual(timeline(sys));
+  });
+
   it('an unfinished pack recording is recovered, and stays a pack', async () => {
     const { text } = await recordPack('HD-T001', 10);
     const cut = text.slice(0, text.lastIndexOf('{"end"'));

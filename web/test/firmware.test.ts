@@ -1,9 +1,12 @@
 import Ajv from 'ajv';
 import { afterAll, describe, expect, it } from 'vitest';
 import schema from '../../protocol/hdp_v1.json';
-import { DogdTransport } from '../src/core/dogd';
+import { DogdTransport, connectDogd, dogdLinks } from '../src/core/dogd';
 import { decodeFrame, type DeviceFrame, type HostCommand } from '../src/core/protocol';
+import { ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog } from '../src/core/session';
 import { System, memoryStore } from '../src/core/system';
+import { PackTransport } from '../src/core/transport';
+import { thresholdsOf } from '../src/core/types';
 import type { Transport, TransportSink } from '../src/core/transport';
 import { createLineDecoder } from '../src/core/transport';
 
@@ -275,6 +278,105 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     expect(sys.facts).toEqual(direct.facts);
     expect(sys.diagnoses.map((d) => [d.id, d.confidence, d.evidence])).toEqual(direct.diagnoses.map((d) => [d.id, d.confidence, d.evidence]));
     expect(sys.frameErrors).toBe(0);
+  });
+
+  it.runIf(DOGD)('LVL 90.3: two firmware processes through one dogd are one pack, one timeline, one diagnosis', { timeout: 60_000 }, async () => {
+    // One board that sees everything, read directly...
+    const one = await engine(await firmware('router', 12));
+    expect(one.diagnoses.map((d) => d.id).sort()).toEqual(['NETWORK_POWER_LOSS', 'SUPPLY_SAG']);
+
+    // ...and the same incident seen by two Dogs: D1 on the supply, D2 on the network. Each
+    // process plays the same deterministic incident from its own start: this proves the
+    // links, the clocks and the merge, not shared physics (that is a bench with two boards).
+    // Real time, not --fast: each Dog's clock must run with the host's for the pack to align them.
+    const port = 45000 + Math.floor(Math.random() * 2000);
+    const dogs = [
+      { port, caps: 'power,uart,i2c', device: 'HD-P0WER', chip: '7cdfa13a0001' },
+      { port: port + 1, caps: 'net,probe', device: 'HD-NET', chip: '7cdfa13a0002' },
+    ];
+    for (const d of dogs) {
+      // --wait-hello 2: dogd's hello, then the interface's, so no frame is sent before anyone listens
+      const fw = await spawn(BIN!, ['--scenario', 'router', '--seconds', '12', '--tcp', String(d.port), '--wait-hello', '2', '--caps', d.caps, '--device', d.device, '--chip', d.chip]);
+      await new Promise<void>((r) => fw.stderr.on('data', (b) => new TextDecoder().decode(b).includes('LISTEN') && r()));
+    }
+    const sources = dogs.flatMap((d) => ['--source', `tcp:127.0.0.1:${d.port}`, '--source-origin', 'simulated']);
+    const dogd = await spawn(DOGD!, ['serve', '--listen', '127.0.0.1:0', ...sources, '--data', `/tmp/dogd-pack-${port}`]);
+    const base = await new Promise<string>((r) => {
+      let s = '';
+      dogd.stdout.on('data', (b) => {
+        s += new TextDecoder().decode(b);
+        const m = /LISTEN\s+(\S+)/.exec(s);
+        if (m) r(`http://${m[1]}`);
+      });
+    });
+    const deadline = Date.now() + 10_000;
+    while (!(await dogdLinks(base)).every((l) => l.state === 'ONLINE')) {
+      if (Date.now() > deadline) throw new Error('dogd never connected to both firmwares');
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect((await dogdLinks(base)).map((l) => [l.dog, l.source, l.origin])).toEqual([
+      ['D1', `tcp:127.0.0.1:${port}`, 'SIMULATED'],
+      ['D2', `tcp:127.0.0.1:${port + 1}`, 'SIMULATED'],
+    ]);
+
+    const pack = await connectDogd(base);
+    expect(pack).toBeInstanceOf(PackTransport);
+    if (!(pack instanceof PackTransport)) return;
+    expect(pack.links.map((l) => [l.dog, l.kind, l.origin])).toEqual([
+      ['D1', 'DOGD', 'SIMULATED'],
+      ['D2', 'DOGD', 'SIMULATED'],
+    ]);
+    const sys = new System(memoryStore());
+    sys.recorder = new SessionRecorder(
+      newHeader({
+        id: 'HD-PACK-FW',
+        startedAt: sys.startedAt,
+        source: 'PACK',
+        endpoint: pack.label,
+        scenario: null,
+        app: 'test',
+        thresholds: thresholdsOf(sys.settings),
+        dogs: pack.links.map((l) => ({ id: l.dog, source: l.kind, endpoint: l.label, origin: l.origin })),
+      }),
+    );
+    await sys.boot(pack, () => {}, 0);
+    // both firmwares end their run after 12 s and close their links
+    const end = Date.now() + 30_000;
+    while (sys.link !== 'LOST' && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+    expect(sys.link).toBe('LOST');
+    await sys.disconnect();
+    sys.evaluate(Date.now());
+
+    expect(sys.frameErrors).toBe(0);
+    expect(sys.dogs.map((d) => [d.id, d.device?.id, d.observes])).toEqual([
+      ['D1', 'HD-P0WER', ['power', 'uart', 'i2c']],
+      ['D2', 'HD-NET', ['net', 'probe']],
+    ]);
+    // one clock: both Dogs sampled over a local link, to a few ms
+    for (const d of ['D1', 'D2']) {
+      const err = sys.pack!.clocks.get(d)!.errAt(Date.now());
+      expect(err, d).not.toBeNull();
+      expect(err!, d).toBeLessThan(25);
+    }
+    // the same diagnosis as one board, with the chain across the two Dogs
+    expect(sys.diagnoses.map((d) => `${d.id}:${d.confidence}`).sort()).toEqual(one.diagnoses.map((d) => `${d.id}:${d.confidence}`).sort());
+    const chain = sys.diagnoses.find((d) => d.id === 'NETWORK_POWER_LOSS')!;
+    expect(chain.correlation).toMatch(/voltage drop .* > link down \+\d+ ms > up \+\d+ ms > DHCP \+\d+ ms > DNS \+\d+ ms/);
+
+    // recorded as hdlog v3, its replay is the session again
+    const text = toHdlog(sys.recorder.recording);
+    const recording = parseHdlog(text);
+    expect(recording.integrity!.status).toBe('VERIFIED');
+    expect(recording.header.dogs!.map((d) => [d.id, d.source])).toEqual([
+      ['D1', 'DOGD'],
+      ['D2', 'DOGD'],
+    ]);
+    const r = new ReplayTransport(recording);
+    const replayed = new System(memoryStore(), () => r.clock);
+    await replayed.boot(r, () => {}, 0);
+    replayed.evaluate(r.clock);
+    expect(replayed.facts).toEqual(sys.facts);
+    expect(replayed.diagnoses.map((d) => [d.id, d.confidence, d.evidence])).toEqual(sys.diagnoses.map((d) => [d.id, d.confidence, d.evidence]));
   });
 
   it.runIf(DOGD)('identity: the same board through dogd twice, and after a restart, is one identity by its chip id', async () => {

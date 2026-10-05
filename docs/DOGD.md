@@ -77,6 +77,23 @@ cargo build --release
 ./target/release/dogd --source tcp:192.168.1.50:3333    # a device on Wi-Fi
 ```
 
+Several sources are a **pack** ([`PACK.md`](PACK.md)): one Dog per
+source, D1, D2... in the order given, up to 8. `--source-origin` applies
+to the `--source` just before it.
+
+```sh
+./target/release/dogd --source serial:/dev/ttyACM0 \
+                      --source serial:/dev/ttyACM1     # D1 on the supply, D2 on the network
+```
+
+dogd bridges each Dog's bytes on its own stream, unchanged: it never
+merges two Dogs, never aligns their clocks, never decides which one is
+right. The one timeline and the one clock are the engine's, the same in
+the interface, in a replay and in a case. CONNECT DOGD opens one device
+when dogd has one source, the pack when it has several; a pack starts
+with every Dog online (a Dog missing from the start would be a hole
+nobody sees).
+
 ```text
 HW DOG / DOGD
 VERSION        0.1.0
@@ -129,7 +146,8 @@ simulated source stays labeled SIMULATED everywhere.
 
 ```text
 GET  /v1/health                {"status":"ok","dogd":"0.1.0","hdp":1}
-GET  /v1/link                  state, source, origin, label, device, epoch
+GET  /v1/link                  state, source, origin, label, device, epoch (D1)
+GET  /v1/links                 {"links":[...]}: every Dog, D1 first, with its id
 GET  /v1/devices               attached devices and who they are, known identities
 GET  /v1/devices/events        ATTACHED / DETACHED / IDENTIFIED (?since=N)
 PUT  /v1/devices/{id}/alias    a label for people (text body)
@@ -138,7 +156,8 @@ GET  /v1/sessions              the session index
 GET  /v1/sessions/{id}         one session
 GET  /v1/sessions/{id}/hdlog   the file, byte for byte
 PUT  /v1/sessions/{id}/hdlog   store a file the interface wrote
-WS   /v1/hdp                   raw HDP: device bytes out, command lines in
+WS   /v1/hdp                   raw HDP: device bytes out, command lines in (D1)
+WS   /v1/hdp/{dog}             the same for one Dog of a pack: /v1/hdp/D2
 ```
 
 HDP commands (probe, i2c scan, baud...) are **not** repeated as REST
@@ -241,5 +260,8 @@ TESTS   dogd/src/api (host, origin, preflight, rebinding, LAN)
 [ OK ] restart dogd -> the session index survives
 [ OK ] no cloud / network dependency, no account
 [ OK ] serial source                            checked on a Linux pty device
+[ OK ] several sources, one stream per Dog      two firmware processes through
+                                                one dogd are one pack: same
+                                                diagnosis as one board (LVL 90.3)
 [ -- ] real ESP32-S3 on a serial port           LVL 60
 ```
