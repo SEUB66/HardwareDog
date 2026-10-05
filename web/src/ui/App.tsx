@@ -25,6 +25,7 @@ import { Hint } from './components/Hint';
 import { IntegrityTag } from './components/IntegrityTag';
 import { ConnectBanner } from './components/ConnectBanner';
 import { SimBanner } from './components/SimBanner';
+import { Tour } from './Tour';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
 import { Bus } from './screens/Bus';
@@ -147,6 +148,7 @@ export function App({ archive }: { archive: SessionArchive }) {
   const [screen, setScreen] = useState<Screen>('STATUS');
   const [traceOnly, setTraceOnly] = useState<Source[] | null>(null);
   const [palette, setPaletteState] = useState(false);
+  const [touring, setTouring] = useState(false);
   // The keyboard handler must see open/close immediately, not after the
   // next render, or fast keystrokes leak into global shortcuts.
   const paletteOpen = useRef(false);
@@ -272,6 +274,14 @@ export function App({ archive }: { archive: SessionArchive }) {
       transport = simulator(scenario);
     }
     await start(transport);
+  };
+
+  /** The tour starts from STATUS, where every part it shows is on screen. */
+  const startTour = () => {
+    setPalette(false);
+    setMoreOpen(false);
+    navigate('STATUS');
+    setTouring(true);
   };
 
   const replay = (recording: Recording) => {
@@ -521,6 +531,9 @@ export function App({ archive }: { archive: SessionArchive }) {
           {system.transportKind === 'DOGD' && <Tag status="INFO" label="DOGD" />}
           {system.origin === 'SIMULATED' && <Tag status="WARN" label="SIMULATOR" />}
         </span>
+        <button class="btn tour-btn" onClick={startTour} title="A guided tour of the interface: what each part is for">
+          TOUR
+        </button>
         <span class="state">
           <span class={`light ${system.link}`} aria-hidden="true" />
           {linkTag}
@@ -563,6 +576,7 @@ export function App({ archive }: { archive: SessionArchive }) {
             onDogd={() => void switchTransport('DOGD')}
             onOpen={(file) => void openFile(file)}
             onDemo={() => void switchTransport('SIMULATOR')}
+            onTour={startTour}
           />
         )}
         <SimBanner
@@ -593,6 +607,8 @@ export function App({ archive }: { archive: SessionArchive }) {
           <kbd>CTRL+K</kbd>CMD
         </span>
       </footer>
+
+      {touring && <Tour onEnd={() => setTouring(false)} />}
 
       {palette && (
         <CommandPalette

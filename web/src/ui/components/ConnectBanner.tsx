@@ -7,6 +7,7 @@ interface ConnectBannerProps {
   onDogd: () => void;
   onOpen: (file: File) => void;
   onDemo: () => void;
+  onTour: () => void;
 }
 
 const WHY =
@@ -16,7 +17,7 @@ const WHY =
  * Nothing is connected: say it, and offer every source. The demo is one of
  * them, chosen on purpose, never started behind the operator's back.
  */
-export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo }: ConnectBannerProps) {
+export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo, onTour }: ConnectBannerProps) {
   const file = useRef<HTMLInputElement>(null);
   const serialOk = webSerialSupported();
   return (
@@ -24,7 +25,12 @@ export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo }: ConnectBanne
       <Hint text={WHY} term="NOT CONNECTED">
         <b>NOT CONNECTED</b>
       </Hint>
-      <span class="dim">choose a source: nothing is measured until you do</span>
+      <span class="dim">
+        choose a source: nothing is measured until you do. First time here?{' '}
+        <button class="link" onClick={onTour}>
+          take the tour
+        </button>
+      </span>
       <span class="actions">
         <button class="btn" onClick={onSerial} disabled={!serialOk} title={serialOk ? 'A Hardware Dog on a USB serial port' : 'Web Serial needs a Chromium-based browser over https or localhost'}>
           CONNECT WEB SERIAL
