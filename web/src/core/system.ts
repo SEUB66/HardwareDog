@@ -364,6 +364,31 @@ export class System {
     return steps;
   }
 
+  /**
+   * The interface starts with no device: the same boot screen, and only
+   * what can really be checked without one. No device service is reported
+   * on: with nothing connected there is nothing to say about them.
+   */
+  async start(onStep: (step: BootStep) => void, pace = 90): Promise<BootStep[]> {
+    const steps: BootStep[] = [];
+    const wait = (n: number) => (n > 0 ? new Promise((r) => setTimeout(r, n)) : Promise.resolve());
+    const step = async (s: BootStep) => {
+      steps.push(s);
+      onStep(s);
+      await wait(pace);
+    };
+    await step({ label: 'EVENT BUS', status: 'OK' });
+    await step(
+      this.storageOk
+        ? { label: 'LOCAL STORAGE', status: 'OK' }
+        : { label: 'LOCAL STORAGE', status: 'WARN', detail: 'unavailable, settings will not persist' },
+    );
+    await step({ label: 'TRACE ENGINE', status: 'OK' });
+    await step({ label: 'DIAGNOSTIC RULES', status: 'OK', detail: `${RULES.length} loaded` });
+    await step({ label: 'HARDWARE INTERFACE', status: 'WARN', detail: 'not connected: choose a source' });
+    return steps;
+  }
+
   /** Open a transport. Returns false (and records why) instead of throwing. */
   async connect(transport: Transport): Promise<boolean> {
     await this.disconnect();

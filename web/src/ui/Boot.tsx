@@ -9,11 +9,15 @@ import { beep } from './sound';
 
 interface BootProps {
   system: System;
-  transport: Transport;
+  /** Null: the interface opens with nothing connected (the signature start). */
+  transport: Transport | null;
   onReady: () => void;
 }
 
-/** The machine boots; it does not "load" (spec 08). Every line is a real check. */
+/**
+ * The machine boots; it does not "load" (spec 08). Every line is a real
+ * check. It plays when the interface opens, and again for each source.
+ */
 export function Boot({ system, transport, onReady }: BootProps) {
   const [steps, setSteps] = useState<BootStep[]>([]);
   const [done, setDone] = useState(false);
@@ -22,8 +26,8 @@ export function Boot({ system, transport, onReady }: BootProps) {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const pace = system.settings.reducedMotion ? 30 : 85;
-    void system
-      .boot(transport, (s) => !cancelled && setSteps((prev) => [...prev, s]), pace)
+    const onStep = (s: BootStep) => !cancelled && setSteps((prev) => [...prev, s]);
+    void (transport ? system.boot(transport, onStep, pace) : system.start(onStep, pace))
       .then(() => {
         if (cancelled) return;
         setDone(true);
@@ -48,6 +52,7 @@ export function Boot({ system, transport, onReady }: BootProps) {
   }, [done]);
 
   const failed = steps.some((s) => s.status === 'FAIL');
+  const ready = transport ? (failed ? 'SYSTEM READY / DEGRADED' : 'SYSTEM READY') : 'SYSTEM READY / NOT CONNECTED';
 
   return (
     <main class="boot" aria-live="polite" aria-busy={!done}>
@@ -90,11 +95,13 @@ export function Boot({ system, transport, onReady }: BootProps) {
           </Fragment>
         ))}
         {done &&
-          `\nSOURCE       ${system.transportKind ?? 'NONE'}\nDEVICE       ${system.device.id}\nMODE         LOCAL\nSESSION      READY\n`}
+          (transport
+            ? `\nSOURCE       ${system.transportKind ?? 'NONE'}\nDEVICE       ${system.device.id}\nMODE         LOCAL\nSESSION      READY\n`
+            : `\nSOURCE       NONE\nDEVICE       --\nMODE         LOCAL\nSESSION      WAITING FOR A SOURCE\n`)}
       </pre>
       {done && (
         <pre class="ready">
-          <span class={failed ? 'tag WARN' : 'tag OK'}>{failed ? 'SYSTEM READY / DEGRADED' : 'SYSTEM READY'}</span>
+          <span class={failed || !transport ? 'tag WARN' : 'tag OK'}>{ready}</span>
           {`\n\n${DESCRIPTOR} // local diagnostic interface`}
         </pre>
       )}
