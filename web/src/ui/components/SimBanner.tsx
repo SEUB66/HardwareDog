@@ -11,7 +11,7 @@ interface SimBannerProps {
 }
 
 const WHY =
-  'Hardware Dog reads ONE device: the Hardware Dog you connect in SETUP (Web Serial or dogd). It never lists or measures the USB ports of this computer. In DEMO MODE, which you started, a built-in simulator plays a fault scenario so every screen has something to show.';
+  'Hardware Dog reads the Hardware Dogs you connect in SETUP (Web Serial or dogd): one, or several as a pack. It never lists or measures the USB ports of this computer. In DEMO MODE, which you started, a built-in simulator plays a fault scenario so every screen has something to show.';
 
 /**
  * Simulated data is labeled on every screen (LAWS 5). Not a corner tag:
@@ -24,7 +24,7 @@ export function SimBanner({ system, scenario, onConnect, onStop }: SimBannerProp
   const what = replay
     ? `REPLAY OF A SIMULATED RECORDING ${replay.id}`
     : scenario
-      ? `DEMO SCENARIO ${scenario.id} ${scenario.title}`
+      ? `${system.pack ? `DEMO PACK OF ${system.dogs.length}` : 'DEMO SCENARIO'} ${scenario.id} ${scenario.title}`
       : 'SIMULATED SOURCE THROUGH DOGD';
   return (
     <div class="sim-banner" role="status">

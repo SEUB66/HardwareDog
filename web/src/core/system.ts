@@ -24,6 +24,7 @@ import type {
   TransportKind,
   UsbDescriptor,
   UsbState,
+  DogView,
 } from './types';
 import { DEFAULT_SETTINGS, THRESHOLD_KEYS, thresholdsOf } from './types';
 import { hex, i2cAddress, milliamps, ms, volts } from './format';
@@ -605,6 +606,28 @@ export class System {
   }
 
   /** One Dog's link is gone; the pack goes on with the others. */
+  /**
+   * The pack as the interface shows it: every Dog, its link, what it
+   * observes (and what it was refused), and how well its clock is known at
+   * host time `t`. Empty when the source is one device.
+   */
+  packView(t = this.now()): DogView[] {
+    if (!this.pack) return [];
+    return this.dogs.map((d) => {
+      const clock = this.pack!.clocks.get(d.id);
+      const err = clock?.errAt(t) ?? null;
+      const claimed = d.device ? (d.device.caps ?? [...CAPABILITIES]) : [];
+      return {
+        id: d.id,
+        device: d.device,
+        link: d.lost ? 'LOST' : d.device ? 'ONLINE' : 'WAITING',
+        observes: d.observes,
+        refused: claimed.filter((c) => !d.observes.includes(c)),
+        clock: { state: !d.device ? 'NONE' : err === null ? 'UNBOUNDED' : 'ALIGNED', errMs: err },
+      };
+    });
+  }
+
   private onDogLost(dog: string, reason: string): void {
     const t = this.now();
     const state = this.dogs.find((d) => d.id === dog);

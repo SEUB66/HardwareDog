@@ -72,3 +72,10 @@ export function sessionId(t: number): string {
   const d = new Date(t);
   return `HD-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
 }
+
+/** "+-3.2 ms": how well a Dog's times are known on the host clock. */
+export function clockText(c: { state: 'NONE' | 'UNBOUNDED' | 'ALIGNED'; errMs: number | null }): string {
+  if (c.state === 'NONE') return '--';
+  if (c.state === 'UNBOUNDED' || c.errMs === null) return 'UNBOUNDED';
+  return `+-${c.errMs < 10 ? c.errMs.toFixed(1) : Math.round(c.errMs)} ms`;
+}

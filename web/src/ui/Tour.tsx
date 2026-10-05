@@ -26,6 +26,11 @@ export const TOUR: readonly TourStop[] = [
     text: 'A simulated Hardware Dog plays a fault scenario. Everything it shows is SIMULATED. STOP DEMO goes back to NOT CONNECTED.',
   },
   {
+    target: '[aria-labelledby="panel-pack"]',
+    title: 'THE PACK',
+    text: 'Several Dogs watch this incident. Each row is one Dog: who it is, its link, the signals it is the source for, and how well its clock is known. Their events share one timeline.',
+  },
+  {
     target: '.nav',
     title: 'SECTIONS',
     text: 'STATUS is the overview. TRACE is every event in order. POWER, USB, SERIAL, BUS (I2C) and NET are one signal each. PROBE runs active tests, REPORT writes what was found, SETUP holds sources and sessions. Keys 1 to 7 jump to them.',

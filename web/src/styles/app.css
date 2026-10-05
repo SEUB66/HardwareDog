@@ -53,6 +53,9 @@ select {
 .dim {
   color: var(--text-dim);
 }
+.amber {
+  color: var(--amber);
+}
 .cyan {
   color: var(--cyan);
 }
@@ -200,6 +203,15 @@ select {
 }
 .connect-banner b {
   letter-spacing: 0.08em;
+}
+.pack-build {
+  margin-top: var(--gap);
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.pack-build ol {
+  margin: 6px 0;
+  padding-left: 18px;
 }
 .connect-banner .demo {
   border-color: var(--amber);
@@ -1215,6 +1227,16 @@ button.link {
  * STATUS, TRACE, POWER and PROBE first, everything else behind MORE.
  */
 @media (max-width: 760px) {
+  /* The pack on a phone: every column fits, the details wrap. */
+  table.pack td,
+  table.pack th {
+    white-space: normal;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  table.pack .rev {
+    display: none;
+  }
   .shell {
     grid-template-columns: 1fr;
     grid-template-rows: calc(var(--head-height) + env(safe-area-inset-top)) 1fr auto;
