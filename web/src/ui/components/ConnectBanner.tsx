@@ -1,6 +1,7 @@
 import { useRef } from 'preact/hooks';
 import { webSerialSupported } from '../../core/webserial';
 import { Hint } from './Hint';
+import { Icon } from './Icon';
 
 interface ConnectBannerProps {
   onSerial: () => void;
@@ -20,31 +21,53 @@ const WHY =
 export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo, onTour }: ConnectBannerProps) {
   const file = useRef<HTMLInputElement>(null);
   const serialOk = webSerialSupported();
+  const tile = (icon: string, title: string, text: string, onClick: () => void, extra = '', disabled = false, why?: string) => (
+    <button class={`source-tile${extra}`} onClick={onClick} disabled={disabled} title={why}>
+      <Icon name={icon} size={22} />
+      <span class="source-title">{title}</span>
+      <span class="source-text">{text}</span>
+    </button>
+  );
   return (
     <div class="connect-banner" role="status">
-      <Hint text={WHY} term="NOT CONNECTED">
-        <b>NOT CONNECTED</b>
-      </Hint>
-      <span class="dim">
-        choose a source: nothing is measured until you do. First time here?{' '}
-        <button class="link" onClick={onTour}>
-          take the tour
-        </button>
-      </span>
-      <span class="actions">
-        <button class="btn" onClick={onSerial} disabled={!serialOk} title={serialOk ? 'A Hardware Dog on a USB serial port' : 'Web Serial needs a Chromium-based browser over https or localhost'}>
-          CONNECT WEB SERIAL
-        </button>
-        <button class="btn" onClick={onDogd} title="The local daemon on this machine (127.0.0.1:4782)">
-          CONNECT DOGD
-        </button>
-        <button class="btn" onClick={() => file.current?.click()} title="Replay a recorded session (.hdlog)">
-          OPEN A RECORDING
-        </button>
-        <button class="btn demo" onClick={onDemo} title="A simulated Hardware Dog plays a fault scenario. Every screen says SIMULATED.">
-          DEMO MODE
-        </button>
-      </span>
+      <div class="start-intro">
+        <Hint text={WHY} term="NOT CONNECTED">
+          <b class="start-state">NOT CONNECTED</b>
+        </Hint>
+        <h2 class="start-title">Start here</h2>
+        <p class="start-text">
+          Hardware Dog watches a board through a Hardware Dog probe, puts everything it sees on one timeline, and tells you what went wrong. Nothing is
+          measured until you choose a source. First time?{' '}
+          <button class="link" onClick={onTour}>
+            take the tour
+          </button>
+        </p>
+        <ol class="start-steps">
+          <li>
+            <b>Connect</b> a Hardware Dog: by USB, or through dogd.
+          </li>
+          <li>
+            <b>Watch</b> power, USB, serial, I2C and network, live.
+          </li>
+          <li>
+            <b>Read</b> the diagnosis: what happened, how sure, what to check next.
+          </li>
+        </ol>
+      </div>
+      <div class="sources">
+        {tile(
+          'WEB_SERIAL',
+          'CONNECT WEB SERIAL',
+          'A Hardware Dog on a USB port of this computer.',
+          onSerial,
+          '',
+          !serialOk,
+          serialOk ? 'A Hardware Dog on a USB serial port' : 'Web Serial needs a Chromium-based browser over https or localhost',
+        )}
+        {tile('DOGD', 'CONNECT DOGD', 'Through the local daemon: one Dog, or several as a pack.', onDogd, '', false, 'The local daemon on this machine (127.0.0.1:4782)')}
+        {tile('RECORDING', 'OPEN A RECORDING', 'Replay a saved session (.hdlog), read-only.', () => file.current?.click(), '', false, 'Replay a recorded session (.hdlog)')}
+        {tile('DEMO', 'DEMO MODE', 'Try it on a simulated fault. Always labeled SIMULATED.', onDemo, ' demo', false, 'A simulated Hardware Dog plays a fault scenario. Every screen says SIMULATED.')}
+      </div>
       <input
         ref={file}
         class="sr-only"

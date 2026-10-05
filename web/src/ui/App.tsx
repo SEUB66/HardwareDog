@@ -18,9 +18,10 @@ import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
 import { connectDogd, dogdStore, viaDogd } from '../core/dogd';
-import markSrc1x from '../../../assets/brand/web/hd-mark-1x.webp';
-import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
-import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
+import headSrc1x from '../../../assets/brand/web/hd-head-1x.webp';
+import headSrc2x from '../../../assets/brand/web/hd-head-2x.webp';
+import headSrc3x from '../../../assets/brand/web/hd-head-3x.webp';
+import { Icon, SCREEN_PURPOSE } from './components/Icon';
 import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Hint } from './components/Hint';
@@ -533,14 +534,16 @@ export function App({ archive }: { archive: SessionArchive }) {
         <span class="brand">
           <img
             class="mark"
-            src={markSrc1x}
-            srcset={`${markSrc1x} 1x, ${markSrc2x} 2x, ${markSrc3x} 3x`}
-            width={22}
-            height={22}
+            src={headSrc1x}
+            srcset={`${headSrc1x} 1x, ${headSrc2x} 2x, ${headSrc3x} 3x`}
+            width={44}
+            height={44}
             alt=""
             decoding="sync"
           />
-          HW <b>DOG</b>
+          <span class="wordmark">
+            HARDWARE <b>DOG</b>
+          </span>
           <span class="ver">v{BUILD}</span>
         </span>
         <span class="field">
@@ -577,7 +580,8 @@ export function App({ archive }: { archive: SessionArchive }) {
           {system.origin === 'SIMULATED' && <Tag status="WARN" label="SIMULATOR" />}
         </span>
         <button class="btn tour-btn" onClick={startTour} title="A guided tour of the interface: what each part is for">
-          TOUR
+          <Icon name="TOUR" size={15} />
+          <span>TOUR</span>
         </button>
         <span class="state">
           <span class={`light ${system.link}`} aria-hidden="true" />
@@ -591,8 +595,12 @@ export function App({ archive }: { archive: SessionArchive }) {
             const digit = DIGIT_SCREENS.indexOf(s);
             return (
               <li key={s} class={PRIMARY.includes(s) ? undefined : 'secondary'}>
-                <button aria-current={screen === s ? 'page' : undefined} onClick={() => navigate(s)}>
-                  {s}
+                <button aria-current={screen === s ? 'page' : undefined} onClick={() => navigate(s)} title={SCREEN_PURPOSE[s]}>
+                  <Icon name={s} />
+                  <span class="nav-label">
+                    <span class="nav-name">{s}</span>
+                    <span class="nav-purpose">{SCREEN_PURPOSE[s]}</span>
+                  </span>
                   <span class="key">{digit >= 0 ? digit + 1 : ''}</span>
                 </button>
               </li>
@@ -600,7 +608,10 @@ export function App({ archive }: { archive: SessionArchive }) {
           })}
           <li class="nav-more">
             <button aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
-              {moreOpen ? 'LESS' : 'MORE'}
+              <Icon name="MORE" />
+              <span class="nav-label">
+                <span class="nav-name">{moreOpen ? 'LESS' : 'MORE'}</span>
+              </span>
             </button>
           </li>
         </ul>

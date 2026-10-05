@@ -1,9 +1,9 @@
 import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { BUILD, DESCRIPTOR, DOG } from '../core/ascii';
+import bootLogo from '../../../assets/brand/web/hd-boot-320.webp';
+import { BUILD, DESCRIPTOR } from '../core/ascii';
 import type { BootStep, System } from '../core/system';
 import type { Transport } from '../core/transport';
-import { AsciiBanner } from './components/AsciiBanner';
 import { Bracket } from './components/Tag';
 import { beep } from './sound';
 
@@ -56,35 +56,13 @@ export function Boot({ system, transport, onReady }: BootProps) {
 
   return (
     <main class="boot" aria-live="polite" aria-busy={!done}>
-      <div class="logo">
-        <AsciiBanner />
+      <div class="boot-brand">
+        <img class="boot-logo" src={bootLogo} width={160} height={160} alt="Hardware Dog" decoding="sync" />
+        <div class="boot-word">
+          HARDWARE <b>DOG</b>
+        </div>
       </div>
-      <pre class="dog" aria-hidden="true">
-        {DOG.map((line, n) => {
-          if (n === 1) {
-            const at = line.indexOf('@');
-            return (
-              <Fragment key={n}>
-                {line.slice(0, at)}
-                <span class="eye">@</span>
-                {line.slice(at + 1)}
-                {'\n'}
-              </Fragment>
-            );
-          }
-          if (n === 2) {
-            const at = line.indexOf('O');
-            return (
-              <Fragment key={n}>
-                {line.slice(0, at)}
-                <span class="leash">{line.slice(at)}</span>
-                {'\n'}
-              </Fragment>
-            );
-          }
-          return line + '\n';
-        })}
-      </pre>
+      <div class="boot-card">
       <pre class="lines">
         {`HARDWARE DOG DIAGNOSTIC SYSTEM\nBUILD ${BUILD}\n\nINITIALIZING...\n\n`}
         {steps.map((s) => (
@@ -105,6 +83,7 @@ export function Boot({ system, transport, onReady }: BootProps) {
           {`\n\n${DESCRIPTOR} // local diagnostic interface`}
         </pre>
       )}
+      </div>
       {done && <p class="skip">press any key</p>}
     </main>
   );
