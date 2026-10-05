@@ -38,6 +38,12 @@ const ICON_BOX = { left: 55, top: 99, width: 1169, height: 1051 };
 const MARK_BOX = { left: 95, top: 130, width: 940, height: 870 };
 /** The USB plug and cable, removed from the MARK. Nothing is added. */
 const USB_REGION = '880,640 1254,540 1254,1254 560,1254 560,965 650,945 880,905';
+/**
+ * HEAD: the dog's head alone (no collar, no cable), for the browser tab
+ * and the header: the one shape that stays readable at 16 px.
+ */
+const HEAD_BOX = { left: 100, top: 165, width: 930, height: 620 };
+const COLLAR_REGION = '0,600 140,640 560,780 640,860 700,1254 0,1254';
 
 const outputs = [];
 
@@ -61,13 +67,13 @@ async function cleanAlpha(input) {
   return sharp(data, { raw: info }).png().toBuffer();
 }
 
-/** Pad a region to a square, transparent, so art never stretches. */
-async function square(buffer, box, removeUsb = false) {
+/** Pad a region to a square, transparent, so art never stretches. Regions listed are cut out first. */
+async function square(buffer, box, removed = []) {
   let img = sharp(buffer);
-  if (removeUsb) {
+  if (removed.length) {
     const meta = await sharp(buffer).metadata();
     const mask = Buffer.from(
-      `<svg width="${meta.width}" height="${meta.height}"><polygon points="${USB_REGION}" fill="#000"/></svg>`,
+      `<svg width="${meta.width}" height="${meta.height}">${removed.map((r) => `<polygon points="${r}" fill="#000"/>`).join('')}</svg>`,
     );
     img = sharp(await img.composite([{ input: mask, blend: 'dest-out' }]).png().toBuffer());
   }
@@ -119,12 +125,13 @@ function ico(pngs) {
 async function main() {
   const head = await cleanAlpha(HEAD);
   const iconArt = await square(head, ICON_BOX);
-  const markArt = await square(head, MARK_BOX, true);
+  const markArt = await square(head, MARK_BOX, [USB_REGION]);
+  const headArt = await square(head, HEAD_BOX, [USB_REGION, COLLAR_REGION]);
 
-  // FAVICON: head + collar only, on the instrument background.
+  // FAVICON: the head alone, transparent: just the dog in the tab.
   const favicons = [];
   for (const size of [16, 32, 48]) {
-    const data = await onBackground(markArt, size, 0.02).png({ compressionLevel: 9 }).toBuffer();
+    const data = await sharp(headArt).resize(size, size, { kernel: 'lanczos3' }).png({ compressionLevel: 9 }).toBuffer();
     favicons.push({ size, data });
     if (size !== 48) await save(join(PUBLIC, `favicon-${size}.png`), sharp(data));
   }
@@ -148,6 +155,16 @@ async function main() {
   ]) {
     await save(join(WEB, `hd-mark-${scale}x.webp`), sharp(markArt).resize(px, px, { kernel: 'lanczos3' }).webp({ lossless: true }));
   }
+  // APP HEADER: the head alone, 44 px (1x, 2x, 3x).
+  for (const [scale, px] of [
+    [1, 44],
+    [2, 88],
+    [3, 132],
+  ]) {
+    await save(join(WEB, `hd-head-${scale}x.webp`), sharp(headArt).resize(px, px, { kernel: 'lanczos3' }).webp({ lossless: true }));
+  }
+  // BOOT: the whole official art (head, collar, USB), 160 px at 2x.
+  await save(join(WEB, 'hd-boot-320.webp'), sharp(iconArt).resize(320, 320, { kernel: 'lanczos3' }).webp({ quality: 92, alphaQuality: 100 }));
 
   // README / DOCS: full art and horizontal lockup, 2x of their display width.
   await save(join(WEB, 'hd-official-full-art-840.webp'), sharp(join(SRC, 'hd-official-full-art.png')).resize(840).webp({ quality: 90, smartSubsample: true }));
