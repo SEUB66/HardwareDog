@@ -75,6 +75,29 @@ I want:
 The interface should feel like something I would expect to find connected to
 a diagnostic bench.
 
+### Revision: the glass surface (after LVL 90)
+
+Used on a bench, the pure terminal look turned out to be too much, and
+too hard to read for someone new. The structure above stays: the boot
+sequence, panels, visible state, mono numbers, keyboard first, no fake
+certainty. What changed is the **surface**, now in the brand's own
+language (the landing page):
+
+```text
+BACKGROUND   charcoal with soft cyan and pink light, a faint grid
+SURFACES     frosted glass: translucent, blurred, a light top edge
+SHAPES       rounded corners (14 px), no boxes drawn in ASCII
+TYPE         words in IBM Plex Sans Condensed, numbers in IBM Plex Mono
+LOGO         the official head in the header, the whole art at boot,
+             the head alone as the browser icon; never "HW DOG" in ASCII
+MENU         every section with an icon and what it is for
+START        nothing connected: three steps and four sources, each said
+```
+
+Colors still carry meaning (section 06): glass is the surface, never a
+signal. FIELD MODE stays opaque and high-contrast for sunlight.
+Code: `web/src/styles/glass.css`, on top of `app.css`.
+
 ---
 
 ## 02 — PRODUCT PERSONALITY

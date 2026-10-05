@@ -1,7 +1,7 @@
 import type { ReportFormat } from '../../core/commands';
 import { buildReport, reportToText } from '../../core/report';
 import type { System } from '../../core/system';
-import { AsciiBanner } from '../components/AsciiBanner';
+import { Brand } from '../components/Brand';
 import { useClock } from '../hooks';
 
 interface ReportProps {
@@ -44,7 +44,7 @@ export function Report({ system, onExport, onExportSession, onSaveCase, caseBloc
       </div>
       {caseBlocker && system.replayOf && <p class="note warn">{caseBlocker}</p>}
       <div class="report-doc">
-        <AsciiBanner scale={0.6} />
+        <Brand size={52} />
         <pre tabIndex={0} aria-label="Diagnostic report" style={{ margin: '14px 0 0', font: 'inherit', whiteSpace: 'pre-wrap' }}>
           {'hardware companion\n\n' + text}
         </pre>
