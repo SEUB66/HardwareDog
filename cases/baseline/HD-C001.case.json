@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C001",
   "title": "HEALTHY BASELINE (simulator HD-T000)",
+  "category": "baseline",
   "recording": {
     "file": "HD-C001.hdlog",
     "sha256": "71c1a72709ce93cf7fb2488f1806cfe5d9d5b02c48169e566800a1476ed8b459",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "Nothing is wrong. Any diagnosis here is a false positive.",
-    "hardware": "None: built-in simulator, scenario HD-T000, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T000, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "Nothing to report: the rail holds, USB stays enumerated, the network answers. Any diagnosis here would be a false positive."
   },
   "ruleset": 1,
   "expect": {

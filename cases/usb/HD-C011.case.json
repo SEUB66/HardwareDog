@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C011",
   "title": "USB NOT ENUMERATED (simulator HD-T010)",
+  "category": "usb",
   "recording": {
     "file": "HD-C011.hdlog",
     "sha256": "5d0410f3321606a56cd853705e376a490350ef92c47dabd2fdd0fbb9155d394c",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "The target is powered but never enumerates (charge-only cable or broken USB firmware).",
-    "hardware": "None: built-in simulator, scenario HD-T010, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T010, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "Plugged in and powered, the target enumerates as a USB device."
   },
   "ruleset": 2,
   "expect": {

@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C010",
   "title": "OVERCURRENT (simulator HD-T009)",
+  "category": "power",
   "recording": {
     "file": "HD-C010.hdlog",
     "sha256": "40f06aea075eda6186558687d86e8212e45b95f6d68c27aefba4578feb6ca07e",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "A motor stalls: the target pulls more than 1 A in spikes on a stiff supply.",
-    "hardware": "None: built-in simulator, scenario HD-T009, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T009, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "The target draws less than the overcurrent threshold (1 A by default) at all times."
   },
   "ruleset": 2,
   "expect": {

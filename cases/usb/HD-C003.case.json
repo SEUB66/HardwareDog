@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C003",
   "title": "INTERMITTENT USB DISCONNECT (simulator HD-T005)",
+  "category": "usb",
   "recording": {
     "file": "HD-C003.hdlog",
     "sha256": "bacb5d03611cc9c4f737c81c2da051e4a75e85dbe22311de87ed64f3e5ab5164",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "Worn connector: USB data drops while the supply stays solid.",
-    "hardware": "None: built-in simulator, scenario HD-T005, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T005, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "The USB device stays enumerated for the whole session."
   },
   "ruleset": 1,
   "expect": {

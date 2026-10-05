@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C018",
   "title": "ROUTER LOSES POWER (simulator HD-T016, pack of three Dogs)",
+  "category": "power",
   "recording": {
     "file": "HD-C018.hdlog",
     "sha256": "ec7001c41d309a4763a2f631cdec5b6b6f8e3db8a8c8596a4901293db2d923b3",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "A USB-powered travel router on a thin cable: load bursts brown it out, it reboots, the network drops and comes back.",
-    "hardware": "None: built-in simulator, scenario HD-T016, seed 1, 45 s, watched by a simulated pack of three Dogs (supply, target, network), each on its own clock. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T016, seed 1, 45 s, watched by a simulated pack of three Dogs (supply, target, network), each on its own clock. Origin SIMULATED.",
+    "expected": "The router stays powered through load bursts: no brownout, the network stays up."
   },
   "ruleset": 3,
   "expect": {

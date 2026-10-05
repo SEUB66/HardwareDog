@@ -660,7 +660,7 @@ UNIT         protocol decoder, trace, rules, commands, report, chart layout
 CONTRACT     every simulator frame validates against protocol/hdp_v1.json
 REPLAY       recording then replaying any scenario gives the same timeline,
              facts and diagnoses; tampered files are reported MODIFIED
-CASES        every cases/*.hdlog is the file its case names and replays to
+CASES        every cases/&lt;shelf&gt;/*.hdlog is the file its case names and replays to
              the facts and diagnosis the case states
 SIMULATION   reliability matrix: HD-T000 .. HD-T010 (DIAGNOSTICS.md)
 PHYSICAL     HD-P001 real undervoltage (resistive cable, loaded target)
@@ -734,7 +734,7 @@ LVL   NAME                                  STATUS
 80    network + I2C on hardware              PARTIAL   rules, simulator, firmware core PASS; ESP32-S3 + W5500 builds in CI; silicon pending
 85    PCB Rev A                              PLANNED
 90    probe architecture                     PARTIAL   software PASS (PACK.md); two boards on one bench pending
-95    community incident library             PLANNED
+95    community incident library             PARTIAL   library, anonymize, checks PASS (LIBRARY.md); first outside case pending
 100   Hardware Dog 1.0                       PLANNED
 MAX   incidents make Hardware Dog better     PLANNED
 ```
@@ -757,7 +757,7 @@ MAX   incidents make Hardware Dog better     PLANNED
 
 GATE: a file recorded today opens in two years without ambiguity.
 `web/test/fixtures/hdlog-v1.hdlog` (written by an earlier build) and
-`cases/*.hdlog` (v2) must parse and replay to the same diagnosis on every
+`cases/*/*.hdlog` (v2, v3) must parse and replay to the same diagnosis on every
 commit.
 
 Why there is no REPLAYED_* origin in the file: replaying does not change
@@ -1005,7 +1005,22 @@ Not a social network. A repository of anonymized, reproducible cases
 (`cases/power`, `usb`, `uart`, `network`, `i2c`). Submissions are a pull
 request: .hdlog, description, hardware, expected behavior; tests run
 automatically, then review. A real library of hardware failures is worth
-more than code.
+more than code. ([`LIBRARY.md`](LIBRARY.md))
+
+```text
+[ OK ] shelves: cases/baseline, power, usb, uart, network, i2c; a case
+       sits on the shelf of its first diagnosis; cases/INDEX.md generated
+[ OK ] anonymize: chip id, device id, USB serial, addresses, host names,
+       MACs, e-mails, secrets, long hex, user names in paths, endpoint;
+       consistent, so every case replays to the same facts, diagnosis and
+       evidence (anonymize.test.ts, all 18 cases)
+[ OK ] submission checks in CI: replay, shelf, name, words (description,
+       hardware, expected), privacy, size, index (hwdog test cases)
+[ OK ] REPORT -&gt; SHARE WITH THE LIBRARY: the anonymized copy and its
+       drafted case; hwdog anonymize from a terminal
+[ OK ] contribution: docs/LIBRARY.md, the incident pull request template
+[ -- ] the first case contributed from outside, recorded on real hardware
+```
 
 ### LVL 100 — HARDWARE DOG 1.0
 
@@ -1350,7 +1365,7 @@ LVL 80, on the same bench:
 ```
 
 When 1 to 7 pass, LVL 60 is done. The recording of step 8 becomes the first
-**PHYSICAL** case (the next free `cases/HD-Cxxx`): send the `.hdlog`. The
+**PHYSICAL** case (the next free `HD-Cxxx`, on its shelf: [`LIBRARY.md`](LIBRARY.md)): send the `.hdlog`. The
 other faults to record are in [`FAULT_LAB.md`](FAULT_LAB.md).
 
 ---

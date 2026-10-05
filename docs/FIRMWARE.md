@@ -236,7 +236,7 @@ LVL 80, on the same bench:
 ```
 
 When 1 to 7 pass, LVL 60 is done. The recording of step 8 becomes the first
-**PHYSICAL** case (the next free `cases/HD-Cxxx`): send the `.hdlog`. The
+**PHYSICAL** case (the next free `HD-Cxxx`, on its shelf: [`LIBRARY.md`](LIBRARY.md)): send the `.hdlog`. The
 other faults to record are in [`FAULT_LAB.md`](FAULT_LAB.md).
 
 ---

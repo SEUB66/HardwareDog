@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C017",
   "title": "ROUTER LOSES POWER (simulator HD-T016)",
+  "category": "power",
   "recording": {
     "file": "HD-C017.hdlog",
     "sha256": "75a2ae64a065c15269914c58ecb368b59a25a5dedb935fd7650ecc383c3af059",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "A USB-powered travel router on a thin cable: load bursts brown it out, it reboots, the network drops and comes back.",
-    "hardware": "None: built-in simulator, scenario HD-T016, seed 1, 45 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T016, seed 1, 45 s. Origin SIMULATED.",
+    "expected": "The router stays powered through load bursts: no brownout, the network stays up."
   },
   "ruleset": 3,
   "expect": {

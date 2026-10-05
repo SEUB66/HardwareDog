@@ -2,6 +2,7 @@
   "case": 1,
   "id": "HD-C007",
   "title": "TARGET RESET LOOP (simulator HD-T006)",
+  "category": "uart",
   "recording": {
     "file": "HD-C007.hdlog",
     "sha256": "dd3a4e1bc5e81c9925b9e957a82fb11b0950b29e63fe6cd2723468d32ca0a5be",
@@ -10,7 +11,8 @@
   },
   "context": {
     "description": "Firmware hangs and the task watchdog reboots the target every few seconds.",
-    "hardware": "None: built-in simulator, scenario HD-T006, seed 1, 30 s. Origin SIMULATED."
+    "hardware": "None: built-in simulator, scenario HD-T006, seed 1, 30 s. Origin SIMULATED.",
+    "expected": "The target boots once and keeps running: one POWERON reset, no watchdog resets."
   },
   "ruleset": 2,
   "expect": {

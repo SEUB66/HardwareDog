@@ -3,8 +3,8 @@
  *
  * A case is a recorded incident turned into a regression test:
  *
- *   cases/HD-C002.hdlog       the recording, untouched
- *   cases/HD-C002.case.json   what replaying it must produce
+ *   cases/power/HD-C002.hdlog       the recording, untouched
+ *   cases/power/HD-C002.case.json   what replaying it must produce
  *
  * The case names the file by its SHA-256 and states the facts and the
  * diagnosis the replay must reach. Every interesting real fault can
@@ -17,6 +17,7 @@ import { DIAGNOSIS_IDS, RULESET_VERSION } from './diagnostics';
 import type { Origin, Recording } from './session';
 import { ReplayTransport, parseHdlog } from './session';
 import { System, memoryStore } from './system';
+import type { Category } from './library';
 
 export const CASE_VERSION = 1;
 
@@ -36,6 +37,8 @@ export interface CaseFile {
   case: typeof CASE_VERSION;
   id: string;
   title: string;
+  /** Library shelf (core/library.ts): the directory the case sits in. */
+  category?: Category;
   recording: { file: string; sha256: string; recording: string; origin: Origin };
   /** What happened, on what hardware, in words. Optional; never affects the check. */
   context?: CaseContext;
@@ -53,6 +56,8 @@ export interface CaseContext {
   description: string;
   /** Board, target, supply, cable, network: what a reader needs to reproduce it. */
   hardware: string;
+  /** What the hardware should have done. */
+  expected?: string;
   notes?: string;
 }
 
@@ -81,7 +86,11 @@ export async function replayRecording(recording: Recording): Promise<System> {
 }
 
 /** The case a replayed recording supports, as the engine sees it now. */
-export function caseFrom(sys: System, recording: Recording, fields: { id: string; title: string; file: string; context?: CaseContext }): CaseFile {
+export function caseFrom(
+  sys: System,
+  recording: Recording,
+  fields: { id: string; title: string; file: string; context?: CaseContext; category?: Category },
+): CaseFile {
   const integrity = recording.integrity;
   if (!integrity || (integrity.status !== 'VERIFIED' && integrity.status !== 'RECOVERED')) {
     throw new Error(`a case needs a finalized, intact recording (this one is ${integrity?.status ?? 'not from a file'})`);
@@ -90,6 +99,7 @@ export function caseFrom(sys: System, recording: Recording, fields: { id: string
     case: CASE_VERSION,
     id: fields.id,
     title: fields.title,
+    ...(fields.category ? { category: fields.category } : {}),
     recording: { file: fields.file, sha256: integrity.fileSha256, recording: recording.header.recording, origin: recording.header.origin },
     ...(fields.context ? { context: fields.context } : {}),
     ruleset: RULESET_VERSION,
@@ -109,7 +119,9 @@ export function parseCase(text: string): CaseFile {
     for (const k of ['description', 'hardware'] as const) {
       if (typeof x[k] !== 'string' || (x[k] as string).length > CONTEXT_MAX) throw new Error(`case: context.${k} must be text (${CONTEXT_MAX} characters at most)`);
     }
-    if (x['notes'] !== undefined && (typeof x['notes'] !== 'string' || x['notes'].length > CONTEXT_MAX)) throw new Error('case: context.notes must be text');
+    for (const k of ['notes', 'expected'] as const) {
+      if (x[k] !== undefined && (typeof x[k] !== 'string' || (x[k] as string).length > CONTEXT_MAX)) throw new Error(`case: context.${k} must be text`);
+    }
   }
   for (const d of c.expect?.diagnoses ?? []) {
     if (!(DIAGNOSIS_IDS as readonly string[]).includes(d.id)) throw new Error(`case: unknown diagnosis ${d.id}`);
