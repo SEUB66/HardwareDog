@@ -144,7 +144,8 @@ export function App({ archive }: { archive: SessionArchive }) {
   });
   const [archived, setArchived] = useState<SessionMeta[]>([]);
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
-  const [booting, setBooting] = useState(() => session.transport !== null);
+  // The signature start plays when the interface opens, connected or not.
+  const [booting, setBooting] = useState(true);
   const [screen, setScreen] = useState<Screen>('STATUS');
   const [traceOnly, setTraceOnly] = useState<Source[] | null>(null);
   const [palette, setPaletteState] = useState(false);
@@ -424,7 +425,7 @@ export function App({ archive }: { archive: SessionArchive }) {
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (booting && session.transport) {
+  if (booting) {
     return <Boot key={session.key} system={system} transport={session.transport} onReady={() => setBooting(false)} />;
   }
 
