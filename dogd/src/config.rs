@@ -43,12 +43,22 @@ impl Origin {
     }
 }
 
+/// One device link: where its bytes come from, and what they are worth.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LinkConfig {
+    pub source: Source,
+    pub origin: Origin,
+}
+
+/// A pack is a bench, not a fleet.
+pub const MAX_SOURCES: usize = 8;
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub listen: SocketAddr,
     pub lan: bool,
-    pub source: Source,
-    pub origin: Origin,
+    /// The device links, in order: D1, D2... Empty: no device yet.
+    pub links: Vec<LinkConfig>,
     pub data_dir: PathBuf,
     /// Browser origins allowed to talk to dogd, besides localhost pages.
     pub allow_origins: Vec<String>,
@@ -86,7 +96,10 @@ USAGE
 OPTIONS (serve)
   --source serial:PATH        a device on a serial port (/dev/ttyACM0, COM4)
   --source tcp:HOST:PORT      a device on any HDP byte stream over TCP
-  --source-origin simulated   the TCP source is a simulator (default: physical)
+                              repeat --source for a pack: each is a Dog,
+                              D1, D2... in this order (at most 8)
+  --source-origin simulated   the TCP source just before it is a simulator
+                              (default: physical)
   --listen ADDR:PORT          default 127.0.0.1:4782, loopback only
   --listen-lan                listen on the network (0.0.0.0): explicit only
   --allow-origin URL          a browser origin allowed to connect (repeatable)
@@ -98,8 +111,9 @@ LOCAL FIRST. NO ACCOUNT. NO CLOUD. NO TELEMETRY.";
 pub fn parse_serve(args: &[String]) -> Result<Config, String> {
     let mut listen: Option<SocketAddr> = None;
     let mut lan = false;
-    let mut source = Source::None;
-    let mut origin: Option<Origin> = None;
+    let mut sources: Vec<(Source, Option<Origin>)> = Vec::new();
+    // Given before any --source: it is for the first one.
+    let mut early_origin: Option<Origin> = None;
     let mut data_dir = default_data_dir();
     let mut allow_origins = Vec::new();
     let mut it = args.iter();
@@ -112,22 +126,32 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
         match a.as_str() {
             "--source" => {
                 let v = value("--source")?;
-                source = if let Some(p) = v.strip_prefix("serial:") {
+                let source = if let Some(p) = v.strip_prefix("serial:") {
                     Source::Serial(p.to_string())
                 } else if let Some(t) = v.strip_prefix("tcp:") {
                     Source::Tcp(t.to_string())
                 } else {
                     return Err(format!("unknown source {v} (serial:PATH or tcp:HOST:PORT)"));
                 };
+                if sources.iter().any(|(s, _)| *s == source) {
+                    return Err(format!("{v} is given twice: one link per device"));
+                }
+                sources.push((source, None));
             }
             "--source-origin" => {
-                origin = Some(
-                    match value("--source-origin")?.to_ascii_lowercase().as_str() {
-                        "physical" => Origin::Physical,
-                        "simulated" => Origin::Simulated,
-                        o => return Err(format!("unknown origin {o} (physical or simulated)")),
-                    },
-                );
+                let o = match value("--source-origin")?.to_ascii_lowercase().as_str() {
+                    "physical" => Origin::Physical,
+                    "simulated" => Origin::Simulated,
+                    o => return Err(format!("unknown origin {o} (physical or simulated)")),
+                };
+                let slot = match sources.last_mut() {
+                    Some((_, slot)) => slot,
+                    None => &mut early_origin,
+                };
+                if slot.is_some() {
+                    return Err("--source-origin given twice for one source".into());
+                }
+                *slot = Some(o);
             }
             "--listen" => {
                 listen = Some(
@@ -151,17 +175,33 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
     if !lan && !listen.ip().is_loopback() {
         return Err(format!("refusing to listen on {listen}: dogd is local only. Add --listen-lan to decide otherwise."));
     }
-    if matches!(source, Source::Serial(_)) && origin == Some(Origin::Simulated) {
-        return Err(
-            "a serial port is physical hardware: --source-origin simulated only applies to tcp"
-                .into(),
-        );
+    if let Some(o) = early_origin {
+        match sources.first_mut() {
+            Some((_, slot)) if slot.is_none() => *slot = Some(o),
+            Some(_) => return Err("--source-origin given twice for one source".into()),
+            None => return Err("--source-origin without a --source".into()),
+        }
+    }
+    if sources.len() > MAX_SOURCES {
+        return Err(format!("at most {MAX_SOURCES} sources: a pack is a bench"));
+    }
+    let mut links = Vec::new();
+    for (source, origin) in sources {
+        if matches!(source, Source::Serial(_)) && origin == Some(Origin::Simulated) {
+            return Err(
+                "a serial port is physical hardware: --source-origin simulated only applies to tcp"
+                    .into(),
+            );
+        }
+        links.push(LinkConfig {
+            source,
+            origin: origin.unwrap_or(Origin::Physical),
+        });
     }
     Ok(Config {
         listen,
         lan,
-        source,
-        origin: origin.unwrap_or(Origin::Physical),
+        links,
         data_dir,
         allow_origins,
     })
@@ -180,7 +220,7 @@ mod tests {
         let c = parse_serve(&[]).unwrap();
         assert_eq!(c.listen.to_string(), "127.0.0.1:4782");
         assert!(!c.lan);
-        assert_eq!(c.source, Source::None);
+        assert!(c.links.is_empty());
     }
 
     #[test]
@@ -204,12 +244,51 @@ mod tests {
             "--source tcp:127.0.0.1:5000 --source-origin simulated",
         ))
         .unwrap();
-        assert_eq!(c.source, Source::Tcp("127.0.0.1:5000".into()));
-        assert_eq!(c.origin, Origin::Simulated);
+        assert_eq!(
+            c.links,
+            [LinkConfig {
+                source: Source::Tcp("127.0.0.1:5000".into()),
+                origin: Origin::Simulated
+            }]
+        );
+        // The order dogd 0.1 accepted: the origin first.
+        let c = parse_serve(&args("--source-origin simulated --source tcp:h:1")).unwrap();
+        assert_eq!(c.links[0].origin, Origin::Simulated);
         assert!(parse_serve(&args(
             "--source serial:/dev/ttyACM0 --source-origin simulated"
         ))
         .is_err());
         assert!(parse_serve(&args("--source usb:x")).is_err());
+    }
+
+    #[test]
+    fn several_sources_are_a_pack() {
+        let c = parse_serve(&args(
+            "--source tcp:h:1 --source-origin simulated --source serial:/dev/ttyACM0 --source tcp:h:2",
+        ))
+        .unwrap();
+        let got: Vec<(String, Origin)> = c
+            .links
+            .iter()
+            .map(|l| (l.source.describe(), l.origin))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                ("tcp:h:1".to_string(), Origin::Simulated),
+                ("serial:/dev/ttyACM0".to_string(), Origin::Physical),
+                ("tcp:h:2".to_string(), Origin::Physical),
+            ]
+        );
+        assert!(parse_serve(&args("--source tcp:h:1 --source tcp:h:1"))
+            .unwrap_err()
+            .contains("twice"));
+        assert!(parse_serve(&args(
+            "--source tcp:h:1 --source-origin simulated --source-origin physical"
+        ))
+        .is_err());
+        assert!(parse_serve(&args("--source-origin simulated")).is_err());
+        let nine: String = (1..=9).map(|n| format!("--source tcp:h:{n} ")).collect();
+        assert!(parse_serve(&args(&nine)).unwrap_err().contains("at most 8"));
     }
 }

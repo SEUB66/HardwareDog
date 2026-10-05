@@ -2,7 +2,8 @@
 //! endpoints, they go through the HDP socket like on every other transport.
 //!
 //!   GET  /v1/health                  alive, versions
-//!   GET  /v1/link                    the device link: state, source, origin, device
+//!   GET  /v1/link                    the first device link (D1): state, source, origin, device
+//!   GET  /v1/links                   every device link, D1, D2...: a pack when several
 //!   GET  /v1/devices                 attached devices and who they are, known identities
 //!   GET  /v1/devices/events?since=N  plug / unplug / identified, in order
 //!   PUT  /v1/devices/{id}/alias      a label for people (text body, empty clears)
@@ -11,7 +12,8 @@
 //!   GET  /v1/sessions/{id}           one session
 //!   GET  /v1/sessions/{id}/hdlog     the file, byte for byte
 //!   PUT  /v1/sessions/{id}/hdlog     store a file the interface wrote
-//!   WS   /v1/hdp                     raw HDP: device bytes out, command lines in
+//!   WS   /v1/hdp                     raw HDP of D1: device bytes out, command lines in
+//!   WS   /v1/hdp/{dog}               raw HDP of one link of a pack (D2...)
 //!
 //! Trust boundary: this machine. Requests must name a loopback host (no DNS
 //! rebinding), and a browser page must come from an allowed origin: a web
@@ -47,7 +49,8 @@ pub const CLOSE_TOO_SLOW: u16 = 4008;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub link: Arc<Link>,
+    /// D1, D2...: never empty (with no source, D1 is a link with no device).
+    pub links: Arc<Vec<Arc<Link>>>,
     pub store: Arc<Store>,
     pub discovery: Arc<Discovery>,
     pub cfg: Arc<Config>,
@@ -57,6 +60,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/v1/health", get(health))
         .route("/v1/link", get(link))
+        .route("/v1/links", get(links))
         .route("/v1/devices", get(devices))
         .route("/v1/devices/events", get(device_events))
         .route("/v1/devices/{id}/alias", axum::routing::put(put_alias))
@@ -70,6 +74,7 @@ pub fn router(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(MAX_BYTES)),
         )
         .route("/v1/hdp", get(hdp))
+        .route("/v1/hdp/{dog}", get(hdp_of))
         .layer(middleware::from_fn_with_state(state.clone(), guard))
         .with_state(state)
 }
@@ -174,7 +179,12 @@ async fn health() -> Json<serde_json::Value> {
 }
 
 async fn link(State(s): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::to_value(s.link.status()).unwrap())
+    Json(serde_json::to_value(s.links[0].status()).unwrap())
+}
+
+async fn links(State(s): State<AppState>) -> Json<serde_json::Value> {
+    let all: Vec<_> = s.links.iter().map(|l| l.status()).collect();
+    Json(json!({ "links": all }))
 }
 
 async fn devices(State(s): State<AppState>) -> Json<serde_json::Value> {
@@ -182,7 +192,8 @@ async fn devices(State(s): State<AppState>) -> Json<serde_json::Value> {
         .await
         .unwrap_or_default();
     Json(json!({
-        "link": s.link.status(),
+        "link": s.links[0].status(),
+        "links": s.links.iter().map(|l| l.status()).collect::<Vec<_>>(),
         "ports": ports,
         "attached": s.discovery.present(),
         "known": s.store.hw_devices(),
@@ -281,8 +292,21 @@ async fn put_hdlog(State(s): State<AppState>, Path(id): Path<String>, body: Byte
 // ------------------------------------------------------------------ HDP socket
 
 async fn hdp(ws: WebSocketUpgrade, State(s): State<AppState>) -> Response {
+    let link = s.links[0].clone();
     ws.max_message_size(MAX_LINE + 1024)
-        .on_upgrade(move |socket| client(socket, s))
+        .on_upgrade(move |socket| client(socket, link))
+}
+
+async fn hdp_of(
+    ws: WebSocketUpgrade,
+    State(s): State<AppState>,
+    Path(dog): Path<String>,
+) -> Response {
+    let Some(link) = s.links.iter().find(|l| l.status().dog == dog).cloned() else {
+        return (StatusCode::NOT_FOUND, format!("no link {dog}")).into_response();
+    };
+    ws.max_message_size(MAX_LINE + 1024)
+        .on_upgrade(move |socket| client(socket, link))
 }
 
 fn close(code: u16, reason: String) -> Message {
@@ -296,9 +320,9 @@ fn close(code: u16, reason: String) -> Message {
 
 /// One interface client: device bytes out as binary messages, exactly as
 /// received; command lines in, written to the device exactly as sent.
-async fn client(socket: WebSocket, s: AppState) {
+async fn client(socket: WebSocket, link: Arc<Link>) {
     let (mut tx, mut rx) = socket.split();
-    let status = s.link.status();
+    let status = link.status();
     if status.state != LinkState::Online {
         let why = status
             .reason
@@ -309,8 +333,8 @@ async fn client(socket: WebSocket, s: AppState) {
         return;
     }
     let epoch = status.epoch;
-    let mut bytes = s.link.subscribe();
-    let mut state = s.link.watch();
+    let mut bytes = link.subscribe();
+    let mut state = link.watch();
     loop {
         tokio::select! {
             chunk = bytes.recv() => match chunk {
@@ -341,8 +365,8 @@ async fn client(socket: WebSocket, s: AppState) {
                 }
             },
             msg = rx.next() => match msg {
-                Some(Ok(Message::Text(t))) => s.link.send(t.as_bytes().to_vec()).await,
-                Some(Ok(Message::Binary(b))) => s.link.send(b.to_vec()).await,
+                Some(Ok(Message::Text(t))) => link.send(t.as_bytes().to_vec()).await,
+                Some(Ok(Message::Binary(b))) => link.send(b.to_vec()).await,
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
                 Some(Ok(_)) => {}
             },
@@ -397,9 +421,23 @@ mod http_tests {
         a.extend(["--data".into(), dir.to_string_lossy().into()]);
         let cfg = parse_serve(&a).unwrap();
         let store = Arc::new(Store::open(&cfg.data_dir).unwrap());
-        let link = Link::new(&Source::None, cfg.origin, |_, _| {});
+        let links: Vec<Arc<Link>> = if cfg.links.is_empty() {
+            vec![Link::new(
+                "D1",
+                &Source::None,
+                crate::config::Origin::Physical,
+                |_, _| {},
+            )]
+        } else {
+            // Links that never connect: a test has no device.
+            cfg.links
+                .iter()
+                .enumerate()
+                .map(|(n, l)| Link::new(&format!("D{}", n + 1), &l.source, l.origin, |_, _| {}))
+                .collect()
+        };
         router(AppState {
-            link,
+            links: Arc::new(links),
             store,
             discovery: Arc::new(crate::discovery::Discovery::default()),
             cfg: Arc::new(cfg),
@@ -522,6 +560,75 @@ mod http_tests {
         .await;
         assert_eq!(s, StatusCode::NO_CONTENT);
         assert!(h.contains(&("access-control-allow-private-network".into(), "true".into())));
+    }
+
+    #[tokio::test]
+    async fn every_source_is_a_link_of_its_own() {
+        let res = app(&[
+            "--source",
+            "tcp:127.0.0.1:9",
+            "--source-origin",
+            "simulated",
+            "--source",
+            "tcp:127.0.0.1:10",
+            "--source-origin",
+            "simulated",
+        ])
+        .oneshot(
+            HttpRequest::get("/v1/links")
+                .header("host", "127.0.0.1:4782")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        let body = axum::body::to_bytes(res.into_body(), 4096).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let links = v["links"].as_array().unwrap();
+        let rows: Vec<_> = links
+            .iter()
+            .map(|l| (l["dog"].clone(), l["source"].clone(), l["origin"].clone()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                (json!("D1"), json!("tcp:127.0.0.1:9"), json!("SIMULATED")),
+                (json!("D2"), json!("tcp:127.0.0.1:10"), json!("SIMULATED")),
+            ]
+        );
+    }
+
+    /// A WebSocket upgrade over a real socket: the status line of the answer.
+    async fn upgrade(app: Router, path: &str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let req = format!(
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+            addr.port()
+        );
+        s.write_all(req.as_bytes()).await.unwrap();
+        let mut buf = vec![0u8; 512];
+        let n = s.read(&mut buf).await.unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).to_string();
+        text.lines().next().unwrap_or("").to_string()
+    }
+
+    #[tokio::test]
+    async fn each_dog_has_its_own_stream() {
+        let two = || {
+            app(&[
+                "--source",
+                "tcp:127.0.0.1:9",
+                "--source",
+                "tcp:127.0.0.1:10",
+            ])
+        };
+        assert!(upgrade(two(), "/v1/hdp/D2").await.contains("101"));
+        assert!(upgrade(two(), "/v1/hdp").await.contains("101")); // D1, as before packs
+        assert!(upgrade(two(), "/v1/hdp/D3").await.contains("404"));
     }
 
     #[tokio::test]

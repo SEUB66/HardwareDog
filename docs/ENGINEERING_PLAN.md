@@ -586,7 +586,7 @@ LVL   NAME                                  STATUS
 75    professional reports                   DONE      TXT, JSON, HTML, PDF from the same lines
 80    network + I2C on hardware              PARTIAL   rules, simulator, firmware core PASS; ESP32-S3 + W5500 builds in CI; silicon pending
 85    PCB Rev A                              PLANNED
-90    probe architecture                     PARTIAL   pack core + hdlog v3 PASS (PACK.md); dogd sources, UI next
+90    probe architecture                     PARTIAL   pack core, hdlog v3, dogd sources PASS (PACK.md); UI next
 95    community incident library             PLANNED
 100   Hardware Dog 1.0                       PLANNED
 MAX   incidents make Hardware Dog better     PLANNED
@@ -843,7 +843,9 @@ signal, and rules that never know which Dog spoke.
        diagnosis as one device on every scenario (pack-system.test.ts)
 [ OK ] hdlog v3: a pack recorded and replayed to the same timeline,
        clocks and diagnosis; case HD-C018; dogd stores it        LVL 90.2
-[ -- ] dogd with several sources; two firmwares through it   LVL 90.3
+[ OK ] dogd with several sources, one stream per Dog; the firmware
+       core says only what its caps declare; two firmware processes
+       through one dogd give the diagnosis of one board        LVL 90.3
 [ -- ] the interface shows the pack                          LVL 90.4
 [ -- ] GATE (hardware): two boards on one bench, a PHYSICAL case
 ```

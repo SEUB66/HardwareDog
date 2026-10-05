@@ -174,6 +174,14 @@ hello (a board knows its own; a simulation is given one or sends none).
 With `--fast` and commands piped on stdin, every command is read at t=0
 before device time runs: a scripted run never races its script.
 
+`--caps power,uart,i2c` makes the process one Dog of a pack: it declares
+and observes only those (the core sends no frame for anything else, and
+rejects commands for it); `--device HD-P0WER` names it. Two processes
+through one dogd are a pack on a PC (web/test/firmware.test.ts, LVL 90.3).
+Each plays the same scripted incident from its own start: that proves the
+links, the clocks and the merge, not shared physics, which takes two
+boards on one bench.
+
 ---
 
 ## BRING-UP ON THE BOARD (the LVL 60 gate)
