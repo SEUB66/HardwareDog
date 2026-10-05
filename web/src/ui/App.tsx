@@ -8,6 +8,8 @@ import { buildReport, reportToText } from '../core/report';
 import { reportToHtml, reportToPdf } from '../core/reportFormats';
 import type { ReportFormat } from '../core/commands';
 import { SimulatedDevice } from '../core/simulator';
+import { SimulatedPack } from '../core/simpack';
+import { PackBuilder } from '../core/packbuilder';
 import { DEFAULT_SCENARIO, isScenarioId, type ScenarioId } from '../core/scenarios';
 import { HDLOG_LIMITS, ReplayTransport, SessionRecorder, newHeader, parseHdlog, toHdlog, type Recording, type SessionHeader } from '../core/session';
 import { System, browserStore } from '../core/system';
@@ -85,6 +87,11 @@ function viaLabel(system: System): string {
 }
 
 const simulator = (scenario: ScenarioId) => new SimulatedDevice({ seed: Date.now() & 0xffff, scenario });
+/** Three simulated Dogs (supply, target, network) around one simulated incident. */
+const simulatedPack = (scenario: ScenarioId) => new SimulatedPack({ seed: Date.now() & 0xffff, scenario });
+
+/** The scenario a demo plays (one device or a pack); null for real hardware. */
+const demoOf = (t: Transport | null) => (t instanceof SimulatedDevice || t instanceof SimulatedPack ? t.scenario : null);
 
 /** Nothing connected: a system with no source, nothing recorded. */
 const idleSession = (): Session => ({ system: new System(browserStore()), transport: null, key: ++sessionCounter, writer: null });
@@ -103,7 +110,7 @@ function newSession(transport: Transport | null, archive: SessionArchive): Sessi
       source: transport.kind as SessionHeader['source'],
       origin: transport.origin,
       endpoint: transport.label,
-      scenario: transport instanceof SimulatedDevice ? transport.scenario.id : null,
+      scenario: demoOf(transport)?.id ?? null,
       app: BUILD,
       thresholds: thresholdsOf(system.settings),
       // A pack is recorded as hdlog v3: its Dogs in the header, one on every line.
@@ -276,6 +283,30 @@ export function App({ archive }: { archive: SessionArchive }) {
       transport = simulator(scenario);
     }
     await start(transport);
+  };
+
+  /** A pack of boards on USB, one port per click: D1, D2... in the order picked. */
+  const [building, setBuilding] = useState<PackBuilder<WebSerialTransport> | null>(null);
+  const [buildMessage, setBuildMessage] = useState<string | null>(null);
+  const addSerialDog = async () => {
+    const b = building ?? new PackBuilder<WebSerialTransport>((x, y) => x.samePort(y));
+    try {
+      setBuildMessage(b.add(await WebSerialTransport.pick()));
+    } catch (e) {
+      setBuildMessage(`web serial: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    setBuilding(b);
+  };
+  const startSerialPack = async () => {
+    if (!building) return;
+    try {
+      const pack = building.build();
+      setBuilding(null);
+      setBuildMessage(null);
+      await start(pack);
+    } catch (e) {
+      setBuildMessage(e instanceof Error ? e.message : String(e));
+    }
   };
 
   /** The tour starts from STATUS, where every part it shows is on screen. */
@@ -463,8 +494,20 @@ export function App({ archive }: { archive: SessionArchive }) {
         return (
           <Setup
             system={system}
-            scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario.id : null}
+            scenario={demoOf(session.transport)?.id ?? null}
+            demoPack={session.transport instanceof SimulatedPack}
             onSwitch={(k, id) => void switchTransport(k, id)}
+            onDemoPack={(id) => void start(simulatedPack(id ?? demoOf(session.transport)?.id ?? DEFAULT_SCENARIO))}
+            packBuilder={{
+              picked: building?.links.map((l) => l.label) ?? [],
+              message: buildMessage,
+              onAdd: () => void addSerialDog(),
+              onStart: () => void startSerialPack(),
+              onCancel: () => {
+                setBuilding(null);
+                setBuildMessage(null);
+              },
+            }}
             onDisconnect={session.transport ? () => void start(null) : null}
             recording={session.writer ? { entries: session.writer.meta.entries, bytes: session.writer.meta.bytes } : null}
             sessions={{
@@ -504,7 +547,7 @@ export function App({ archive }: { archive: SessionArchive }) {
           <Hint text={explain('DEVICE', 'HEADER')} class="k">
             DEVICE
           </Hint>
-          <span class="v">{system.device.id}</span>
+          <span class="v">{system.pack ? `${system.dogs.length} DOGS` : system.device.id}</span>
         </span>
         <span class="field opt via">
           <Hint text={explain('VIA', 'HEADER')} class="k">
@@ -583,9 +626,9 @@ export function App({ archive }: { archive: SessionArchive }) {
         )}
         <SimBanner
           system={system}
-          scenario={session.transport instanceof SimulatedDevice ? session.transport.scenario : null}
+          scenario={demoOf(session.transport)}
           onConnect={() => navigate('SETUP')}
-          onStop={session.transport instanceof SimulatedDevice ? () => void start(null) : null}
+          onStop={demoOf(session.transport) ? () => void start(null) : null}
         />
         {body}
       </main>

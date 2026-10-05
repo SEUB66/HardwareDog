@@ -96,7 +96,7 @@ export function Boot({ system, transport, onReady }: BootProps) {
         ))}
         {done &&
           (transport
-            ? `\nSOURCE       ${system.transportKind ?? 'NONE'}\nDEVICE       ${system.device.id}\nMODE         LOCAL\nSESSION      READY\n`
+            ? `\nSOURCE       ${system.transportKind ?? 'NONE'}\nDEVICE       ${system.pack ? `${system.dogs.length} DOGS (${system.dogs.map((d) => d.device?.id ?? d.id).join(' ')})` : system.device.id}\nMODE         LOCAL\nSESSION      READY\n`
             : `\nSOURCE       NONE\nDEVICE       --\nMODE         LOCAL\nSESSION      WAITING FOR A SOURCE\n`)}
       </pre>
       {done && (
