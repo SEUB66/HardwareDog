@@ -275,10 +275,18 @@ export class System {
   /** The operator's own settings, as stored. A replay may run on others. */
   private own: Settings;
 
+  /**
+   * Host time, read once per arrival: while a frame (or a loss, an error, a
+   * command sent) is handled, every reading is the time it was recorded at.
+   * A replay reads the recording's times, so live and replay see the same.
+   */
+  readonly now = (): number => this.arrival ?? this.clock();
+  private arrival: number | null = null;
+
   constructor(
     private readonly store: SettingsStore = memoryStore(),
     /** Host clock. A replay passes the recording's clock. */
-    readonly now: () => number = Date.now,
+    private readonly clock: () => number = Date.now,
   ) {
     this.startedAt = this.now();
     this.own = { ...DEFAULT_SETTINGS, ...(store.load() ?? {}) };
@@ -381,21 +389,24 @@ export class System {
     this.changed();
     try {
       await transport.open({
-        frame: (f, dog) => {
-          this.recorder?.add(dog === undefined ? { at: this.now(), frame: f } : { at: this.now(), dog, frame: f });
-          if (this.pack && dog !== undefined) this.onPackFrame(dog, f);
-          else this.onFrame(f);
-        },
-        error: (message, raw, dog) => {
-          const on = dog === undefined ? {} : { dog };
-          this.recorder?.add(raw === undefined ? { at: this.now(), ...on, reject: message } : { at: this.now(), ...on, reject: message, raw });
-          this.onFrameError(dog === undefined ? message : `${dog}: ${message}`, raw);
-        },
-        lost: (reason, dog) => {
-          this.recorder?.add(dog === undefined ? { at: this.now(), lost: reason } : { at: this.now(), dog, lost: reason });
-          if (this.pack && dog !== undefined) this.onDogLost(dog, reason);
-          else this.onLost(reason);
-        },
+        frame: (f, dog) =>
+          this.arriving(() => {
+            this.recorder?.add(dog === undefined ? { at: this.now(), frame: f } : { at: this.now(), dog, frame: f });
+            if (this.pack && dog !== undefined) this.onPackFrame(dog, f);
+            else this.onFrame(f);
+          }),
+        error: (message, raw, dog) =>
+          this.arriving(() => {
+            const on = dog === undefined ? {} : { dog };
+            this.recorder?.add(raw === undefined ? { at: this.now(), ...on, reject: message } : { at: this.now(), ...on, reject: message, raw });
+            this.onFrameError(dog === undefined ? message : `${dog}: ${message}`, raw);
+          }),
+        lost: (reason, dog) =>
+          this.arriving(() => {
+            this.recorder?.add(dog === undefined ? { at: this.now(), lost: reason } : { at: this.now(), dog, lost: reason });
+            if (this.pack && dog !== undefined) this.onDogLost(dog, reason);
+            else this.onLost(reason);
+          }),
         sent: (cmd, dog) => {
           if (this.pack && dog !== undefined && cmd.cmd === 'time') this.pack.sent(dog, cmd.id, this.now());
         },
@@ -437,6 +448,17 @@ export class System {
   // ------------------------------------------------------------ frames
 
   /** Host wall-clock time for a device timestamp. */
+  /** Handle one arrival on one reading of the clock (see now). */
+  private arriving(handle: () => void): void {
+    if (this.arrival !== null) return handle();
+    this.arrival = this.clock();
+    try {
+      handle();
+    } finally {
+      this.arrival = null;
+    }
+  }
+
   private hostTime(deviceT: number): number {
     return this.device.bootedAt === null ? this.now() : this.device.bootedAt + deviceT;
   }

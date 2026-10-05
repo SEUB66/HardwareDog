@@ -25,6 +25,8 @@ pub enum LinkState {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct LinkStatus {
+    /// Its place among dogd's links: D1, D2... (one link: D1).
+    pub dog: String,
     pub state: LinkState,
     pub source: String,
     pub origin: &'static str,
@@ -52,6 +54,7 @@ pub struct Link {
 
 impl Link {
     pub fn new(
+        dog: &str,
         source: &Source,
         origin: Origin,
         on_hello: impl Fn(&Hello, &str) + Send + Sync + 'static,
@@ -62,6 +65,7 @@ impl Link {
             LinkState::Connecting
         };
         let (status, _) = watch::channel(LinkStatus {
+            dog: dog.to_string(),
             state,
             source: source.describe(),
             origin: origin.as_str(),

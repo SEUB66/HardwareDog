@@ -15,7 +15,7 @@ import { PackTransport, type Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
-import { DogdTransport, dogdStore } from '../core/dogd';
+import { connectDogd, dogdStore, viaDogd } from '../core/dogd';
 import markSrc1x from '../../../assets/brand/web/hd-mark-1x.webp';
 import markSrc2x from '../../../assets/brand/web/hd-mark-2x.webp';
 import markSrc3x from '../../../assets/brand/web/hd-mark-3x.webp';
@@ -236,7 +236,7 @@ export function App({ archive }: { archive: SessionArchive }) {
     await system.disconnect();
     await session.writer?.stop();
     // Through dogd, the finished recording also goes to dogd's local store.
-    if (session.transport instanceof DogdTransport && session.writer && !session.writer.error) {
+    if (viaDogd(session.transport) && session.writer && !session.writer.error) {
       const w = session.writer;
       void archive
         .text(w.meta.key)
@@ -263,7 +263,8 @@ export function App({ archive }: { archive: SessionArchive }) {
       }
     } else if (kind === 'DOGD') {
       try {
-        transport = await DogdTransport.prepare();
+        // One source: one device. Several: a pack, one Dog per source.
+        transport = await connectDogd();
       } catch (e) {
         system.mark(`dogd: ${e instanceof Error ? e.message : String(e)}`);
         return;

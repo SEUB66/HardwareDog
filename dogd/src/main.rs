@@ -75,15 +75,34 @@ async fn serve(cfg: Config) -> i32 {
         .map(|a| a.to_string())
         .unwrap_or_default();
     let discovery = Arc::new(discovery::Discovery::default());
-    let (seen, found) = (store.clone(), discovery.clone());
-    let link = transport::Link::new(&cfg.source, cfg.origin, move |hello, port| {
-        seen.saw_device(hello, port);
-        // The 48-bit chip id (or, from older firmware, the 24-bit HDP id).
-        if let Some(line) = found.identified(&seen, port, hello) {
-            println!("{line}");
-        }
-    });
-    tokio::spawn(link.clone().run(cfg.source.clone()));
+    // One link per source: D1, D2... A pack is assembled by the interface,
+    // from one stream per Dog; dogd bridges each one unchanged.
+    let sources: Vec<(config::Source, config::Origin)> = if cfg.links.is_empty() {
+        vec![(config::Source::None, config::Origin::Physical)]
+    } else {
+        cfg.links
+            .iter()
+            .map(|l| (l.source.clone(), l.origin))
+            .collect()
+    };
+    let mut links = Vec::new();
+    for (n, (source, origin)) in sources.into_iter().enumerate() {
+        let (seen, found) = (store.clone(), discovery.clone());
+        let link = transport::Link::new(
+            &format!("D{}", n + 1),
+            &source,
+            origin,
+            move |hello, port| {
+                seen.saw_device(hello, port);
+                // The 48-bit chip id (or, from older firmware, the 24-bit HDP id).
+                if let Some(line) = found.identified(&seen, port, hello) {
+                    println!("{line}");
+                }
+            },
+        );
+        tokio::spawn(link.clone().run(source));
+        links.push(link);
+    }
     // Hot-plug: one scan a second. Listing ports never writes to them.
     let (scan_store, scan) = (store.clone(), discovery.clone());
     tokio::spawn(async move {
@@ -103,9 +122,20 @@ async fn serve(cfg: Config) -> i32 {
     row("MODE", if cfg.lan { "LAN (explicit)" } else { "LOCAL" });
     row("LISTEN", &listen);
     row("HDP", format!("v{}", protocol::HDP_VERSION));
-    row("DEVICE", cfg.source.describe());
-    if cfg.source != config::Source::None {
-        row("ORIGIN", cfg.origin.as_str());
+    match cfg.links.as_slice() {
+        [] => row("DEVICE", config::Source::None.describe()),
+        [one] => {
+            row("DEVICE", one.source.describe());
+            row("ORIGIN", one.origin.as_str());
+        }
+        many => {
+            for (n, l) in many.iter().enumerate() {
+                row(
+                    &format!("DOG D{}", n + 1),
+                    format!("{} ({})", l.source.describe(), l.origin.as_str()),
+                );
+            }
+        }
     }
     row("DATA", cfg.data_dir.display());
     row("SESSIONS", store.sessions().len());
@@ -113,7 +143,7 @@ async fn serve(cfg: Config) -> i32 {
     println!();
 
     let state = api::AppState {
-        link,
+        links: Arc::new(links),
         store,
         discovery,
         cfg: Arc::new(cfg),
@@ -191,7 +221,12 @@ async fn status(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let link = local_get(port, "/v1/link").await.unwrap_or_default();
+    let links = local_get(port, "/v1/links").await.unwrap_or_default();
+    let links: Vec<serde_json::Value> = links
+        .get("links")
+        .and_then(|l| l.as_array())
+        .cloned()
+        .unwrap_or_default();
     let s = |v: &serde_json::Value, k: &str| {
         v.get(k)
             .and_then(|x| x.as_str())
@@ -208,14 +243,24 @@ async fn status(args: &[String]) -> i32 {
             health.get("hdp").and_then(|x| x.as_u64()).unwrap_or(0)
         ),
     );
-    row("LINK", s(&link, "state"));
-    row("SOURCE", s(&link, "source"));
-    match link.get("device").filter(|d| !d.is_null()) {
-        Some(d) => row(
-            "DEVICE",
-            format!("{} rev {} fw {}", s(d, "device"), s(d, "rev"), s(d, "fw")),
-        ),
-        None => row("DEVICE", "NONE"),
+    let device = |l: &serde_json::Value| match l.get("device").filter(|d| !d.is_null()) {
+        Some(d) => format!("{} rev {} fw {}", s(d, "device"), s(d, "rev"), s(d, "fw")),
+        None => "NONE".into(),
+    };
+    match links.as_slice() {
+        [link] => {
+            row("LINK", s(link, "state"));
+            row("SOURCE", s(link, "source"));
+            row("DEVICE", device(link));
+        }
+        many => {
+            for l in many {
+                row(
+                    &format!("DOG {}", s(l, "dog")),
+                    format!("{} {} {}", s(l, "state"), s(l, "source"), device(l)),
+                );
+            }
+        }
     }
     0
 }

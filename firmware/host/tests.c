@@ -141,7 +141,8 @@ static void test_boot_and_power(void) {
     hdp_start(&D);
     CHECK(has("{\"type\":\"hello\",\"t\":0,\"proto\":1,\"device\":\"HD-TEST\",\"rev\":\"T\",\"fw\":\"0.1.0\",\"caps\":[\"power\",\"uart\",\"i2c\"]}\n"));
     CHECK(has("\"type\":\"uart.config\""));
-    CHECK(has("\"link\":null")); /* no network on this board: said, not guessed */
+    /* no network on this board: its caps say so, and it says nothing about one */
+    CHECK(!has("net.status"));
     CHECK(has("INA226 at 0x40 verified"));
     CHECK(B.config == hdp_ina226_config_word());
     CHECK(B.cal == hdp_ina226_calibration(0.1f, 0.8f, NULL));
@@ -334,6 +335,7 @@ static void test_i2c_watch_and_faults(void) {
 
 static void test_network_checks_and_probes(void) {
     setup();
+    D.cfg.caps |= HDP_CAP_NET | HDP_CAP_PROBE;
     hdp_start(&D);
     /* No network hook: gateway, DNS, Internet stay UNKNOWN, never guessed. */
     CHECK(has("\"gateway\":{\"address\":null,\"status\":\"UNKNOWN\"}"));
@@ -404,6 +406,7 @@ static void test_read_failure_stops_power(void) {
 
 static void test_time_never_goes_backwards(void) {
     setup();
+    D.cfg.caps |= HDP_CAP_NET;
     B.t = 500;
     hdp_start(&D);
     B.t = 100; /* a clock that jumps back */
@@ -414,6 +417,7 @@ static void test_time_never_goes_backwards(void) {
 
 static void test_commands(void) {
     setup();
+    D.cfg.caps |= HDP_CAP_NET | HDP_CAP_PROBE;
     hdp_start(&D);
     clear();
     const char *c1 = "{\"cmd\":\"i2c.scan\"}\n";
@@ -471,6 +475,53 @@ static void test_hostile_commands(void) {
     CHECK(has("refused this baud rate"));
 }
 
+/* A Dog of a pack speaks only of what it declared. */
+static void test_caps_are_respected(void) {
+    setup();
+    D.cfg.caps = HDP_CAP_NET;
+    D.cfg.net_ms = 2000;
+    D.i2c_watch_ms = 3000;
+    hdp_start(&D);
+    CHECK(has("\"caps\":[\"net\"]"));
+    CHECK(has("\"type\":\"net.status\""));
+    CHECK(!has("uart.config") && !has("INA226") && !has("power.meter"));
+    clear();
+    for (B.t = 1; B.t <= 6000; B.t++) hdp_poll(&D);
+    CHECK(!has("\"type\":\"power\"") && !has("i2c.scan"));
+    CHECK(has("\"type\":\"net.status\",\"t\":2000"));
+    clear();
+    hdp_uart_input(&D, "boot\n", 5);
+    hdp_uart_error(&D, "FRAMING");
+    CHECK(B.len == 0);
+    cmd("{\"cmd\":\"i2c.scan\"}\n");
+    CHECK(has("command rejected: i2c.scan: this Dog does not observe i2c"));
+    cmd("{\"cmd\":\"uart.config\",\"baud\":9600}\n");
+    CHECK(has("uart.config: this Dog does not observe uart") && B.baud == 0);
+    cmd("{\"cmd\":\"meter.clear\"}\n");
+    CHECK(has("meter.clear: this Dog does not observe power"));
+    cmd("{\"cmd\":\"probe\",\"id\":\"p\",\"target\":\"x\",\"tests\":[\"PING\"]}\n");
+    CHECK(has("probe: this Dog does not observe probe"));
+    clear();
+    cmd("{\"cmd\":\"hello\"}\n");
+    CHECK(has("\"type\":\"hello\"") && has("net.status") && !has("uart.config"));
+    clear();
+    cmd("{\"cmd\":\"time\",\"id\":7}\n"); /* every Dog keeps time */
+    CHECK(has("\"type\":\"time\""));
+    CHECK(lines_well_formed());
+
+    setup();
+    D.cfg.caps = HDP_CAP_POWER;
+    hdp_start(&D);
+    CHECK(has("\"caps\":[\"power\"]") && has("power.meter"));
+    CHECK(!has("net.status") && !has("uart.config"));
+    hdp_net_changed(&D);
+    CHECK(!has("net.status"));
+    clear();
+    B.t = 20;
+    hdp_poll(&D);
+    CHECK(has("\"type\":\"power\""));
+}
+
 static void test_uart_rx(void) {
     setup();
     hdp_start(&D);
@@ -517,6 +568,7 @@ int main(void) {
     test_time_never_goes_backwards();
     test_commands();
     test_hostile_commands();
+    test_caps_are_respected();
     test_uart_rx();
     test_json_string();
     if (failures) {

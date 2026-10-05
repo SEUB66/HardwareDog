@@ -182,6 +182,8 @@ static void send(hdp_device_t *d, line_t *l) {
     d->hal.write(d->hal.ctx, l->buf, l->len);
 }
 
+static void reject(hdp_device_t *d, const char *why);
+
 static void send_log(hdp_device_t *d, const char *level, const char *message) {
     line_t l;
     begin(d, &l, "log");
@@ -208,6 +210,20 @@ static bool chip_ok(const char *c) {
     for (int k = 0; k < 12; k++)
         if (!((c[k] >= '0' && c[k] <= '9') || (c[k] >= 'a' && c[k] <= 'f'))) return false;
     return true;
+}
+
+/* A Dog speaks only of what it declared in hello.caps: in a pack, the USB
+   Dog on a cable says nothing about the supply or the network, and the
+   host never has to guess which of two Dogs is the source of a signal. */
+static bool observes(const hdp_device_t *d, uint32_t cap) { return (d->cfg.caps & cap) != 0; }
+
+/* A command for something this Dog does not observe: said, not carried out. */
+static bool needs(hdp_device_t *d, uint32_t cap, const char *cmd, const char *what) {
+    if (observes(d, cap)) return true;
+    char msg[96];
+    snprintf(msg, sizeof msg, "%s: this Dog does not observe %s", cmd, what);
+    reject(d, msg);
+    return false;
 }
 
 static void send_hello(hdp_device_t *d) {
@@ -735,10 +751,11 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
     const char *c = cmd->str;
     if (!strcmp(c, "hello")) {
         send_hello(d);
-        send_uart_config(d);
-        send_net(d);
+        if (observes(d, HDP_CAP_UART)) send_uart_config(d);
+        if (observes(d, HDP_CAP_NET)) send_net(d);
         send_meter(d);
     } else if (!strcmp(c, "uart.config")) {
+        if (!needs(d, HDP_CAP_UART, c, "uart")) return;
         const kv_t *b = field(kvs, n, "baud", V_NUM);
         if (!b || b->num < 300 || b->num > 4000000 || b->num != floor(b->num)) {
             reject(d, "uart.config needs an integer baud 300..4000000");
@@ -752,6 +769,7 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         d->uart_len = 0;
         send_uart_config(d);
     } else if (!strcmp(c, "uart.tx")) {
+        if (!needs(d, HDP_CAP_UART, c, "uart")) return;
         const kv_t *data = field(kvs, n, "data", V_STR);
         if (!data) {
             reject(d, "uart.tx needs \"data\"");
@@ -772,8 +790,10 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         putf(&l, ",\"id\":%lu", (unsigned long)id->num);
         send(d, &l);
     } else if (!strcmp(c, "i2c.scan")) {
+        if (!needs(d, HDP_CAP_I2C, c, "i2c")) return;
         scan_i2c(d, false);
     } else if (!strcmp(c, "i2c.watch")) {
+        if (!needs(d, HDP_CAP_I2C, c, "i2c")) return;
         const kv_t *e = field(kvs, n, "every_ms", V_NUM);
         if (!e || e->num != floor(e->num) || e->num < 0 || (e->num > 0 && e->num < 1000) || e->num > 600000) {
             reject(d, "i2c.watch needs every_ms 0 or 1000..600000");
@@ -783,12 +803,16 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
         d->next_i2c = now(d) + d->i2c_watch_ms;
         send_log(d, "info", d->i2c_watch_ms ? "i2c watch on" : "i2c watch off");
     } else if (!strcmp(c, "net.watch")) {
+        if (!needs(d, HDP_CAP_NET, c, "net")) return;
         net_watch(d, kvs, n);
     } else if (!strcmp(c, "net.refresh")) {
+        if (!needs(d, HDP_CAP_NET, c, "net")) return;
         send_net(d);
     } else if (!strcmp(c, "meter.cal")) {
+        if (!needs(d, HDP_CAP_POWER, c, "power")) return;
         meter_cal(d, kvs, n);
     } else if (!strcmp(c, "meter.clear")) {
+        if (!needs(d, HDP_CAP_POWER, c, "power")) return;
         if (!d->ina_ok) {
             reject(d, "meter.clear: no verified power sensor");
             return;
@@ -800,6 +824,7 @@ static void handle_command(hdp_device_t *d, const char *line, size_t len) {
     } else if (!strcmp(c, "usb.enumerate")) {
         send_log(d, "warn", "usb.enumerate: this hardware revision has no USB host port");
     } else if (!strcmp(c, "probe")) {
+        if (!needs(d, HDP_CAP_PROBE, c, "probe")) return;
         const kv_t *id = field(kvs, n, "id", V_STR);
         const kv_t *tests = field(kvs, n, "tests", V_ARR);
         if (!id || !tests || tests->arr_n == 0 || !field(kvs, n, "target", V_STR)) {
@@ -824,12 +849,13 @@ void hdp_init(hdp_device_t *d, const hdp_config_t *cfg, const hdp_hal_t *hal) {
 
 void hdp_start(hdp_device_t *d) {
     send_hello(d);
-    send_uart_config(d);
-    send_net(d);
-    ina_start(d);
+    if (observes(d, HDP_CAP_UART)) send_uart_config(d);
+    if (observes(d, HDP_CAP_NET)) send_net(d);
+    if (observes(d, HDP_CAP_POWER)) ina_start(d);
     uint32_t t = now(d);
     d->next_sample = t;
     d->next_net = d->cfg.net_ms ? t + d->cfg.net_ms : 0;
+    if (!observes(d, HDP_CAP_I2C)) d->i2c_watch_ms = 0;
     d->next_i2c = t + d->i2c_watch_ms;
 }
 
@@ -863,6 +889,7 @@ static void flush_uart_line(hdp_device_t *d) {
 }
 
 void hdp_uart_input(hdp_device_t *d, const char *data, size_t len) {
+    if (!observes(d, HDP_CAP_UART)) return;
     for (size_t k = 0; k < len; k++) {
         if (data[k] == '\n') {
             flush_uart_line(d);
@@ -874,6 +901,7 @@ void hdp_uart_input(hdp_device_t *d, const char *data, size_t len) {
 }
 
 void hdp_uart_error(hdp_device_t *d, const char *kind) {
+    if (!observes(d, HDP_CAP_UART)) return;
     line_t l;
     begin(d, &l, "uart.error");
     puts_(&l, ",\"kind\":");
@@ -893,13 +921,15 @@ void hdp_poll(hdp_device_t *d) {
         /* Fell far behind (a long blocking call): resynchronise, do not burst. */
         if (t > d->next_sample + 5 * d->cfg.sample_ms) d->next_sample = t + d->cfg.sample_ms;
     }
-    if (d->cfg.net_ms && t >= d->next_net) {
+    if (d->cfg.net_ms && observes(d, HDP_CAP_NET) && t >= d->next_net) {
         send_net(d);
         d->next_net = t + d->cfg.net_ms;
     }
 }
 
-void hdp_net_changed(hdp_device_t *d) { send_net(d); }
+void hdp_net_changed(hdp_device_t *d) {
+    if (observes(d, HDP_CAP_NET)) send_net(d);
+}
 
 void hdp_probe_result(hdp_device_t *d, const char *id, const char *test, hdp_check_t status, const char *detail) {
     line_t l;
