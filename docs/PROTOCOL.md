@@ -62,6 +62,11 @@ have is never an observation**: without `usb`, no USB frame is not "no USB
 device", and the engine makes no USB diagnosis from it. Decoders ignore
 capability names they do not know.
 
+A device speaks only of what it declared: no frame for a capability it
+did not list, and a command for one is rejected (`log`, "this Dog does not
+observe net"). In a pack ([`PACK.md`](PACK.md)) that is what keeps one
+source per signal without any Dog being ignored.
+
 ### power
 
 One sample of the target supply rail. Volts and amps.
