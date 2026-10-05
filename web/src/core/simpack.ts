@@ -176,6 +176,11 @@ export class SimulatedPack extends PackTransport {
     this.hub.flush(this.hub.world.uptime);
   }
 
+  /** The fault scenario the pack is watching. */
+  get scenario() {
+    return this.hub.world.scenario;
+  }
+
   /** World time, ms since the incident started. */
   get uptime(): number {
     return this.hub.world.uptime;

@@ -13,7 +13,7 @@ import { IntegrityTag } from '../components/IntegrityTag';
 import { SessionsPanel, type SessionsPanelProps } from '../components/SessionsPanel';
 import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
-import { explain } from '../../core/glossary';
+import { explain, explainPanel } from '../../core/glossary';
 import { beep } from '../sound';
 
 interface SetupProps {
@@ -21,6 +21,12 @@ interface SetupProps {
   /** Active simulator scenario, or null on real hardware. */
   scenario: ScenarioId | null;
   onSwitch: (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario?: ScenarioId) => void;
+  /** Whether the demo running is a pack of simulated Dogs. */
+  demoPack: boolean;
+  /** Start a demo pack (three simulated Dogs) on a scenario. */
+  onDemoPack: (scenario?: ScenarioId) => void;
+  /** Several boards on USB as one pack, one port per click. */
+  packBuilder: { picked: string[]; message: string | null; onAdd: () => void; onStart: () => void; onCancel: () => void };
   /** End this session and go back to NOT CONNECTED; null when nothing is connected. */
   onDisconnect: (() => void) | null;
   sessions: SessionsPanelProps;
@@ -75,6 +81,8 @@ function sourceCell(system: System) {
   if (r) return <Tag status={r.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`REPLAY OF ${r.origin} / ${r.id}${r.scenario ? ` ${r.scenario}` : ''}`} />;
   if (system.transportKind === 'DOGD') return <Tag status={system.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`DOGD / ${system.origin ?? '--'}`} />;
   if (system.transportKind === 'SIMULATOR') return <Tag status="WARN" label="SIMULATOR" />;
+  if (system.transportKind === 'PACK')
+    return <Tag status={system.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`PACK OF ${system.dogs.length} / ${system.origin ?? '--'}`} />;
   return system.transportKind ?? 'NONE';
 }
 
@@ -85,7 +93,7 @@ function recordingCell(system: System, recording: SetupProps['recording']) {
   return <Tag status="LIVE" label={`REC ${recording.entries.toLocaleString('en-US')} EVENTS / ${bytes(recording.bytes)}`} />;
 }
 
-export function Setup({ system, scenario, onSwitch, onDisconnect, sessions, recording }: SetupProps) {
+export function Setup({ system, scenario, demoPack, onSwitch, onDemoPack, packBuilder, onDisconnect, sessions, recording }: SetupProps) {
   const s = system.settings;
   const set = (patch: Partial<Settings>) => system.updateSettings(patch);
   const serialOk = webSerialSupported();
@@ -120,6 +128,9 @@ export function Setup({ system, scenario, onSwitch, onDisconnect, sessions, reco
             <button class={`btn ${system.transportKind === 'SIMULATOR' ? 'active' : ''}`} onClick={() => onSwitch('SIMULATOR')}>
               DEMO MODE
             </button>
+            <button class={`btn ${demoPack ? 'active' : ''}`} onClick={() => onDemoPack()} title="Three simulated Dogs: one on the supply, one on the target, one on the network">
+              DEMO PACK
+            </button>
             <button class={`btn ${system.transportKind === 'DOGD' ? 'active' : ''}`} onClick={() => onSwitch('DOGD')} title="The local daemon on this machine (127.0.0.1:4782)">
               CONNECT DOGD
             </button>
@@ -131,6 +142,37 @@ export function Setup({ system, scenario, onSwitch, onDisconnect, sessions, reco
                 DISCONNECT
               </button>
             )}
+          </div>
+          <div class="pack-build">
+            <Hint text={explainPanel('PACK')} term="PACK">
+              <b>PACK OF BOARDS ON USB</b>
+            </Hint>
+            <span class="dim"> one port per click; each board becomes D1, D2... in that order</span>
+            {packBuilder.picked.length > 0 && (
+              <ol>
+                {packBuilder.picked.map((p, n) => (
+                  <li key={n}>
+                    <span class="pink">D{n + 1}</span> {p}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {packBuilder.message && <p class="note warn">{packBuilder.message}</p>}
+            <div class="actions">
+              <button class="btn" onClick={packBuilder.onAdd} disabled={!serialOk}>
+                ADD A PORT
+              </button>
+              {packBuilder.picked.length > 0 && (
+                <>
+                  <button class="btn primary" onClick={packBuilder.onStart} disabled={packBuilder.picked.length < 2}>
+                    START PACK
+                  </button>
+                  <button class="btn" onClick={packBuilder.onCancel}>
+                    CANCEL
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           {!serialOk && <p class="note warn">WEB SERIAL NOT AVAILABLE IN THIS BROWSER. Use a Chromium-based browser over https or localhost.</p>}
           <p class="note">Switching source starts a new session, so simulated and real measurements are never mixed in one report.</p>
@@ -146,7 +188,11 @@ export function Setup({ system, scenario, onSwitch, onDisconnect, sessions, reco
             id="scenario"
             class="input"
             value={scenario ?? ''}
-            onChange={(e) => onSwitch('SIMULATOR', (e.target as HTMLSelectElement).value as ScenarioId)}
+            onChange={(e) => {
+              const id = (e.target as HTMLSelectElement).value as ScenarioId;
+              if (demoPack) onDemoPack(id);
+              else onSwitch('SIMULATOR', id);
+            }}
             style={{ width: '100%' }}
           >
             {scenario === null && <option value="">-- choose a scenario --</option>}

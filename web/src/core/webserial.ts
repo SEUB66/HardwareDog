@@ -66,6 +66,11 @@ export class WebSerialTransport implements Transport {
     return t;
   }
 
+  /** Whether two picks are the same port: one board cannot be two Dogs. */
+  samePort(other: WebSerialTransport): boolean {
+    return this.port !== null && this.port === other.port;
+  }
+
   async open(sink: TransportSink): Promise<void> {
     if (!this.port) throw new Error('no serial port selected');
     await this.port.open({ baudRate: LINK_BAUD });

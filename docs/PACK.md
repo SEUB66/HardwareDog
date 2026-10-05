@@ -17,7 +17,27 @@ Code: `web/src/core/pack.ts` (clocks and merge, pure),
 `web/src/core/system.ts` (the pack in the System),
 `web/src/core/transport.ts` (`PackTransport`),
 `web/src/core/simpack.ts` (a simulated pack),
-`web/src/core/dogd.ts` (a pack through dogd: one stream per Dog).
+`web/src/core/dogd.ts` (a pack through dogd: one stream per Dog),
+`web/src/core/packbuilder.ts` (a pack of boards on USB, built by hand),
+`web/src/ui/components/PackPanel.tsx` (the pack on screen).
+
+---
+
+## IN THE INTERFACE
+
+```text
+BUILD A PACK   CONNECT DOGD           dogd with several --source: one Dog each
+               SETUP > ADD A PORT     boards on USB, one port per click (the
+                                      browser asks every time), START PACK
+               SETUP > DEMO PACK      three simulated Dogs, labeled SIMULATED
+SEE IT         STATUS > PACK          every Dog: who it is, its link (WAITING,
+                                      ONLINE, LOST), what it observes (and what
+                                      it was refused), its clock (+-ms, or
+                                      UNBOUNDED before its first time sample)
+               header                 DEVICE 3 DOGS, VIA PACK OF 3
+               REPORT                 a PACK section, in every format
+               TOUR                   a stop on the pack
+```
 
 ---
 
@@ -159,6 +179,10 @@ TWO FIRMWARES, ONE PACK        PASS  two firmware processes (supply: power
                                      ms, the same diagnosis as one board,
                                      recorded and replayed the same
                                      (firmware.test.ts)
+THE INTERFACE SHOWS IT         PASS  the PACK panel, the header, the report
+                                     (pack-ui.test.ts); built from dogd, from
+                                     boards on USB, or as a demo; checked in
+                                     Chromium on a desktop and a phone
 ONE READING PER ARRIVAL        PASS  the time a frame is recorded at is the
                                      time it is handled at, so the replay
                                      agrees to the last digit (found with
@@ -170,8 +194,6 @@ ONE READING PER ARRIVAL        PASS  the time a frame is recorded at is the
 ## NOT YET
 
 ```text
-[ -- ] the interface: build a pack, show its Dogs, their clocks and who
-       observes what                                    LVL 90.4
 [ -- ] two real boards on one bench, recorded as a PHYSICAL case
 [ -- ] new probe kinds (CAN, RS-485, GPIO, environment): each is new HDP
        frames for a new capability, under the same pack

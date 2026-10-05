@@ -4,6 +4,7 @@ import { Empty } from '../components/Empty';
 import { ErrorBlock } from '../components/ErrorBlock';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
+import { PackPanel } from '../components/PackPanel';
 import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
 import { explain, explainSource, explainStatus } from '../../core/glossary';
@@ -23,7 +24,10 @@ export function Status({ system }: { system: System }) {
         STATUS <span class="sub">what is happening right now</span>
       </h1>
       {system.lastError && system.link !== 'ONLINE' && <ErrorBlock error={system.lastError} />}
+      {/* A pack: every Dog in place of the one device. */}
+      {system.pack && <PackPanel system={system} />}
       <div class="grid even">
+        {!system.pack && (
         <Panel title="DEVICE">
           <KV
             rows={[
@@ -42,6 +46,7 @@ export function Status({ system }: { system: System }) {
             ]}
           />
         </Panel>
+        )}
 
         <Panel title="POWER">
           <KV
@@ -107,7 +112,10 @@ export function Status({ system }: { system: System }) {
                 system.replayOf ? (
                   <Tag status={system.replayOf.origin === 'SIMULATED' ? 'WARN' : 'INFO'} label={`REPLAY OF ${system.replayOf.origin}`} />
                 ) : system.origin === 'SIMULATED' ? (
-                  <Tag status="WARN" label={system.transportKind === 'DOGD' ? 'DOGD / SIMULATED' : 'SIMULATOR'} />
+                  <Tag
+                    status="WARN"
+                    label={system.transportKind === 'DOGD' ? 'DOGD / SIMULATED' : system.transportKind === 'PACK' ? 'PACK / SIMULATED' : 'SIMULATOR'}
+                  />
                 ) : (
                   (system.transportKind ?? 'NONE')
                 ),
