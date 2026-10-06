@@ -224,6 +224,10 @@ async fn resolve_v4(name: &str) -> Option<Ipv4Addr> {
 }
 
 impl Net for System {
+    fn usb(&self) -> Option<Vec<super::usb::UsbDevice>> {
+        super::usb::scan()
+    }
+
     async fn observe(&self) -> Observation {
         observe_os().await
     }
