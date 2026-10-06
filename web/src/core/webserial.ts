@@ -4,22 +4,22 @@ import type { Transport, TransportSink } from './transport';
 import { createLineDecoder } from './transport';
 
 // Minimal Web Serial typings: the API is not part of the TypeScript DOM lib.
-interface SerialPortInfo {
+export interface SerialPortInfo {
   usbVendorId?: number;
   usbProductId?: number;
 }
-interface SerialPortLike {
-  open(options: { baudRate: number }): Promise<void>;
+export interface SerialPortLike {
+  open(options: { baudRate: number; bufferSize?: number }): Promise<void>;
   close(): Promise<void>;
   getInfo(): SerialPortInfo;
   readonly readable: ReadableStream<Uint8Array> | null;
   readonly writable: WritableStream<Uint8Array> | null;
 }
-interface SerialLike {
+export interface SerialLike {
   requestPort(options?: object): Promise<SerialPortLike>;
 }
 
-function serialApi(): SerialLike | null {
+export function serialApi(): SerialLike | null {
   const nav = globalThis.navigator as (Navigator & { serial?: SerialLike }) | undefined;
   return nav?.serial ?? null;
 }
@@ -35,7 +35,7 @@ const LINK_BAUD = 115200;
  * Requires a Chromium-based browser and a user gesture to pick the port.
  */
 /** "USB CDC 303A:1001". Known as soon as the port is picked, before it opens. */
-function portLabel(port: SerialPortLike): string {
+export function portLabel(port: SerialPortLike): string {
   const info = port.getInfo();
   if (info.usbVendorId === undefined || info.usbProductId === undefined) return 'WEB SERIAL';
   const h = (n: number) => n.toString(16).toUpperCase().padStart(4, '0');
