@@ -199,8 +199,12 @@ export interface ProbeRun {
   results: ProbeResult[];
 }
 
+export type Theme = 'dark' | 'light';
+
 export interface Settings {
   sound: boolean;
+  /** Dark (the default) or light, pale grey. Field mode, for sunlight, overrides both. */
+  theme: Theme;
   fieldMode: boolean;
   reducedMotion: boolean;
   undervoltageThreshold: number;
@@ -221,6 +225,7 @@ export const thresholdsOf = (s: Settings): Thresholds => ({
 
 export const DEFAULT_SETTINGS: Settings = {
   sound: false,
+  theme: 'dark',
   fieldMode: false,
   reducedMotion: false,
   undervoltageThreshold: 4.75,

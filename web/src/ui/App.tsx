@@ -156,6 +156,8 @@ export function App({ archive }: { archive: SessionArchive }) {
   const [sessionMessage, setSessionMessage] = useState<string | null>(null);
   // The signature start plays when the interface opens, connected or not.
   const [booting, setBooting] = useState(true);
+  // The terminal intro plays once, when the interface opens; a new source only runs the checks.
+  const introPlayed = useRef(false);
   const [screen, setScreen] = useState<Screen>('STATUS');
   const [traceOnly, setTraceOnly] = useState<Source[] | null>(null);
   const [palette, setPaletteState] = useState(false);
@@ -208,10 +210,12 @@ export function App({ archive }: { archive: SessionArchive }) {
   // Theme and motion are system settings, applied to the document root.
   useEffect(() => {
     const root = document.documentElement;
+    root.dataset['theme'] = system.settings.theme;
     root.dataset['field'] = system.settings.fieldMode ? 'on' : 'off';
     root.dataset['motion'] = system.settings.reducedMotion ? 'reduced' : 'full';
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', system.settings.fieldMode ? '#F4F1E8' : '#0B0D0F');
-  }, [system.settings.fieldMode, system.settings.reducedMotion]);
+    const color = system.settings.fieldMode ? '#F4F1E8' : system.settings.theme === 'light' ? '#E6E8EB' : '#0B0D0F';
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
+  }, [system.settings.theme, system.settings.fieldMode, system.settings.reducedMotion]);
 
   const navigate = (next: Screen, only: Source[] | null = null) => {
     setTraceOnly(next === 'TRACE' ? only : null);
@@ -488,7 +492,19 @@ export function App({ archive }: { archive: SessionArchive }) {
   });
 
   if (booting) {
-    return <Boot key={session.key} system={system} transport={session.transport} onReady={() => setBooting(false)} />;
+    const intro = !introPlayed.current;
+    return (
+      <Boot
+        key={session.key}
+        system={system}
+        transport={session.transport}
+        intro={intro}
+        onReady={() => {
+          introPlayed.current = true;
+          setBooting(false);
+        }}
+      />
+    );
   }
 
   const linkTag = system.replayOf ? (
@@ -610,6 +626,14 @@ export function App({ archive }: { archive: SessionArchive }) {
           {system.transportKind === 'DOGD' && <Tag status="INFO" label="DOGD" />}
           {system.origin === 'SIMULATED' && <Tag status="WARN" label="SIMULATOR" />}
         </span>
+        <button
+          class="btn theme-btn"
+          onClick={() => system.updateSettings({ theme: system.settings.theme === 'light' ? 'dark' : 'light' })}
+          title={system.settings.theme === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
+          aria-label={system.settings.theme === 'light' ? 'Switch to the dark theme' : 'Switch to the light theme'}
+        >
+          <Icon name={system.settings.theme === 'light' ? 'MOON' : 'SUN'} size={15} />
+        </button>
         <button class="btn tour-btn" onClick={startTour} title="A guided tour of the interface: what each part is for">
           <Icon name="TOUR" size={15} />
           <span>TOUR</span>

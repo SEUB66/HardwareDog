@@ -29,6 +29,19 @@
   --gap: 14px;
 }
 
+:root[data-theme='light'] {
+  --bg: #e6e8eb;
+  --panel: #ffffff9e;
+  --panel-alt: #ffffffd9;
+  --border: #1d24301c;
+  --text-dim: #59616a;
+  --grid: #1d243012;
+  --glass-top: #ffffffd0;
+  --glass-bottom: #ffffff70;
+  --glass-edge: #ffffffee;
+  --glass-shadow: #1d24301a;
+}
+
 :root[data-field='on'] {
   --panel: #ffffffcc;
   --panel-alt: #ffffff;
@@ -66,6 +79,45 @@ body::before {
   background-size: 48px 48px;
   mask-image: radial-gradient(ellipse at 50% 35%, #000 20%, transparent 75%);
   opacity: 0.35;
+}
+
+/* Light: the same soft color fields, on pale grey. */
+:root[data-theme='light'] body {
+  background:
+    radial-gradient(ellipse 760px 620px at 92% 8%, #ff4fa31a, transparent 72%),
+    radial-gradient(ellipse 650px 600px at 8% 30%, #00b8d41a, transparent 72%),
+    radial-gradient(ellipse 750px 600px at 85% 70%, #ff4fa30f, transparent 72%),
+    radial-gradient(ellipse 550px 500px at 20% 95%, #00b8d412, transparent 75%),
+    var(--bg);
+}
+:root[data-theme='light'] body::before {
+  opacity: 0.6;
+}
+:root[data-theme='light'] .head .state {
+  background: #ffffff8c;
+}
+:root[data-theme='light'] .btn {
+  background: #ffffffa8;
+}
+:root[data-theme='light'] .btn:hover:not(:disabled) {
+  background: #ffffff;
+}
+:root[data-theme='light'] .nav button:hover {
+  background: #1d24300a;
+}
+:root[data-theme='light'] .help kbd {
+  background: #ffffff;
+}
+:root[data-theme='light'] .trace th {
+  background: #f1f3f5;
+}
+:root[data-theme='light'] .tip {
+  background: linear-gradient(145deg, #ffffff, #f6f7f9);
+  box-shadow: 0 14px 40px #1d243026;
+}
+:root[data-theme='light'] .wordmark,
+:root[data-theme='light'] .boot-word {
+  color: var(--text);
 }
 
 :root[data-field='on'] body {
@@ -617,6 +669,8 @@ body::before {
   }
   .shell {
     grid-template-columns: minmax(0, 1fr);
+    /* The tab bar takes its own height: the desktop footer row is 30 px and would cut it in half. */
+    grid-template-rows: calc(var(--head-height) + env(safe-area-inset-top)) minmax(0, 1fr) auto;
     gap: 8px;
     padding: 0;
   }
@@ -707,5 +761,212 @@ body::before {
   }
   .boot-word {
     font-size: 30px;
+  }
+}
+
+/* ------------------------------------------------------------------ intro */
+/* Phase one of the start: always the dark terminal, whatever the theme. */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #0b0d0f;
+  color: #ece8de;
+  font-family: var(--mono);
+  transition: opacity 0.7s ease;
+}
+.intro.fading {
+  opacity: 0;
+}
+.intro-rain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+}
+.intro-stage {
+  position: relative;
+  width: min(760px, calc(100vw - 32px));
+  display: grid;
+  gap: 14px;
+  padding: 22px 24px;
+  border: 1px solid #ffffff1a;
+  border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 0%, #00e5ff12, transparent 60%), #0b0d0fd9;
+  box-shadow:
+    0 0 0 1px #00000060,
+    0 30px 80px #000000a0,
+    inset 0 1px 0 #ffffff14;
+}
+/* Scan lines over the stage: the old monitor. */
+.intro-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, #ffffff06 0 1px, transparent 1px 3px);
+}
+.intro pre {
+  margin: 0;
+  font-family: var(--mono);
+  white-space: pre;
+  overflow: hidden;
+}
+.intro-prompt {
+  color: #79d98a;
+  font-size: 13px;
+  min-height: 1.3em;
+}
+.intro-cursor {
+  color: #00e5ff;
+  animation: intro-blink 1s steps(1) infinite;
+}
+@keyframes intro-blink {
+  50% {
+    opacity: 0;
+  }
+}
+.intro-banner {
+  width: 100%;
+  filter: drop-shadow(0 0 10px #00e5ff40) drop-shadow(0 0 22px #ff4fa333);
+  aspect-ratio: 48 / 12;
+}
+.intro-dog {
+  font-size: 13px;
+  line-height: 1.3;
+  min-height: calc(5 * 1.3em);
+  color: #ece8de;
+}
+.intro-dog .eye {
+  color: #ff4fa3;
+  text-shadow: 0 0 10px #ff4fa3;
+  animation: intro-blink 2.4s steps(1) infinite;
+}
+.intro-dog .leash {
+  color: #00e5ff;
+  text-shadow: 0 0 8px #00e5ff80;
+}
+.intro-dog .usb {
+  color: #79d98a;
+}
+.intro-code {
+  font-size: 12.5px;
+  line-height: 1.6;
+  min-height: calc(6 * 1.6em);
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffffff07;
+  border: 1px solid #ffffff10;
+}
+.intro-code .ln {
+  color: #ffffff38;
+  margin-right: 14px;
+}
+.tk-kw {
+  color: #ff4fa3;
+}
+.tk-id {
+  color: #ece8de;
+}
+.tk-op {
+  color: #8a9195;
+}
+.tk-str {
+  color: #79d98a;
+}
+.tk-num {
+  color: #e4b04a;
+}
+.tk-com {
+  color: #6f7a80;
+  font-style: italic;
+}
+.tk-fn {
+  color: #00e5ff;
+}
+.intro-tagline {
+  margin: 0;
+  min-height: 1.4em;
+  text-align: center;
+  font-family: var(--cond);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+  color: #ff4fa3;
+  text-shadow: 0 0 18px #ff4fa380;
+}
+.intro-skip {
+  position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8a9195;
+}
+@media (max-width: 760px) {
+  .intro-stage {
+    padding: 16px 14px;
+    gap: 10px;
+  }
+  .intro-dog {
+    font-size: 9.5px;
+  }
+  .intro-code {
+    font-size: 9px;
+    padding: 8px;
+    white-space: pre-wrap;
+  }
+  .intro-code .ln {
+    margin-right: 8px;
+  }
+  .intro-tagline {
+    font-size: 15px;
+    letter-spacing: 0.22em;
+  }
+}
+
+/* The start keeps its terminal character in every theme. */
+:root[data-theme='light'] .boot {
+  --bg: #0b0d0f;
+  --panel: #ffffff08;
+  --panel-alt: #ffffff10;
+  --border: #ffffff1f;
+  --text: #ece8de;
+  --text-dim: #9ea3aa;
+  --cyan: #00e5ff;
+  --pink: #ff4fa3;
+  --amber: #e4b04a;
+  --green: #79d98a;
+  --red: #ff5f56;
+  --glass-top: #ffffff12;
+  --glass-bottom: #ffffff04;
+  --glass-edge: #ffffff30;
+  --glass-shadow: #00000045;
+  color-scheme: dark;
+  color: var(--text);
+  background: #171619;
+}
+:root[data-theme='light'] .boot .boot-word {
+  color: var(--text);
+}
+
+/* A narrow phone: the link state keeps its light, the word goes (its color says it). */
+@media (max-width: 430px) {
+  .head .state .tag {
+    display: none;
+  }
+  .head .state {
+    padding: 9px;
+  }
+  .head .theme-btn,
+  .head .tour-btn {
+    padding: 7px 8px;
   }
 }
