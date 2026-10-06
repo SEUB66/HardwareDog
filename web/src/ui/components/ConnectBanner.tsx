@@ -56,6 +56,11 @@ export function ConnectBanner({ onConsole, onSerial, onDogd, onOpen, onDemo, onT
         </ol>
       </div>
       <div class="sources">
+        {!serialOk && (
+          <p class="sources-note">
+            Serial ports need <b>Chrome or Edge on a computer</b>. On this device: the demo, a recording, or dogd.
+          </p>
+        )}
         {tile(
           'SERIAL',
           'SERIAL CONSOLE',
@@ -92,6 +97,27 @@ export function ConnectBanner({ onConsole, onSerial, onDogd, onOpen, onDemo, onT
           if (f) onOpen(f);
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * Off STATUS, nothing connected: one line, not the whole start card, so
+ * each screen is itself and the way back to the sources is one tap.
+ */
+export function ConnectStrip({ onChoose, onDemo }: { onChoose: () => void; onDemo: () => void }) {
+  return (
+    <div class="connect-strip" role="status">
+      <span class="dot" aria-hidden="true" />
+      <b>NOT CONNECTED</b>
+      <span class="dim">nothing is measured</span>
+      <span class="spacer" />
+      <button class="btn" onClick={onChoose}>
+        <span class="long">CHOOSE A </span>SOURCE
+      </button>
+      <button class="btn demo-btn" onClick={onDemo}>
+        DEMO
+      </button>
     </div>
   );
 }
