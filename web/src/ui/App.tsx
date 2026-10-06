@@ -19,7 +19,7 @@ import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
 import { ConsoleTransport } from '../core/console';
-import { connectDogd, dogdStore, viaDogd } from '../core/dogd';
+import { DOGD_URL, HOST_DEVICE, connectDogd, dogdStore, viaDogd } from '../core/dogd';
 import headSrc1x from '../../../assets/brand/web/hd-head-1x.webp';
 import headSrc2x from '../../../assets/brand/web/hd-head-2x.webp';
 import headSrc3x from '../../../assets/brand/web/hd-head-3x.webp';
@@ -81,7 +81,9 @@ function viaLabel(system: System): string {
     case 'WEB SERIAL':
       return system.transportLabel;
     case 'DOGD':
-      return system.origin === 'SIMULATED' ? 'DOGD (SIMULATED)' : `DOGD ${system.transportLabel}`;
+      if (system.origin === 'SIMULATED') return 'DOGD (SIMULATED)';
+      if (system.device.id === HOST_DEVICE) return 'THIS COMPUTER (DOGD)';
+      return system.transportLabel.startsWith('DOGD') ? system.transportLabel : `DOGD ${system.transportLabel}`;
     case 'PACK':
       return `PACK OF ${system.dogs.length}${system.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}`;
     default:
@@ -289,7 +291,8 @@ export function App({ archive }: { archive: SessionArchive }) {
         // One source: one device. Several: a pack, one Dog per source.
         transport = await connectDogd();
       } catch (e) {
-        system.mark(`dogd: ${e instanceof Error ? e.message : String(e)}`);
+        system.sourceFailed('DOGD NOT REACHED', DOGD_URL.replace(/^https?:\/\//, ''), e instanceof Error ? e.message : String(e));
+        navigate('STATUS');
         return;
       }
     } else {
@@ -297,6 +300,25 @@ export function App({ archive }: { archive: SessionArchive }) {
     }
     await start(transport);
   };
+
+  /**
+   * This computer's network, through dogd --source host. Choosing it is
+   * asking for the checks: the watch starts (ACTIVE, said on the timeline),
+   * and NET is the screen to read.
+   */
+  const wantNetwork = useRef(false);
+  const openNetwork = async () => {
+    wantNetwork.current = true;
+    await switchTransport('DOGD');
+  };
+  // The link opens during the start: the watch begins once it is online.
+  useEffect(() => {
+    if (booting || !wantNetwork.current) return;
+    wantNetwork.current = false;
+    if (system.link !== 'ONLINE' || !system.observes('net')) return;
+    if (!system.netWatch) system.watchNet(10, 'example.com', 'example.com');
+    setScreen('NET');
+  }, [booting]);
 
   /** Any board's serial console, read by this browser: no probe needed. Its console is the screen to watch. */
   const openConsole = async () => {
@@ -703,6 +725,7 @@ export function App({ archive }: { archive: SessionArchive }) {
             onConsole={() => void openConsole()}
             onSerial={() => void switchTransport('WEB SERIAL')}
             onDogd={() => void switchTransport('DOGD')}
+            onNetwork={() => void openNetwork()}
             onOpen={(file) => void openFile(file)}
             onDemo={() => void switchTransport('SIMULATOR')}
             onTour={startTour}

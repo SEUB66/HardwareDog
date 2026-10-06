@@ -75,6 +75,7 @@ cargo build --release
 ./target/release/dogd --source serial:/dev/ttyACM0      # Linux / macOS
 ./target/release/dogd --source serial:COM4              # Windows
 ./target/release/dogd --source tcp:192.168.1.50:3333    # a device on Wi-Fi
+./target/release/dogd --source host                     # this computer's network, no probe
 ```
 
 Several sources are a **pack** ([`PACK.md`](PACK.md)): one Dog per
@@ -124,6 +125,54 @@ dogd sessions            list stored sessions (works with dogd stopped)
 `--identify` writes exactly one HDP `hello` and reads the answer. dogd
 never writes anything else to a port it was not told to use, and never
 flashes anything. Note: opening a serial port can reset some boards (DTR).
+
+---
+
+## NO PROBE: THIS COMPUTER'S NETWORK
+
+```sh
+./target/release/dogd --source host
+```
+
+Then in the interface: **START HERE → THIS COMPUTER'S NETWORK**.
+
+`host` is a device that lives in dogd and speaks HDP v1 like a probe,
+with the capabilities it really has: `net` and `probe`. Its hello says
+`device HOST, rev HOST`. Power, USB, serial and I2C are not observed,
+and STATUS says NOT MONITORED. The timeline, the network rules
+(NO_LINK, DHCP_FAILURE, GATEWAY_UNREACHABLE, DNS_FAILURE,
+UPSTREAM_FAILURE, NETWORK_UNSTABLE), the recording, the replay and the
+report are the same as with a probe.
+
+```text
+PASSIVE (always)     reads what the system knows, sends nothing, every 5 s:
+                     link    Linux: operstate, carrier, speed, duplex of the
+                             interface of the default route
+                             macOS: ifconfig status of that interface
+                             Windows: not said: UNKNOWN
+                     address the address the system would use to go out (a
+                             connected UDP socket, never written to)
+                     DHCP    PASS: an address that is not 169.254.x.x
+                             FAIL: link up and no address, or 169.254.x.x
+                             (dogd cannot tell DHCP from a static address)
+                     routes  the default gateway (/proc/net/route, route -n
+                             get default, route print); the name server from
+                             /etc/resolv.conf (Windows: not said)
+ACTIVE (when asked)  the interface asks with net.watch: THIS COMPUTER'S
+                     NETWORK starts it (every 10 s), NET -> WATCH changes it
+                     gateway four pings (the system's ping); none answered:
+                             FAIL; ping missing or not allowed: UNKNOWN
+                     DNS     the name given resolves
+                     Internet a TCP connection to the host given, port 443
+                             (a name that does not resolve: UNKNOWN, it is DNS)
+                     latency, loss: of the four pings
+PROBE                PING, DNS, TCP (port 80), HTTP (GET /, the status line):
+                     what the PROBE screen asks, from this computer
+```
+
+Nothing ACTIVE runs before the interface asks, and the timeline says
+when it did. A computer is not a probe: it sees its own network, not the
+board's; it measures no power. A probe adds that.
 
 ---
 

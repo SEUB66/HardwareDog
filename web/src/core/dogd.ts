@@ -24,6 +24,9 @@ import { PackTransport, createLineDecoder } from './transport';
 /** The only place dogd is: this machine. */
 export const DOGD_URL = 'http://127.0.0.1:4782';
 
+/** The device id of dogd --source host: this computer, for the network. */
+export const HOST_DEVICE = 'HOST';
+
 export interface DogdLink {
   /** Its place among dogd's links: D1, D2... (older dogd: absent, one link). */
   dog?: string;
@@ -41,7 +44,7 @@ async function getJson<T>(url: string): Promise<T> {
   try {
     res = await fetch(url, { cache: 'no-store' });
   } catch {
-    throw new Error(`no dogd at ${new URL(url).host} (start it with: dogd)`);
+    throw new Error(`no dogd at ${new URL(url).host}. Start it on this computer: dogd serve --source host (its network), or --source serial:PORT (a probe). docs/DOGD.md`);
   }
   if (!res.ok) throw new Error(`dogd: ${res.status} ${await res.text()}`);
   return (await res.json()) as T;
@@ -170,3 +173,4 @@ export class DogdTransport implements Transport {
     this.socket = null;
   }
 }
+
