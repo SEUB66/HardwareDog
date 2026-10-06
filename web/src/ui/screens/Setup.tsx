@@ -236,6 +236,7 @@ export function Setup({ system, scenario, demoPack, onSwitch, onConsole, onDemoP
 
         <Panel title="INTERFACE">
           <Toggle label="STARTUP BEEP" on={s.sound} onChange={(v) => set({ sound: v })} />
+          <Toggle label="LIGHT THEME (pale grey)" on={s.theme === 'light'} onChange={(v) => set({ theme: v ? 'light' : 'dark' })} />
           <Toggle label="FIELD MODE (high contrast, direct sunlight)" on={s.fieldMode} onChange={(v) => set({ fieldMode: v })} />
           <Toggle label="REDUCED MOTION" on={s.reducedMotion} onChange={(v) => set({ reducedMotion: v })} />
           <div class="actions">
