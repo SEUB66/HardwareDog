@@ -32,3 +32,5 @@ jobs:
       - run: npm run build
       # LVL 50: the cases, replayed by the command line, outside the test suite.
       - run: npm run test:cases
+      # LVL 100: the published files are what the sources build, byte for byte.
+      - run: npm run build:verify

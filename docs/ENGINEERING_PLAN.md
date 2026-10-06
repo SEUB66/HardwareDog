@@ -588,7 +588,7 @@ LVL   NAME                                  STATUS
 85    PCB Rev A                              PLANNED
 90    probe architecture                     PARTIAL   software PASS (PACK.md); two boards on one bench pending
 95    community incident library             PARTIAL   library, anonymize, checks PASS (LIBRARY.md); first outside case pending
-100   Hardware Dog 1.0                       PLANNED
+100   Hardware Dog 1.0                       PARTIAL   software ready (RELEASE.md); the hardware lines pending
 MAX   incidents make Hardware Dog better     PLANNED
 ```
 
@@ -876,6 +876,11 @@ more than code. ([`LIBRARY.md`](LIBRARY.md))
 ```
 
 ### LVL 100 — HARDWARE DOG 1.0
+
+The checklist with its evidence, line by line: [`RELEASE.md`](RELEASE.md).
+Software: every line `[ OK ]` or waiting for a board (security review,
+reproducible builds, update and recovery procedures, trademark, documents
+indexed and their links checked). Hardware: the bring-up comes first.
 
 ```text
 [ ] stable HDP v1                  [ ] USB

@@ -234,11 +234,15 @@ NO TELEMETRY
   example a hosted copy of the interface, `--allow-origin
   https://your.site`) gets the preflight answer browsers require to reach
   127.0.0.1.
-- **LAN** is an explicit decision: `dogd --listen-lan`. Even then, browser
-  origins are still checked.
+- **LAN** is an explicit decision: `dogd --listen-lan`. dogd then prints a
+  `TOKEN` (128 random bits, new at every start): a request from another
+  machine must show it (`Authorization: Bearer <token>`, or `?token=` for a
+  WebSocket), or it is refused; this machine needs none. Browser origins
+  are still checked. It is plain HTTP: use it on a network you trust
+  ([`SECURITY.md`](SECURITY.md)).
 
 ```text
-TESTS   dogd/src/api (host, origin, preflight, rebinding, LAN)
+TESTS   dogd/src/api (host, origin, preflight, rebinding, LAN, token)
 ```
 
 ---

@@ -62,6 +62,16 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// Browser origins allowed to talk to dogd, besides localhost pages.
     pub allow_origins: Vec<String>,
+    /// With --listen-lan: the token a client on another machine must show
+    /// (Authorization: Bearer, or ?token= for a WebSocket). Made at start.
+    pub lan_token: Option<String>,
+}
+
+/// A new LAN access token: 128 random bits, hex.
+pub fn new_token() -> Result<String, String> {
+    let mut b = [0u8; 16];
+    getrandom::fill(&mut b).map_err(|e| format!("no randomness from the system: {e}"))?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }
 
 pub fn default_data_dir() -> PathBuf {
@@ -101,7 +111,8 @@ OPTIONS (serve)
   --source-origin simulated   the TCP source just before it is a simulator
                               (default: physical)
   --listen ADDR:PORT          default 127.0.0.1:4782, loopback only
-  --listen-lan                listen on the network (0.0.0.0): explicit only
+  --listen-lan                listen on the network (0.0.0.0): explicit only;
+                              other machines need the token printed at start
   --allow-origin URL          a browser origin allowed to connect (repeatable)
   --data DIR                  sessions and index (default ~/.local/share/hwdog)
 
@@ -204,6 +215,7 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
         links,
         data_dir,
         allow_origins,
+        lan_token: None,
     })
 }
 

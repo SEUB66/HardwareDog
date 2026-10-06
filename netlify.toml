@@ -7,3 +7,14 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# Security headers. Everything is served from this site; the only other
+# place the interface talks to is dogd, on this machine (docs/SECURITY.md).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://127.0.0.1:4782 ws://127.0.0.1:4782; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "serial=(self), camera=(), microphone=(), geolocation=(), usb=()"
+    Cross-Origin-Opener-Policy = "same-origin"

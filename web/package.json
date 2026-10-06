@@ -17,7 +17,8 @@
     "cases": "UPDATE_CASES=1 vitest run test/cases.test.ts",
     "docs:sync": "node scripts/sync-raw-docs.mjs",
     "cli": "vite build --config vite.cli.config.ts",
-    "test:cases": "npm run cli && node dist-cli/hwdog.mjs test ../cases"
+    "test:cases": "npm run cli && node dist-cli/hwdog.mjs test ../cases",
+    "build:verify": "node scripts/verify-reproducible.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
