@@ -1,0 +1,83 @@
+name: release
+
+# A tag dogd-vX.Y.Z publishes dogd for Kali, Debian and Ubuntu: one .deb
+# per architecture, the bare binaries, and SHA256SUMS. Built on Ubuntu
+# 22.04 (glibc 2.35), so the packages run there and on anything newer.
+on:
+  push:
+    tags: ['dogd-v*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: the tag is the version in Cargo.toml
+        run: |
+          want="dogd-v$(sed -n 's/^version = "\(.*\)"/\1/p' dogd/Cargo.toml | head -1)"
+          [ "$GITHUB_REF_NAME" = "$want" ] || { echo "tag $GITHUB_REF_NAME, Cargo.toml says $want"; exit 1; }
+      - name: build
+        working-directory: dogd
+        run: cargo build --release --locked
+      - name: package
+        run: packaging/deb/build-deb.sh dogd/target/release/dogd ${{ matrix.arch }}
+      # What a user does: install it, start it, ask it how it is.
+      - name: installs and starts
+        run: |
+          sudo apt-get install -y ./dist/hwdog-dogd_*_${{ matrix.arch }}.deb
+          dogd serve --source host --listen 127.0.0.1:4799 --data "$RUNNER_TEMP/d" &
+          pid=$!
+          for i in $(seq 1 50); do curl -fs http://127.0.0.1:4799/v1/health && break; sleep 0.2; done
+          curl -fs http://127.0.0.1:4799/v1/health | grep -q '"status":"ok"'
+          kill "$pid"
+          sudo apt-get remove -y hwdog-dogd
+      - name: bare binary
+        run: |
+          v="${GITHUB_REF_NAME#dogd-v}"
+          tar -C dogd/target/release -czf "dist/dogd-${v}-linux-${{ matrix.arch }}.tar.gz" dogd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dogd-${{ matrix.arch }}
+          path: dist/*
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'NOTES'
+          dogd, the Hardware Dog local daemon, for Kali, Debian and Ubuntu (amd64, arm64).
+
+          ```sh
+          sha256sum --check --ignore-missing SHA256SUMS
+          sudo apt install ./hwdog-dogd_*_amd64.deb
+          dogd serve --source host
+          ```
+
+          Then in the interface: START HERE -> THIS COMPUTER. docs/INSTALL.md says the rest.
+          NOTES
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md

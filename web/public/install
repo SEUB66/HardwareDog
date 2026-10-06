@@ -1,0 +1,307 @@
+#!/usr/bin/env bash
+# HARDWARE DOG / INSTALL dogd
+#
+#   curl -fsSL hwdog.netlify.app/install | bash
+#
+# What it does, and nothing else:
+#   1. reads this machine's system and architecture
+#   2. asks github.com/SEUB66/HardwareDog for its latest dogd-v* release
+#   3. downloads the package and SHA256SUMS from that release
+#   4. checks the sum (stops on any difference)
+#   5. installs: apt on Kali, Debian, Ubuntu; else the binary in ~/.local/bin
+# It sends nothing about you anywhere, and dogd starts only when you say so.
+#
+# Options:
+#   --deb FILE     install this package instead of downloading one
+#   --user         put the binary in ~/.local/bin (no sudo, no apt)
+#   --version V    a given release (0.1.0) instead of the latest
+#   --plain        no colors, no animation
+#   -h, --help     this text
+#
+# The whole script is one function, called on its last line: a download cut
+# short runs nothing.
+
+hwdog_install() {
+  set -eu
+  local REPO="SEUB66/HardwareDog"
+  local API="${HWDOG_API:-https://api.github.com/repos/$REPO}"
+  local DL="${HWDOG_DOWNLOAD:-https://github.com/$REPO/releases/download}"
+  local SITE="https://hwdog.netlify.app"
+
+  local deb_file="" user_mode=0 want="" plain=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --deb) deb_file="${2:-}"; shift 2 ;;
+      --user) user_mode=1; shift ;;
+      --version) want="${2:-}"; shift 2 ;;
+      --plain) plain=1; shift ;;
+      -h | --help) cat <<'HELP'
+HARDWARE DOG / install dogd
+
+  curl -fsSL hwdog.netlify.app/install | bash
+  curl -fsSL hwdog.netlify.app/install | bash -s -- --user
+
+  --deb FILE     install this package instead of downloading one
+  --user         put the binary in ~/.local/bin (no sudo, no apt)
+  --version V    a given release (0.1.0) instead of the latest
+  --plain        no colors, no animation
+HELP
+        return 0 ;;
+      *) printf 'unknown option: %s (try --help)\n' "$1" >&2; return 2 ;;
+    esac
+  done
+
+  # ── colors ────────────────────────────────────────────────────────────
+  local tty=0
+  [ -t 1 ] && tty=1
+  [ -n "${NO_COLOR:-}" ] && plain=1
+  [ "$tty" = 1 ] || plain=1
+  [ "${TERM:-dumb}" = dumb ] && plain=1
+
+  local R="" B="" D="" CY="" PK="" GR="" AM="" WH="" GY=""
+  if [ "$plain" = 0 ]; then
+    R=$'\e[0m' B=$'\e[1m' D=$'\e[2m'
+    case "${COLORTERM:-}" in
+      truecolor | 24bit)
+        CY=$'\e[38;2;0;229;255m' PK=$'\e[38;2;255;79;163m'
+        GR=$'\e[38;2;121;217;138m' AM=$'\e[38;2;228;176;74m'
+        WH=$'\e[38;2;230;237;243m' GY=$'\e[38;2;110;122;134m' ;;
+      *)
+        CY=$'\e[38;5;45m' PK=$'\e[38;5;205m' GR=$'\e[38;5;114m'
+        AM=$'\e[38;5;179m' WH=$'\e[38;5;255m' GY=$'\e[38;5;244m' ;;
+    esac
+  fi
+
+  # The animation sleeps; a plain run never waits.
+  nap() { [ "$plain" = 1 ] || sleep "$1"; }
+
+  # ── the image ─────────────────────────────────────────────────────────
+  local HW=(
+    '██╗  ██╗██╗    ██╗'
+    '██║  ██║██║    ██║'
+    '███████║██║ █╗ ██║'
+    '██╔══██║██║███╗██║'
+    '██║  ██║╚███╔███╔╝'
+    '╚═╝  ╚═╝ ╚══╝╚══╝ '
+  )
+  local DOG=(
+    '██████╗  ██████╗  ██████╗ '
+    '██╔══██╗██╔═══██╗██╔════╝ '
+    '██║  ██║██║   ██║██║  ███╗'
+    '██║  ██║██║   ██║██║   ██║'
+    '██████╔╝╚██████╔╝╚██████╔╝'
+    '╚═════╝  ╚═════╝  ╚═════╝ '
+  )
+
+  rain() {
+    # One line of bits that settles, the way the interface boots.
+    [ "$plain" = 1 ] && return 0
+    local n=58 i j line
+    for i in 1 2 3 4 5 6; do
+      line=""
+      for ((j = 0; j < n; j++)); do
+        if ((RANDOM % 7 < i)); then line+=" "; else line+=$((RANDOM % 2)); fi
+      done
+      printf '\r  %s%s%s' "$GR$D" "$line" "$R"
+      sleep 0.07
+    done
+    printf '\r%*s\r' $((n + 2)) ''
+  }
+
+  banner() {
+    local i
+    printf '\n'
+    rain
+    for i in 0 1 2 3 4 5; do
+      printf '  %s%s%s    %s%s%s\n' "$B$CY" "${HW[$i]}" "$R" "$B$PK" "${DOG[$i]}" "$R"
+      nap 0.05
+    done
+    printf '\n'
+    printf '%s           / \\__%s\n' "$WH" "$R"
+    printf '%s          (    %s@%s\\___%s\n' "$WH" "$PK$B" "$R$WH" "$R"
+    printf '%s          /         %sO================%s[ USB ]%s\n' "$WH" "$CY" "$AM$B" "$R"
+    printf '%s         /   (_____/%s\n' "$WH" "$R"
+    printf '%s        /_____/   \\%s     %s%sSNIFF THE PROBLEM.%s\n' "$WH" "$R" "$B" "$GR" "$R"
+    printf '\n  %s── dogd installer ──────────────── local first · no cloud · no telemetry ──%s\n\n' "$GY" "$R"
+    nap 0.3
+  }
+
+  # ── steps ─────────────────────────────────────────────────────────────
+  say() { printf '  %s%s%s\n' "$GY" "$*" "$R"; }
+  ok() { printf '  %s[%s OK %s]%s %s%-8s%s %s\n' "$GY" "$GR$B" "$R$GY" "$R" "$CY" "$1" "$R" "$2"; }
+  bad() {
+    printf '  %s[%sFAIL%s]%s %s%-8s%s %s\n' "$GY" "$PK$B" "$R$GY" "$R" "$CY" "$1" "$R" "$2" >&2
+    shift 2
+    local l
+    for l in "$@"; do printf '         %s%s%s\n' "$GY" "$l" "$R" >&2; done
+    printf '\n' >&2
+    return 1
+  }
+
+  # Run "$@" behind a spinner. Its output goes to a log, shown if it fails.
+  local LOG
+  LOG="$(mktemp "${TMPDIR:-/tmp}/hwdog-install.XXXXXX")"
+  work() {
+    local label="$1"
+    shift
+    if [ "$plain" = 1 ]; then
+      "$@" >>"$LOG" 2>&1
+      return
+    fi
+    "$@" >>"$LOG" 2>&1 &
+    local pid=$! k=0
+    local frames=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r  %s[%s %s  %s]%s %s%-8s%s %s...%s ' "$GY" "$AM" "${frames[k % 10]}" "$GY" "$R" \
+        "$CY" "$label" "$R" "$GY" "$R"
+      k=$((k + 1))
+      sleep 0.08
+    done
+    printf '\r%*s\r' 40 ''
+    wait "$pid"
+  }
+
+  fetch() {
+    # fetch URL [FILE]: curl or wget, nothing else.
+    if command -v curl >/dev/null 2>&1; then
+      if [ -n "${2:-}" ]; then curl -fsSL --retry 2 -o "$2" "$1"; else curl -fsSL --retry 2 "$1"; fi
+    elif command -v wget >/dev/null 2>&1; then
+      if [ -n "${2:-}" ]; then wget -q -O "$2" "$1"; else wget -q -O - "$1"; fi
+    else
+      return 127
+    fi
+  }
+
+  local TMP
+  TMP="$(mktemp -d "${TMPDIR:-/tmp}/hwdog.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$TMP' '$LOG'" EXIT
+
+  banner
+
+  # 1. SYSTEM
+  local os arch
+  os="$(uname -s)"
+  case "$(uname -m)" in
+    x86_64 | amd64) arch=amd64 ;;
+    aarch64 | arm64) arch=arm64 ;;
+    *) arch="" ;;
+  esac
+  [ "$os" = Linux ] || bad SYSTEM "$os: this installer is for Linux" \
+    "elsewhere, build it: $SITE (docs/INSTALL.md, BUILD IT YOURSELF)" || return 1
+  [ -n "$arch" ] || bad SYSTEM "$(uname -m): no package for this processor" \
+    "build it: cargo build --release in dogd/ (docs/INSTALL.md)" || return 1
+  local distro="Linux"
+  if [ -r /etc/os-release ]; then
+    distro="$(. /etc/os-release && printf '%s' "${PRETTY_NAME:-${NAME:-Linux}}")"
+  fi
+  local has_apt=0
+  command -v apt-get >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1 && has_apt=1
+  [ "$has_apt" = 1 ] || user_mode=1
+  ok SYSTEM "$distro · $arch"
+  nap 0.15
+
+  local version="" pkg=""
+  if [ -n "$deb_file" ]; then
+    # A package already here: nothing to download.
+    [ -r "$deb_file" ] || bad PACKAGE "$deb_file: not found" || return 1
+    [ "$has_apt" = 1 ] || bad PACKAGE "a .deb needs apt and dpkg (Kali, Debian, Ubuntu)" \
+      "without them: --user, which downloads the binary" || return 1
+    user_mode=0
+    pkg="$TMP/$(basename "$deb_file")"
+    cp "$deb_file" "$pkg"
+    version="$(dpkg-deb -f "$pkg" Version 2>/dev/null || true)"
+    ok RELEASE "local file ${version:+· $version}"
+    ok FETCH "$(basename "$deb_file") · nothing downloaded"
+    ok VERIFY "your file: checked when you got it"
+  else
+    # 2. RELEASE
+    if [ -n "$want" ]; then
+      version="${want#dogd-v}"
+      ok RELEASE "dogd-v$version (asked for)"
+    else
+      fetch "$API/releases?per_page=30" >"$TMP/releases.json" 2>>"$LOG" ||
+        bad RELEASE "github.com did not answer" "check the connection, or: bash install --deb FILE" || return 1
+      version="$(grep -o '"tag_name": *"dogd-v[^"]*"' "$TMP/releases.json" | head -n 1 |
+        sed 's/.*"dogd-v\([^"]*\)"/\1/')"
+      [ -n "$version" ] || bad RELEASE "no dogd release published yet" \
+        "build it in one command: docs/INSTALL.md, BUILD IT YOURSELF" || return 1
+      ok RELEASE "dogd-v$version · latest"
+    fi
+    local tag="dogd-v$version" asset
+    if [ "$user_mode" = 1 ]; then
+      asset="dogd-$version-linux-$arch.tar.gz"
+    else
+      asset="hwdog-dogd_${version}_${arch}.deb"
+    fi
+
+    # 3. FETCH
+    work FETCH fetch "$DL/$tag/$asset" "$TMP/$asset" ||
+      bad FETCH "$asset: download failed" "$DL/$tag/$asset" || return 1
+    work FETCH fetch "$DL/$tag/SHA256SUMS" "$TMP/SHA256SUMS" ||
+      bad FETCH "SHA256SUMS: download failed" || return 1
+    ok FETCH "$asset · $(($(wc -c <"$TMP/$asset") / 1024)) KiB"
+
+    # 4. VERIFY: the sum the release publishes, for this exact file.
+    local expect got
+    expect="$(awk -v f="$asset" '$2 == f || $2 == "*" f { print $1 }' "$TMP/SHA256SUMS")"
+    [ -n "$expect" ] || bad VERIFY "$asset is not in SHA256SUMS" "nothing installed" || return 1
+    if command -v sha256sum >/dev/null 2>&1; then
+      got="$(sha256sum "$TMP/$asset" | awk '{ print $1 }')"
+    else
+      got="$(shasum -a 256 "$TMP/$asset" | awk '{ print $1 }')"
+    fi
+    [ "$got" = "$expect" ] || bad VERIFY "sha256 DIFFERS: nothing installed" \
+      "expected $expect" "got      $got" || return 1
+    ok VERIFY "sha256 ${got:0:16}… matches"
+    pkg="$TMP/$asset"
+  fi
+
+  # 5. INSTALL
+  local where
+  if [ "$user_mode" = 1 ]; then
+    mkdir -p "$HOME/.local/bin"
+    work INSTALL tar -xzf "$pkg" -C "$HOME/.local/bin" dogd ||
+      bad INSTALL "could not unpack $pkg" || return 1
+    chmod 0755 "$HOME/.local/bin/dogd"
+    where="$HOME/.local/bin/dogd"
+  else
+    local SUDO=""
+    if [ "$(id -u)" != 0 ]; then
+      command -v sudo >/dev/null 2>&1 || bad INSTALL "needs root, and there is no sudo" \
+        "as root: apt install $pkg" "or: --user" || return 1
+      SUDO=sudo
+      # Ask for the password before the spinner, on the terminal.
+      if ! sudo -n true 2>/dev/null; then
+        say "apt needs root: sudo asks for your password"
+        sudo -v </dev/tty || bad INSTALL "sudo refused" || return 1
+      fi
+    fi
+    chmod 0644 "$pkg"
+    chmod 0755 "$TMP"
+    work INSTALL $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y "$pkg" </dev/null ||
+      bad INSTALL "apt could not install the package" "$(tail -n 4 "$LOG")" || return 1
+    where="$(command -v dogd || printf /usr/bin/dogd)"
+  fi
+  local said
+  said="$("$where" --version 2>/dev/null || true)"
+  ok INSTALL "$where ${said:+· $said}"
+
+  # ── what now ──────────────────────────────────────────────────────────
+  printf '\n  %s╔══════════════════════════════════════════════════════════════════╗%s\n' "$PK" "$R"
+  printf '  %s║%s  %sTHE DOG IS IN.%s %-49s%s║%s\n' "$PK" "$R" "$B$GR" "$R" "" "$PK" "$R"
+  printf '  %s╚══════════════════════════════════════════════════════════════════╝%s\n\n' "$PK" "$R"
+  printf '  %s1%s  start it        %sdogd serve --source host%s\n' "$AM$B" "$R" "$CY" "$R"
+  printf '  %s2%s  open            %s%s%s  →  START HERE → THIS COMPUTER\n' "$AM$B" "$R" "$CY" "$SITE" "$R"
+  if [ "$user_mode" = 0 ]; then
+    printf '  %s3%s  with my session %ssystemctl --user enable --now dogd%s\n' "$AM$B" "$R" "$CY" "$R"
+  fi
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) [ "$user_mode" = 1 ] && say "~/.local/bin is not on your PATH: add it, or run $where" ;;
+  esac
+  printf '\n  %sdogd listens on 127.0.0.1 only · remove: %s%s\n\n' "$GY" \
+    "$([ "$user_mode" = 1 ] && printf 'rm %s' "$where" || printf 'sudo apt remove hwdog-dogd')" "$R"
+}
+
+hwdog_install "$@"
