@@ -61,7 +61,13 @@ fn row(k: &str, v: impl std::fmt::Display) {
     println!("{k:<15}{v}");
 }
 
-async fn serve(cfg: Config) -> i32 {
+async fn serve(mut cfg: Config) -> i32 {
+    if cfg.lan {
+        match config::new_token() {
+            Ok(t) => cfg.lan_token = Some(t),
+            Err(e) => return fail(&e),
+        }
+    }
     let store = match storage::Store::open(&cfg.data_dir) {
         Ok(s) => Arc::new(s),
         Err(e) => return fail(&e),
@@ -120,6 +126,10 @@ async fn serve(cfg: Config) -> i32 {
     println!("HW DOG / DOGD");
     row("VERSION", api::VERSION);
     row("MODE", if cfg.lan { "LAN (explicit)" } else { "LOCAL" });
+    if let Some(t) = &cfg.lan_token {
+        // Other machines show it; this one does not need to.
+        row("TOKEN", t);
+    }
     row("LISTEN", &listen);
     row("HDP", format!("v{}", protocol::HDP_VERSION));
     match cfg.links.as_slice() {
@@ -152,9 +162,13 @@ async fn serve(cfg: Config) -> i32 {
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
     };
-    match axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown)
-        .await
+    // The peer address: the LAN guard tells this machine from the others.
+    match axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await
     {
         Ok(()) => 0,
         Err(e) => fail(&e.to_string()),

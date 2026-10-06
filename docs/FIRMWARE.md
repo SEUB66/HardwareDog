@@ -184,6 +184,58 @@ boards on one bench.
 
 ---
 
+## UPDATE
+
+There is no over-the-air update: a Hardware Dog is updated on the bench,
+by cable, by the person who owns it. Nothing reaches the board by itself.
+
+```sh
+cd firmware && git pull
+idf.py build
+idf.py -p PORT app-flash      # the application only: the calibration stays
+```
+
+`app-flash` writes the application partition only. The calibration lives
+in NVS and survives it; `idf.py flash` also rewrites the bootloader and
+the partition table, and survives it as well unless the partition table
+changed. **`erase-flash` removes the calibration**: write the calibration
+points down (METER in the interface) before using it.
+
+After an update the interface shows the new version at the next hello
+(`DEVICE` / `FIRMWARE`), and every recording names the firmware that
+produced it, so no session ever mixes two versions without saying so.
+
+The image is reproducible (`CONFIG_APP_REPRODUCIBLE_BUILD`): the same
+sources give the same bytes, checked in CI by building twice. Anyone can
+check that a published image is what the code builds:
+`sha256sum build/hwdog.bin`.
+
+## RECOVERY (a failed update)
+
+An ESP32-S3 cannot be bricked by a bad application: the first bootloader
+is in mask ROM and always answers in download mode.
+
+```text
+1  Hold BOOT (GPIO0), press and release RESET, release BOOT.
+   The board is now in ROM download mode, whatever was flashed.
+2  idf.py -p PORT flash          the known good build (git checkout <tag>)
+3  If the board still does not boot: idf.py -p PORT erase-flash, then
+   idf.py -p PORT flash. The calibration is lost: calibrate again.
+4  Press RESET. The interface must show the hello of the version flashed.
+```
+
+The UART port of the dev board (CP2102 / CH343) is the most reliable for
+recovery: it does not depend on the firmware's USB stack.
+
+```text
+[ -- ] update and recovery procedures, checked on the board    LVL 60 bring-up
+```
+
+These steps follow the ESP-IDF tools and the ESP32-S3 boot ROM. They are
+**not yet verified on a Hardware Dog**: that is part of the bring-up.
+
+---
+
 ## BRING-UP ON THE BOARD (the LVL 60 gate)
 
 This is the part a computer cannot do for us. Each step has the result to

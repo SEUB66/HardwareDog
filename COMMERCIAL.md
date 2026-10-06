@@ -33,6 +33,8 @@ These uses are covered for free by the PolyForm Noncommercial License 1.0.0.
 The Hardware Dog name, logo and official mascot are not covered by either
 license for third-party use. A commercial license states which brand
 assets, if any, may be used and how.
+What anyone may do with the name and logo without asking is in
+[`TRADEMARK.md`](TRADEMARK.md).
 
 ## CONTACT
 

@@ -735,7 +735,7 @@ LVL   NAME                                  STATUS
 85    PCB Rev A                              PLANNED
 90    probe architecture                     PARTIAL   software PASS (PACK.md); two boards on one bench pending
 95    community incident library             PARTIAL   library, anonymize, checks PASS (LIBRARY.md); first outside case pending
-100   Hardware Dog 1.0                       PLANNED
+100   Hardware Dog 1.0                       PARTIAL   software ready (RELEASE.md); the hardware lines pending
 MAX   incidents make Hardware Dog better     PLANNED
 ```
 
@@ -1024,6 +1024,11 @@ more than code. ([`LIBRARY.md`](LIBRARY.md))
 
 ### LVL 100 — HARDWARE DOG 1.0
 
+The checklist with its evidence, line by line: [`RELEASE.md`](RELEASE.md).
+Software: every line `[ OK ]` or waiting for a board (security review,
+reproducible builds, update and recovery procedures, trademark, documents
+indexed and their links checked). Hardware: the bring-up comes first.
+
 ```text
 [ ] stable HDP v1                  [ ] USB
 [ ] stable HDLOG                   [ ] power
@@ -1310,6 +1315,58 @@ through one dogd are a pack on a PC (web/test/firmware.test.ts, LVL 90.3).
 Each plays the same scripted incident from its own start: that proves the
 links, the clocks and the merge, not shared physics, which takes two
 boards on one bench.
+
+---
+
+## UPDATE
+
+There is no over-the-air update: a Hardware Dog is updated on the bench,
+by cable, by the person who owns it. Nothing reaches the board by itself.
+
+```sh
+cd firmware &amp;&amp; git pull
+idf.py build
+idf.py -p PORT app-flash      # the application only: the calibration stays
+```
+
+`app-flash` writes the application partition only. The calibration lives
+in NVS and survives it; `idf.py flash` also rewrites the bootloader and
+the partition table, and survives it as well unless the partition table
+changed. **`erase-flash` removes the calibration**: write the calibration
+points down (METER in the interface) before using it.
+
+After an update the interface shows the new version at the next hello
+(`DEVICE` / `FIRMWARE`), and every recording names the firmware that
+produced it, so no session ever mixes two versions without saying so.
+
+The image is reproducible (`CONFIG_APP_REPRODUCIBLE_BUILD`): the same
+sources give the same bytes, checked in CI by building twice. Anyone can
+check that a published image is what the code builds:
+`sha256sum build/hwdog.bin`.
+
+## RECOVERY (a failed update)
+
+An ESP32-S3 cannot be bricked by a bad application: the first bootloader
+is in mask ROM and always answers in download mode.
+
+```text
+1  Hold BOOT (GPIO0), press and release RESET, release BOOT.
+   The board is now in ROM download mode, whatever was flashed.
+2  idf.py -p PORT flash          the known good build (git checkout &lt;tag&gt;)
+3  If the board still does not boot: idf.py -p PORT erase-flash, then
+   idf.py -p PORT flash. The calibration is lost: calibrate again.
+4  Press RESET. The interface must show the hello of the version flashed.
+```
+
+The UART port of the dev board (CP2102 / CH343) is the most reliable for
+recovery: it does not depend on the firmware&#39;s USB stack.
+
+```text
+[ -- ] update and recovery procedures, checked on the board    LVL 60 bring-up
+```
+
+These steps follow the ESP-IDF tools and the ESP32-S3 boot ROM. They are
+**not yet verified on a Hardware Dog**: that is part of the bring-up.
 
 ---
 

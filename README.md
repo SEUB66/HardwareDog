@@ -153,6 +153,10 @@ ARCHITECTURE       docs/ARCHITECTURE.md
 PROTOCOL           docs/PROTOCOL.md, protocol/hdp_v1.json
 DIAGNOSTICS        docs/DIAGNOSTICS.md
 DESIGN / BRAND     docs/DESIGN_SPEC.md, docs/BRAND.md
+LIBRARY            docs/LIBRARY.md, cases/INDEX.md
+SECURITY           docs/SECURITY.md
+1.0                docs/RELEASE.md
+EVERY DOCUMENT     docs/README.md
 ```
 
 ---
@@ -241,7 +245,8 @@ COMPANIES / RESELLERS / SERVICES       COMMERCIAL LICENSE
 Copyright (c) 2026 Sebastien Germain (Seub G.). All rights not expressly
 granted by the license are reserved. The Hardware Dog name, logo and
 official mascot are brand assets: they are not licensed for third-party
-branding or resale.
+branding or resale. What you may do with them without asking:
+[`TRADEMARK.md`](TRADEMARK.md).
 
 ---
 
