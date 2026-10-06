@@ -60,6 +60,7 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'session list', summary: 'sessions recorded in this browser' },
   { usage: 'session replay <n>', summary: 'replay a recorded session (read-only, new session)' },
   { usage: 'sound <on|off>', summary: 'startup beep' },
+  { usage: 'theme <dark|light>', summary: 'dark, or light pale grey' },
   { usage: 'field <on|off>', summary: 'high-contrast field mode' },
   { usage: 'go <screen>', summary: 'open a screen by name' },
   { usage: 'sim list', summary: 'list simulator fault scenarios' },
@@ -280,6 +281,12 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
       if (!ctx.simulate) return fail('scenario switching is not available here');
       ctx.simulate(id);
       return ok(`simulator -> ${id} ${SCENARIOS[id].title}, new session`);
+    }
+
+    case 'theme': {
+      if (a0 !== 'dark' && a0 !== 'light') return fail('usage: theme <dark|light>');
+      sys.updateSettings({ theme: a0 });
+      return ok(`theme ${a0}`);
     }
 
     case 'sound':

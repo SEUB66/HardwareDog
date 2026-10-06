@@ -19,6 +19,8 @@ const PATHS: Record<string, string> = {
   DOGD: 'M4 5h16v10H4zM8 19h8M12 15v4',
   RECORDING: 'M5 4h10l4 4v12H5zM10 11v6l5-3z',
   DEMO: 'M6 4l14 8-14 8z',
+  SUN: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  MOON: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
 };
 
 /** What each section is for, in a few words: the menu explains itself. */

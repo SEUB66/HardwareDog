@@ -44,6 +44,23 @@
   color-scheme: dark;
 }
 
+/* LIGHT THEME: pale grey, calm. Signals keep their meaning, darker to read on light. */
+:root[data-theme='light'] {
+  --bg: #e6e8eb;
+  --panel: #f6f7f9;
+  --panel-alt: #eceef1;
+  --border: #c5cad1;
+  --text: #15181c;
+  --text-dim: #59616a;
+  --cyan: #00829a;
+  --pink: #c4246f;
+  --amber: #9a6200;
+  --green: #22803a;
+  --red: #c4322a;
+  --grid: #d3d7dc;
+  color-scheme: light;
+}
+
 /* FIELD MODE: high-contrast light theme for direct sunlight (spec 34). */
 :root[data-field='on'] {
   --bg: #f4f1e8;
