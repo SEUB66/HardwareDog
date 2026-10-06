@@ -134,3 +134,16 @@ describe('execute', () => {
     expect(nav).toEqual(['REPORT', 'BUS']);
   });
 });
+
+describe('theme', () => {
+  it('starts dark, switches to light and back, and refuses anything else', async () => {
+    const { sys, c } = await ctx();
+    expect(sys.settings.theme).toBe('dark');
+    expect(execute('theme light', c).ok).toBe(true);
+    expect(sys.settings.theme).toBe('light');
+    expect(execute('theme dark', c).ok).toBe(true);
+    expect(sys.settings.theme).toBe('dark');
+    expect(execute('theme blue', c).ok).toBe(false);
+    expect(sys.settings.theme).toBe('dark');
+  });
+});

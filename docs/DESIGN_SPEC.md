@@ -341,6 +341,17 @@ UPPERCASE FOR SYSTEM STATES
 Hardware Dog should boot. It should not display a spinner. I want an actual
 initialization sequence.
 
+**Revision (owner's request): two phases, and time to look at them.**
+Phase one, when the interface opens (not for each new source): the
+terminal intro, about nine seconds. Bits rain in the signal colors; the
+HW DOG banner decodes out of 0 and 1 and locks letter by letter; the dog
+arrives on its USB leash; the laws are typed as colored code (every value
+true of the build: protocol version, rules loaded); SNIFF THE PROBLEM.
+settles. It claims no check. Any key or tap skips it after 1.5 s; reduced
+motion skips it. Phase two: the real checks below, a line every 260 ms,
+then the result held 2.6 s (any key continues). Code: `web/src/ui/intro.ts`,
+`web/src/ui/BootIntro.tsx`, `web/src/ui/Boot.tsx`.
+
 ```text
 HARDWARE DOG DIAGNOSTIC SYSTEM
 BUILD 0.1.0
@@ -1061,6 +1072,13 @@ Dog is an instrument interface. The default environment is dark.
 A high-contrast light theme may eventually exist for field use in direct
 sunlight, but it should be treated as **FIELD MODE** rather than cosmetic
 personalization.
+
+**Revision (owner's request).** Dark stays the default. A **LIGHT** theme,
+pale grey, sits beside it: the sun / moon button in the header, SETUP, or
+`theme <dark|light>`; remembered on this machine. The signal colors keep
+their meaning, darker to read on light. FIELD MODE, for direct sunlight,
+overrides both. The start (section 08) stays the dark terminal in every
+theme: it is the character of the instrument.
 
 ---
 
