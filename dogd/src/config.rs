@@ -14,6 +14,8 @@ pub enum Source {
     Serial(String),
     /// Any HDP byte stream over TCP, e.g. a device on Wi-Fi.
     Tcp(String),
+    /// This computer, for the network: no probe needed (hostnet).
+    Host,
 }
 
 impl Source {
@@ -22,6 +24,7 @@ impl Source {
             Source::None => "NONE".into(),
             Source::Serial(p) => format!("serial:{p}"),
             Source::Tcp(a) => format!("tcp:{a}"),
+            Source::Host => "host".into(),
         }
     }
 }
@@ -106,6 +109,11 @@ USAGE
 OPTIONS (serve)
   --source serial:PATH        a device on a serial port (/dev/ttyACM0, COM4)
   --source tcp:HOST:PORT      a device on any HDP byte stream over TCP
+  --source host               this computer, for the network: no probe needed.
+                              Link, address, gateway, DNS, Internet, and the
+                              PROBE tests, checked from here. Passive until
+                              the interface asks: then it pings the gateway,
+                              resolves a name, connects to 443 (ACTIVE)
                               repeat --source for a pack: each is a Dog,
                               D1, D2... in this order (at most 8)
   --source-origin simulated   the TCP source just before it is a simulator
@@ -137,12 +145,16 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
         match a.as_str() {
             "--source" => {
                 let v = value("--source")?;
-                let source = if let Some(p) = v.strip_prefix("serial:") {
+                let source = if v == "host" {
+                    Source::Host
+                } else if let Some(p) = v.strip_prefix("serial:") {
                     Source::Serial(p.to_string())
                 } else if let Some(t) = v.strip_prefix("tcp:") {
                     Source::Tcp(t.to_string())
                 } else {
-                    return Err(format!("unknown source {v} (serial:PATH or tcp:HOST:PORT)"));
+                    return Err(format!(
+                        "unknown source {v} (host, serial:PATH or tcp:HOST:PORT)"
+                    ));
                 };
                 if sources.iter().any(|(s, _)| *s == source) {
                     return Err(format!("{v} is given twice: one link per device"));
@@ -198,6 +210,9 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
     }
     let mut links = Vec::new();
     for (source, origin) in sources {
+        if matches!(source, Source::Host) && origin == Some(Origin::Simulated) {
+            return Err("host is this computer, measured for real: --source-origin simulated only applies to tcp".into());
+        }
         if matches!(source, Source::Serial(_)) && origin == Some(Origin::Simulated) {
             return Err(
                 "a serial port is physical hardware: --source-origin simulated only applies to tcp"
@@ -271,6 +286,10 @@ mod tests {
         ))
         .is_err());
         assert!(parse_serve(&args("--source usb:x")).is_err());
+        let c = parse_serve(&args("--source host")).unwrap();
+        assert_eq!(c.links[0].source, Source::Host);
+        assert_eq!(c.links[0].origin, Origin::Physical);
+        assert!(parse_serve(&args("--source host --source-origin simulated")).is_err());
     }
 
     #[test]

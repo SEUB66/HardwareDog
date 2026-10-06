@@ -1252,6 +1252,13 @@ export class System {
     this.transport!.send(cmd, dog);
   }
 
+  /** A source could not be opened: said where it shows (STATUS), not only in the trace. */
+  sourceFailed(what: string, where: string, detail: string): void {
+    this.lastError = { what, where, when: this.now(), detail };
+    this.log(this.now(), 'SYS', 'FAIL', what.toLowerCase(), detail);
+    this.changed();
+  }
+
   mark(text: string): void {
     this.recorder?.add({ at: this.now(), mark: text });
     this.log(this.now(), 'USER', 'INFO', `mark: ${text}`);

@@ -8,6 +8,7 @@ mod api;
 mod config;
 mod device;
 mod discovery;
+mod hostnet;
 mod identity;
 mod protocol;
 mod sessions;
@@ -94,11 +95,16 @@ async fn serve(mut cfg: Config) -> i32 {
     let mut links = Vec::new();
     for (n, (source, origin)) in sources.into_iter().enumerate() {
         let (seen, found) = (store.clone(), discovery.clone());
+        // This computer is not a board: it has no identity to remember.
+        let is_host = source == config::Source::Host;
         let link = transport::Link::new(
             &format!("D{}", n + 1),
             &source,
             origin,
             move |hello, port| {
+                if is_host {
+                    return;
+                }
                 seen.saw_device(hello, port);
                 // The 48-bit chip id (or, from older firmware, the 24-bit HDP id).
                 if let Some(line) = found.identified(&seen, port, hello) {
@@ -137,6 +143,12 @@ async fn serve(mut cfg: Config) -> i32 {
         [one] => {
             row("DEVICE", one.source.describe());
             row("ORIGIN", one.origin.as_str());
+            if one.source == config::Source::Host {
+                row(
+                    "NET WATCH",
+                    "off until the interface starts it: reads link, address, routes; sends nothing",
+                );
+            }
         }
         many => {
             for (n, l) in many.iter().enumerate() {
@@ -555,5 +567,27 @@ mod laws {
                 assert!(!file.contains(call), "{call} in the identity code");
             }
         }
+    }
+
+    /// The network checks of `--source host` (ping, resolve, connect) run
+    /// only when the operator chose that source: nothing else starts them.
+    #[test]
+    fn network_checks_only_when_asked() {
+        for file in [
+            include_str!("main.rs").split("mod laws").next().unwrap(),
+            include_str!("api/mod.rs"),
+            include_str!("discovery.rs"),
+            include_str!("identity/mod.rs"),
+            include_str!("sessions/mod.rs"),
+            include_str!("storage/mod.rs"),
+        ] {
+            assert!(
+                !file.contains("hostnet::run"),
+                "hostnet started outside the host source"
+            );
+        }
+        let transport = include_str!("transport/mod.rs");
+        assert_eq!(transport.matches("hostnet::run").count(), 1);
+        assert!(transport.contains("Source::Host =>"));
     }
 }

@@ -312,3 +312,52 @@ describe.runIf(BIN)('dogd (real binary)', { timeout: 60_000 }, () => {
     device.close();
   });
 });
+
+/**
+ * No probe: dogd --source host is this computer, for the network. Its
+ * results depend on the machine the test runs on, so the test checks what
+ * must hold anywhere: what it is, what it observes, passive until asked,
+ * and every answer one of the HDP checks.
+ */
+describe.runIf(BIN)('dogd --source host (real binary, this computer)', { timeout: 60_000 }, () => {
+  const CHECKS = ['PASS', 'WARN', 'FAIL', 'PENDING', 'UNKNOWN'];
+
+  it('is a device that observes the network only, passive until asked, then checks and probes', async () => {
+    const os = await node<{ tmpdir(): string }>('os');
+    const { base } = await startDogd(['--source', 'host', '--data', `${os.tmpdir()}/dogd-host-${Date.now()}`]);
+    await until('host link online', () => online(base));
+    const link = await dogdLink(base);
+    expect(link.origin).toBe('PHYSICAL');
+    expect(link.device?.device).toBe('HOST');
+
+    const sys = new System(memoryStore());
+    expect(await sys.connect(await DogdTransport.prepare(base))).toBe(true);
+    await until('hello', () => sys.device.id === 'HOST');
+    expect(sys.observes('net')).toBe(true);
+    expect(sys.observes('probe')).toBe(true);
+    for (const cap of ['power', 'usb', 'uart', 'i2c']) expect(sys.observes(cap)).toBe(false);
+
+    // Passive: what the system knows, nothing judged that needs a packet.
+    await until('a first net.status', () => sys.net.updatedAt !== null);
+    expect(sys.net.gateway.status).toBe('UNKNOWN');
+    expect(sys.net.dns.status).toBe('UNKNOWN');
+    expect(sys.net.internet).toBe('UNKNOWN');
+    expect(CHECKS).toContain(sys.net.dhcp);
+
+    // Asked: the checks run, and each says one of the HDP checks.
+    expect(sys.watchNet(2, 'localhost', 'localhost')).toBeNull();
+    await until('a checked net.status', () => sys.net.dns.status !== 'UNKNOWN' || sys.net.address === null, 20_000);
+    for (const c of [sys.net.gateway.status, sys.net.dns.status, sys.net.internet]) expect(CHECKS).toContain(c);
+
+    // A probe from this computer: every test answered, then done.
+    const run = sys.probe('localhost', ['DNS', 'TCP']);
+    expect(typeof run).not.toBe('string');
+    await until('probe done', () => sys.probes.some((p) => p.finishedAt !== null), 20_000);
+    const done = sys.probes.find((p) => p.finishedAt !== null)!;
+    expect(done.results.map((r) => r.test)).toEqual(['DNS', 'TCP']);
+    for (const r of done.results) expect(CHECKS).toContain(r.status);
+    // Every frame this computer sent is valid HDP: the decoder refused none.
+    expect(sys.frameErrors).toBe(0);
+    await sys.disconnect();
+  });
+});
