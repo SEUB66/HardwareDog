@@ -211,8 +211,12 @@ pub fn diff<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // sysfs is Linux's: its trees name interfaces "1-2:1.0", a name
+    // Windows refuses. They are built and read on Unix only.
+    #[cfg(unix)]
     use std::fs;
 
+    #[cfg(unix)]
     fn dev(root: &Path, port: &str, files: &[(&str, &str)]) {
         let d = root.join(port);
         fs::create_dir_all(&d).unwrap();
@@ -223,6 +227,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     fn tree() -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(
             "hwdog-usb-{}-{:?}",
@@ -285,6 +290,7 @@ mod tests {
         root
     }
 
+    #[cfg(unix)]
     #[test]
     fn reads_every_device_and_only_devices() {
         let root = tree();
@@ -313,6 +319,7 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     fn follows_the_right_one_and_sees_it_come_and_go() {
         let root = tree();
