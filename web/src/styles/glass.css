@@ -569,6 +569,13 @@ body::before {
   border-color: var(--pink);
   box-shadow: 0 10px 30px #ff4fa324;
 }
+.source-tile.primary-alt {
+  grid-column: 1 / -1;
+  border-color: #00e5ff55;
+}
+.source-tile.primary-alt .source-title {
+  color: var(--cyan);
+}
 .source-tile.demo .icon,
 .source-tile.demo .source-title {
   color: var(--amber);

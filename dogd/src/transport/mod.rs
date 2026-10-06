@@ -188,6 +188,17 @@ async fn open(source: &Source) -> Result<(Reader, Writer), String> {
             let (r, w) = s.into_split();
             Ok((Box::new(r), Box::new(w)))
         }
+        Source::Host => {
+            // The device lives in dogd: one end of an in-memory stream.
+            let (ours, device) = tokio::io::duplex(256 * 1024);
+            tokio::spawn(crate::hostnet::run(
+                crate::hostnet::System,
+                device,
+                crate::hostnet::Watch::off(),
+            ));
+            let (r, w) = tokio::io::split(ours);
+            Ok((Box::new(r), Box::new(w)))
+        }
         Source::Serial(path) => {
             use tokio_serial::SerialPortBuilderExt;
             let port = tokio_serial::new(path, 115_200)

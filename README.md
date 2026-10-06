@@ -89,7 +89,8 @@ landing page (official branding, project laws, light/dark theme),
 `diagnostic.html` opens the local diagnostic interface. It opens NOT CONNECTED
 and measures nothing until you choose a source: the SERIAL CONSOLE of any
 board (no probe needed: an Arduino, an ESP32, a USB-UART adapter;
-docs/CONSOLE.md), a Hardware Dog probe over Web Serial or dogd, a recorded
+docs/CONSOLE.md), this computer's network (`dogd --source host`, no probe
+needed; docs/DOGD.md), a Hardware Dog probe over Web Serial or dogd, a recorded
 `.hdlog`, or DEMO MODE (the simulator, only when you ask for it; a link can
 ask with `?demo` or `?scenario=HD-T004`).
 They use bundled assets and fonts; the landing page has no account,

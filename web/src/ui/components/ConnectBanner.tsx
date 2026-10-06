@@ -7,6 +7,8 @@ interface ConnectBannerProps {
   onConsole: () => void;
   onSerial: () => void;
   onDogd: () => void;
+  /** This computer's network, through dogd --source host. */
+  onNetwork: () => void;
   onOpen: (file: File) => void;
   onDemo: () => void;
   onTour: () => void;
@@ -19,7 +21,7 @@ const WHY =
  * Nothing is connected: say it, and offer every source. The demo is one of
  * them, chosen on purpose, never started behind the operator's back.
  */
-export function ConnectBanner({ onConsole, onSerial, onDogd, onOpen, onDemo, onTour }: ConnectBannerProps) {
+export function ConnectBanner({ onConsole, onSerial, onDogd, onNetwork, onOpen, onDemo, onTour }: ConnectBannerProps) {
   const file = useRef<HTMLInputElement>(null);
   const serialOk = webSerialSupported();
   const tile = (icon: string, title: string, text: string, onClick: () => void, extra = '', disabled = false, why?: string) => (
@@ -37,18 +39,18 @@ export function ConnectBanner({ onConsole, onSerial, onDogd, onOpen, onDemo, onT
         </Hint>
         <h2 class="start-title">Start here</h2>
         <p class="start-text">
-          Hardware Dog reads what your hardware says, puts it on one timeline, and tells you what went wrong. <b>No probe needed to start</b>: plug in
-          a board and read its serial console. A Hardware Dog probe adds power, USB, I2C and network. First time?{' '}
+          Hardware Dog reads what your hardware says, puts it on one timeline, and tells you what went wrong. <b>No probe needed to start</b>: read a
+          board's serial console, or this computer's network. A Hardware Dog probe adds power, USB, I2C, and the network of the board itself. First time?{' '}
           <button class="link" onClick={onTour}>
             take the tour
           </button>
         </p>
         <ol class="start-steps">
           <li>
-            <b>Plug&nbsp;in</b> a board with a USB serial port: Arduino, ESP32, a USB-UART adapter.
+            <b>Plug&nbsp;in</b> a board with a USB serial port (Arduino, ESP32, a USB-UART adapter), or check this computer's network.
           </li>
           <li>
-            <b>Watch</b> its console live: resets, crashes, wrong baud rate.
+            <b>Watch</b> it live: resets, crashes, wrong baud rate; link, DHCP, gateway, DNS, Internet.
           </li>
           <li>
             <b>Read</b> the diagnosis: what happened, how sure, what to check next.
@@ -69,6 +71,15 @@ export function ConnectBanner({ onConsole, onSerial, onDogd, onOpen, onDemo, onT
           ' primary',
           !serialOk,
           serialOk ? 'Chrome lists the serial ports of this computer; pick the board' : 'Web Serial needs Chrome or Edge on a computer, over https or localhost',
+        )}
+        {tile(
+          'NET',
+          'THIS COMPUTER\'S NETWORK',
+          'Link, DHCP, gateway, DNS, Internet, checked from here. No probe: dogd serve --source host.',
+          onNetwork,
+          ' primary-alt',
+          false,
+          'The network as this computer sees it, through dogd on this machine (docs/DOGD.md)',
         )}
         {tile(
           'WEB_SERIAL',
