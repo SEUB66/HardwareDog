@@ -28,7 +28,7 @@ import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Hint } from './components/Hint';
 import { IntegrityTag } from './components/IntegrityTag';
-import { ConnectBanner } from './components/ConnectBanner';
+import { ConnectBanner, ConnectStrip } from './components/ConnectBanner';
 import { SimBanner } from './components/SimBanner';
 import { Tour } from './Tour';
 import { Tag } from './components/Tag';
@@ -216,6 +216,12 @@ export function App({ archive }: { archive: SessionArchive }) {
     const color = system.settings.fieldMode ? '#F4F1E8' : system.settings.theme === 'light' ? '#E6E8EB' : '#0B0D0F';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
   }, [system.settings.theme, system.settings.fieldMode, system.settings.reducedMotion]);
+
+  // A new screen opens at its top: it never looks like the one before.
+  useEffect(() => {
+    const work = document.getElementById('workspace');
+    if (work) work.scrollTop = 0;
+  }, [screen]);
 
   const navigate = (next: Screen, only: Source[] | null = null) => {
     setTraceOnly(next === 'TRACE' ? only : null);
@@ -661,6 +667,16 @@ export function App({ archive }: { archive: SessionArchive }) {
               </li>
             );
           })}
+          {/* The open MORE menu on a phone: its last row carries the mark. */}
+          <li class="nav-plate" aria-hidden="true">
+            <img src={headSrc1x} srcset={`${headSrc1x} 1x, ${headSrc2x} 2x, ${headSrc3x} 3x`} width={34} height={34} alt="" />
+            <span>
+              <b>
+                HARDWARE <i>DOG</i>
+              </b>
+              <small>LOCAL · NO CLOUD · NO TELEMETRY</small>
+            </span>
+          </li>
           <li class="nav-more">
             <button aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
               <Icon name="MORE" />
@@ -681,7 +697,8 @@ export function App({ archive }: { archive: SessionArchive }) {
       </nav>
 
       <main class="work" id="workspace">
-        {session.transport === null && (
+        {session.transport === null && screen !== 'STATUS' && <ConnectStrip onChoose={() => navigate('STATUS')} onDemo={() => void switchTransport('SIMULATOR')} />}
+        {session.transport === null && screen === 'STATUS' && (
           <ConnectBanner
             onConsole={() => void openConsole()}
             onSerial={() => void switchTransport('WEB SERIAL')}

@@ -959,14 +959,168 @@ body::before {
 
 /* A narrow phone: the link state keeps its light, the word goes (its color says it). */
 @media (max-width: 430px) {
-  .head .state .tag {
+  /* The SIMULATED banner under the header says it; the link state keeps its word. */
+  .head .narrow-only {
     display: none;
   }
   .head .state {
-    padding: 9px;
+    padding: 4px 2px;
   }
   .head .theme-btn,
   .head .tour-btn {
     padding: 7px 8px;
+  }
+}
+
+/* ------------------------------------------------------------------ mobile polish */
+
+/* 1. The page itself never moves: only the work area scrolls. On a phone,
+   100% is not the visible height (the browser bars come and go): the
+   shell takes the dynamic viewport height, and the body is pinned. */
+html,
+body {
+  overscroll-behavior: none;
+}
+.shell {
+  height: 100dvh;
+}
+.work {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 760px) {
+  body {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+  }
+}
+
+/* 2. Off STATUS, the start is one line. */
+.connect-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: var(--gap);
+  padding: 8px 12px;
+  border: 1px solid #e4b04a55;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(100deg, #e4b04a14, transparent 70%), var(--panel);
+  font-size: var(--fs-meta);
+  letter-spacing: 0.08em;
+}
+.connect-strip b {
+  color: var(--amber);
+}
+.connect-strip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+}
+.connect-strip .spacer {
+  flex: 1;
+}
+.connect-strip .btn {
+  padding: 5px 10px;
+  font-size: var(--fs-meta);
+}
+.connect-strip .demo-btn {
+  color: var(--amber);
+  border-color: #e4b04a66;
+}
+.sources-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #e4b04a55;
+  background: #e4b04a12;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.sources-note b {
+  color: var(--amber);
+}
+
+/* 3. Header controls: clearly buttons, in color; the link state clearly a state. */
+.head .theme-btn .icon {
+  color: var(--amber);
+}
+.head .tour-btn .icon {
+  color: var(--cyan);
+}
+.head .theme-btn,
+.head .tour-btn {
+  border-color: #ffffff2e;
+}
+:root[data-theme='light'] .head .theme-btn,
+:root[data-theme='light'] .head .tour-btn {
+  border-color: #1d243026;
+}
+.head .state {
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* The tour card is solid: it is read over the page. */
+.tour-card {
+  background: linear-gradient(145deg, #ffffff12, #ffffff04), #17161af7;
+  border-radius: var(--radius);
+  box-shadow: 0 18px 50px #000000a0;
+}
+:root[data-theme='light'] .tour-card {
+  background: #fbfbfc;
+  box-shadow: 0 18px 50px #1d243033;
+}
+
+/* 4. The brand plate fills the last row of the open MORE menu on a phone. */
+.nav li.nav-plate {
+  display: none;
+}
+@media (max-width: 760px) {
+  .nav.more-open li.nav-plate {
+    display: flex;
+    order: 20;
+    grid-column: span 4;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 6px 6px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #ff4fa333;
+    background: linear-gradient(100deg, #00e5ff14, #ff4fa314);
+  }
+  .nav-plate img {
+    filter: drop-shadow(0 0 8px #00e5ff40);
+  }
+  .nav-plate span {
+    display: grid;
+    gap: 2px;
+  }
+  .nav-plate b {
+    font-family: var(--cond);
+    font-size: 15px;
+    letter-spacing: 0.04em;
+  }
+  .nav-plate i {
+    font-style: normal;
+    color: var(--pink);
+  }
+  .nav-plate small {
+    font-size: 8.5px;
+    letter-spacing: 0.14em;
+    color: var(--text-dim);
+  }
+  .connect-strip .dim,
+  .connect-strip .long {
+    display: none;
+  }
+  .connect-strip {
+    flex-wrap: nowrap;
   }
 }
