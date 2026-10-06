@@ -302,6 +302,20 @@
         { "type": "object", "required": ["cmd"], "properties": { "cmd": { "const": "usb.enumerate" } }, "additionalProperties": false },
         {
           "type": "object",
+          "required": ["cmd"],
+          "properties": {
+            "cmd": { "const": "usb.follow" },
+            "vid": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "pid": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "serial": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "port": { "type": "string", "minLength": 1, "maxLength": 128 }
+          },
+          "dependentRequired": { "vid": ["pid"], "pid": ["vid"] },
+          "additionalProperties": false,
+          "description": "A device that watches several USB devices (a computer, dogd --source host) follows this one as its target: usb.attach / usb.detach for it only. Without vid and pid: follow none. Devices with one USB port ignore it (log)."
+        },
+        {
+          "type": "object",
           "required": ["cmd", "baud"],
           "properties": { "cmd": { "const": "uart.config" }, "baud": { "type": "integer", "minimum": 300, "maximum": 4000000 } },
           "additionalProperties": false

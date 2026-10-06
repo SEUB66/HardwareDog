@@ -176,6 +176,7 @@ function commandCapability(cmd: HostCommand): Capability | null {
     case 'time':
       return null;
     case 'usb.enumerate':
+    case 'usb.follow':
       return 'usb';
     case 'uart.config':
     case 'uart.tx':
@@ -225,6 +226,10 @@ export class System {
   storageOk: boolean;
   lastError: LinkError | null = null;
   frameErrors = 0;
+  /** Whether any supply sample arrived in this session (USB rules say what they cannot know). */
+  private powerSeen = false;
+  /** The USB device a host source follows as its target (usb.follow). Null: none. */
+  usbFollow: { vid: number; pid: number; serial: string | null; port: string | null } | null = null;
   /** Waiting for the first hello of a live link. */
   private helloTimer: ReturnType<typeof setTimeout> | null = null;
   /** Structured record the diagnostic engine reads. Survives trace clears. */
@@ -878,6 +883,7 @@ export class System {
   }
 
   private onPower(t: number, v: number, i: number): void {
+    this.powerSeen = true;
     const p = this.power;
     const s = this.settings;
     p.voltage = v;
@@ -1012,6 +1018,7 @@ export class System {
       dropSeq: correlated ? (this.facts.drops.at(-1)?.seq ?? null) : null,
       dropMin: correlated ? this.power.lastDropVoltage : null,
       currentAfter: null,
+      ...(this.powerSeen ? {} : { supplyUnseen: true as const }),
       ...this.stamp(),
       ...(rel === 'UNKNOWN' ? { undetermined: Number.isFinite(m) ? m : null } : {}),
     });
@@ -1266,6 +1273,29 @@ export class System {
   }
 
   /** Returns an error message, or null when the command was sent. */
+  /**
+   * Follow one USB device of the computer as the target (a host source):
+   * its disconnects go to the USB rules. Null stops. Not a disconnect.
+   */
+  followUsb(target: { vid: number; pid: number; serial?: string | null; port?: string | null } | null): string | null {
+    const err = this.requireLink('usb follow', 'usb');
+    if (err) return err;
+    if (target && (!Number.isInteger(target.vid) || !Number.isInteger(target.pid) || target.vid < 0 || target.pid < 0 || target.vid > 0xffff || target.pid > 0xffff)) {
+      return 'usb follow: VID and PID are 0000 to FFFF';
+    }
+    this.usbFollow = target ? { vid: target.vid, pid: target.pid, serial: target.serial ?? null, port: target.port ?? null } : null;
+    // A new target starts clean: the previous one's state is not its.
+    this.usb = emptyUsb();
+    this.send(
+      target
+        ? { cmd: 'usb.follow', vid: target.vid, pid: target.pid, ...(target.serial ? { serial: target.serial } : {}), ...(target.port ? { port: target.port } : {}) }
+        : { cmd: 'usb.follow' },
+    );
+    this.log(this.now(), 'USER', 'INFO', target ? `usb follow ${hex(target.vid)}:${hex(target.pid)}` : 'usb follow off');
+    this.changed();
+    return null;
+  }
+
   enumerateUsb(): string | null {
     const err = this.requireLink('usb enumerate', 'usb');
     if (err) return err;

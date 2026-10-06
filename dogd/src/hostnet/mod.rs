@@ -15,6 +15,7 @@
 
 pub mod parse;
 mod system;
+pub mod usb;
 
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
@@ -82,6 +83,8 @@ pub trait Net: Send + Sync + 'static {
         &self,
         host: &str,
     ) -> impl std::future::Future<Output = Result<Option<String>, ()>> + Send;
+    /// The USB devices plugged in now. None: this system is not read.
+    fn usb(&self) -> Option<Vec<usb::UsbDevice>>;
 }
 
 /// net.status from what was observed and checked. Pure: tested as is.
@@ -140,11 +143,188 @@ pub fn net_status(t: u64, obs: &Observation, checks: &Checks, ran: bool) -> Valu
 }
 
 /// The hello of this device.
-pub fn hello(t: u64) -> Value {
+pub fn hello(t: u64, usb: bool) -> Value {
+    let caps: &[&str] = if usb {
+        &["net", "probe", "usb"]
+    } else {
+        &["net", "probe"]
+    };
     json!({
         "type": "hello", "t": t, "proto": 1, "device": HOST_DEVICE, "rev": "HOST",
-        "fw": concat!("dogd-", env!("CARGO_PKG_VERSION")), "caps": ["net", "probe"],
+        "fw": concat!("dogd-", env!("CARGO_PKG_VERSION")), "caps": caps,
     })
+}
+
+/// How often the USB list is read: an unplugged device shows within this.
+const USB_EVERY_MS: u64 = 1_000;
+
+/// The USB side of the host device: every device on the timeline as a log
+/// line, and the one followed as the target (usb.attach / usb.detach), so
+/// the USB rules judge it like a probe's target.
+#[derive(Default)]
+pub struct UsbWatch {
+    seen: Option<Vec<usb::UsbDevice>>,
+    follow: Option<usb::Follow>,
+    present: bool,
+}
+
+/// usb.attach for a device, if its descriptor says all HDP needs.
+fn attach(t: u64, d: &usb::UsbDevice) -> Value {
+    match (d.speed, d.power) {
+        (Some(speed), Some(power)) => json!({
+            "type": "usb.attach", "t": t, "speed": speed, "vid": d.vid, "pid": d.pid,
+            "cls": d.cls, "power": power, "manufacturer": d.manufacturer,
+            "product": d.product, "serial": d.serial,
+        }),
+        _ => log(
+            t,
+            "warn",
+            format!(
+                "usb {} {}: descriptor without speed or power, not followed",
+                d.id(),
+                d.name()
+            ),
+        ),
+    }
+}
+
+fn describe(d: &usb::UsbDevice) -> String {
+    let speed = d.speed.unwrap_or("?");
+    let ma = d
+        .max_ma
+        .map(|m| format!(", up to {m} mA"))
+        .unwrap_or_default();
+    format!(
+        "{} {} ({}, {} speed{}, port {})",
+        d.id(),
+        d.name(),
+        d.cls,
+        speed,
+        ma,
+        d.port
+    )
+}
+
+impl UsbWatch {
+    /// One read of the list: what changed, as frames.
+    pub fn tick(&mut self, t: u64, now: Vec<usb::UsbDevice>) -> Vec<Value> {
+        let mut out = Vec::new();
+        match &self.seen {
+            None => {
+                let n = now.iter().filter(|d| !d.is_hub()).count();
+                out.push(log(
+                    t,
+                    "info",
+                    format!("usb: {n} device(s) on this computer (hubs aside)"),
+                ));
+            }
+            Some(before) => {
+                let (came, went) = usb::diff(before, &now);
+                for d in went.iter().filter(|d| !d.is_hub()) {
+                    out.push(log(t, "info", format!("usb detached: {}", describe(d))));
+                }
+                for d in came.iter().filter(|d| !d.is_hub()) {
+                    out.push(log(t, "info", format!("usb attached: {}", describe(d))));
+                }
+            }
+        }
+        out.extend(self.follow_state(t, &now));
+        self.seen = Some(now);
+        out
+    }
+
+    /// The followed device came or went.
+    fn follow_state(&mut self, t: u64, now: &[usb::UsbDevice]) -> Vec<Value> {
+        let Some(f) = &self.follow else { return vec![] };
+        let found = now.iter().find(|d| f.matches(d));
+        match (self.present, found) {
+            (false, Some(d)) => {
+                self.present = true;
+                vec![attach(t, d)]
+            }
+            (true, None) => {
+                self.present = false;
+                vec![json!({ "type": "usb.detach", "t": t })]
+            }
+            _ => vec![],
+        }
+    }
+
+    /// usb.follow: a device to follow, or none.
+    pub fn follow(&mut self, t: u64, f: Option<usb::Follow>) -> Vec<Value> {
+        self.present = false;
+        self.follow = f;
+        let Some(f) = &self.follow else {
+            return vec![log(t, "info", "usb follow: none")];
+        };
+        let now = self.seen.clone().unwrap_or_default();
+        let mut out = vec![log(
+            t,
+            "info",
+            format!(
+                "usb follow: {:04X}:{:04X}{}",
+                f.vid,
+                f.pid,
+                f.serial
+                    .as_ref()
+                    .map(|s| format!(" serial {s}"))
+                    .unwrap_or_default()
+            ),
+        )];
+        let found = self.follow_state(t, &now);
+        if found.is_empty() {
+            out.push(log(t, "info", "usb follow: not plugged in, waiting for it"));
+        }
+        out.extend(found);
+        out
+    }
+
+    /// usb.enumerate: the followed device's descriptor again, if present.
+    pub fn enumerate(&self, t: u64) -> Vec<Value> {
+        let now = self.seen.clone().unwrap_or_default();
+        match self
+            .follow
+            .as_ref()
+            .and_then(|f| now.iter().find(|d| f.matches(d)))
+        {
+            Some(d) => vec![attach(t, d)],
+            None => vec![log(
+                t,
+                "info",
+                "usb enumerate: no followed device plugged in",
+            )],
+        }
+    }
+}
+
+fn parse_follow(cmd: &Value) -> Result<Option<usb::Follow>, String> {
+    let id = |k: &str| -> Result<Option<u16>, String> {
+        match cmd.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => v
+                .as_u64()
+                .filter(|n| *n <= 0xffff)
+                .map(|n| Some(n as u16))
+                .ok_or(format!("{k}: 0 to 65535")),
+        }
+    };
+    let text = |k: &str| -> Result<Option<String>, String> {
+        match cmd.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(s)) if !s.is_empty() && s.len() <= 128 => Ok(Some(s.clone())),
+            Some(_) => Err(format!("{k}: text, 1 to 128 characters")),
+        }
+    };
+    match (id("vid")?, id("pid")?) {
+        (None, None) => Ok(None),
+        (Some(vid), Some(pid)) => Ok(Some(usb::Follow {
+            vid,
+            pid,
+            serial: text("serial")?,
+            port: text("port")?,
+        })),
+        _ => Err("vid and pid together, or neither (stop)".into()),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -284,6 +464,9 @@ pub async fn run<N: Net>(net: N, stream: DuplexStream, mut watch: Watch) {
     // The first round at once: nobody should wait 10 s to see the network.
     let mut next = Instant::now();
     let mut probes: Vec<(String, String, Vec<String>)> = Vec::new();
+    let has_usb = net.usb().is_some();
+    let mut usb = UsbWatch::default();
+    let mut next_usb = Instant::now();
     loop {
         // A probe asked for runs before the next watch round, one at a time.
         if let Some((id, target, tests)) = (!probes.is_empty()).then(|| probes.remove(0)) {
@@ -294,7 +477,8 @@ pub async fn run<N: Net>(net: N, stream: DuplexStream, mut watch: Watch) {
             }
             continue;
         }
-        let wait = next.saturating_duration_since(Instant::now());
+        let due = if has_usb { next.min(next_usb) } else { next };
+        let wait = due.saturating_duration_since(Instant::now());
         tokio::select! {
             line = lines.next_line() => {
                 let Ok(Some(line)) = line else { return };
@@ -303,7 +487,7 @@ pub async fn run<N: Net>(net: N, stream: DuplexStream, mut watch: Watch) {
                     Ok(cmd) => match cmd.get("cmd").and_then(Value::as_str) {
                         Some("hello") => {
                             next = Instant::now();
-                            vec![hello(t())]
+                            vec![hello(t(), has_usb)]
                         }
                         Some("time") => match cmd.get("id").and_then(Value::as_u64) {
                             Some(id) if id <= u64::from(u32::MAX) => vec![json!({ "type": "time", "t": t(), "id": id })],
@@ -333,7 +517,16 @@ pub async fn run<N: Net>(net: N, stream: DuplexStream, mut watch: Watch) {
                             }
                             Err(e) => vec![log(t(), "warn", format!("probe refused: {e}"))],
                         },
-                        Some(other) => vec![log(t(), "warn", format!("{other}: this computer does not observe that (caps: net, probe)"))],
+                        Some("usb.follow") if has_usb => match parse_follow(&cmd) {
+                            Ok(f) => usb.follow(t(), f),
+                            Err(e) => vec![log(t(), "warn", format!("usb.follow refused: {e}"))],
+                        },
+                        Some("usb.enumerate") if has_usb => usb.enumerate(t()),
+                        Some(other) => vec![log(
+                            t(),
+                            "warn",
+                            format!("{other}: this computer does not observe that (caps: {})", if has_usb { "net, probe, usb" } else { "net, probe" }),
+                        )],
                         None => vec![log(t(), "warn", "command refused: no cmd")],
                     },
                 };
@@ -344,6 +537,17 @@ pub async fn run<N: Net>(net: N, stream: DuplexStream, mut watch: Watch) {
                 }
             }
             _ = tokio::time::sleep(wait) => {
+                if has_usb && Instant::now() >= next_usb {
+                    next_usb = Instant::now() + Duration::from_millis(USB_EVERY_MS);
+                    for f in usb.tick(t(), net.usb().unwrap_or_default()) {
+                        if send(&mut w, &f).await.is_err() {
+                            return;
+                        }
+                    }
+                    if Instant::now() < next {
+                        continue;
+                    }
+                }
                 let ran = watch.every_ms > 0;
                 let (obs, checks) = if ran { round(&net, &watch).await } else { (net.observe().await, Checks::default()) };
                 if send(&mut w, &net_status(t(), &obs, &checks, ran)).await.is_err() {
