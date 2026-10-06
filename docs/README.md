@@ -17,6 +17,7 @@ WHERE WE ARE   ENGINEERING_PLAN.md     the levels, LVL 40 to MAX, and their gate
 ```text
 NO PROBE       CONSOLE.md              any board's serial console, read by the browser
                DOGD.md                 this computer, its network and USB: dogd --source host
+INSTALL        INSTALL.md              dogd on Kali, Debian, Ubuntu: one package
 THE DEVICE     FIRMWARE.md             build, flash, update, recover, bring-up
 THE DAEMON     DOGD.md                 dogd: the device link and the session store
 SEVERAL DOGS   PACK.md                 one timeline, one clock for several Dogs
@@ -47,7 +48,7 @@ NAME, LOGO     ../TRADEMARK.md         what you may do with the name and logo
 
 Links: [VISION](VISION.md) · [LAWS](LAWS.md) ·
 [ENGINEERING PLAN](ENGINEERING_PLAN.md) · [RELEASE](RELEASE.md) ·
-[CONSOLE](CONSOLE.md) · [FIRMWARE](FIRMWARE.md) · [DOGD](DOGD.md) · [PACK](PACK.md) ·
+[CONSOLE](CONSOLE.md) · [INSTALL](INSTALL.md) · [FIRMWARE](FIRMWARE.md) · [DOGD](DOGD.md) · [PACK](PACK.md) ·
 [DIAGNOSTICS](DIAGNOSTICS.md) · [FAULT LAB](FAULT_LAB.md) ·
 [IDENTITY](IDENTITY.md) · [LIBRARY](LIBRARY.md) · [PROTOCOL](PROTOCOL.md) ·
 [ARCHITECTURE](ARCHITECTURE.md) · [SECURITY](SECURITY.md) ·

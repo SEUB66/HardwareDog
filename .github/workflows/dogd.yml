@@ -8,6 +8,7 @@ on:
       - 'dogd/**'
       - 'web/**'
       - 'cases/**'
+      - 'packaging/**'
       - '.github/workflows/dogd.yml'
 
 permissions:
@@ -38,6 +39,17 @@ jobs:
           CARGO_TARGET_DIR=/tmp/r2 cargo build --release --locked
           cmp /tmp/r1/release/dogd /tmp/r2/release/dogd
           sha256sum /tmp/r1/release/dogd
+      # The package a release publishes: built, installed, started, removed.
+      - name: the .deb installs and starts
+        run: |
+          packaging/deb/build-deb.sh /tmp/r1/release/dogd amd64
+          sudo apt-get install -y ./dist/hwdog-dogd_*_amd64.deb
+          dogd serve --source host --listen 127.0.0.1:4799 --data "$RUNNER_TEMP/d" &
+          pid=$!
+          for i in $(seq 1 50); do curl -fs http://127.0.0.1:4799/v1/health && break; sleep 0.2; done
+          curl -fs http://127.0.0.1:4799/v1/health | grep -q '"status":"ok"'
+          kill "$pid"
+          sudo apt-get remove -y hwdog-dogd
       - uses: actions/setup-node@v4
         with:
           node-version: 22
