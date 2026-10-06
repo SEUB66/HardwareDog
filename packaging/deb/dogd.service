@@ -1,0 +1,15 @@
+# dogd for one user, started with the session:
+#   systemctl --user enable --now dogd
+# It reads this computer's network and USB (--source host), listens on
+# 127.0.0.1 only. Edit with: systemctl --user edit dogd
+[Unit]
+Description=Hardware Dog local daemon (this computer: network and USB)
+Documentation=file:///usr/share/doc/hwdog-dogd/INSTALL.md
+
+[Service]
+ExecStart=/usr/bin/dogd serve --source host
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
