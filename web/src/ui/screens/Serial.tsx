@@ -5,7 +5,7 @@ import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
 
-const BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
+const BAUD_RATES = [9600, 19200, 38400, 57600, 74880, 115200, 230400, 460800, 921600];
 
 /** A real serial monitor, minimal controls (spec 17). */
 export function Serial({ system }: { system: System }) {

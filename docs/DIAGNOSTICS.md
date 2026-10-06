@@ -78,8 +78,9 @@ USB_NOT_ENUMERATED              target draws >= 50 mA for >= 3 s with no USB    
                                 device                                             MEDIUM otherwise
 TARGET_RESET_LOOP               >= 2 target resets that are not power-on or        HIGH >= 3 / MEDIUM 2
                                 brownout (ESP-IDF "rst:0x.. (REASON)")
-SERIAL_CONFIGURATION_MISMATCH   >= 3 framing errors at the current baud, on        HIGH  >= 5 errors and >= 80 %
-                                >= 30 % of lines, last one < 15 s ago              MEDIUM otherwise
+SERIAL_CONFIGURATION_MISMATCH   >= 3 framing errors or garbled lines (CONSOLE.md)  HIGH  >= 5 errors and >= 80 %
+                                at the current baud, on >= 30 % of lines,          MEDIUM otherwise
+                                last one < 15 s ago
 NO_LINK / DHCP_FAILURE /        the LOWEST failing layer of the latest report      HIGH >= 3 consecutive reports
 GATEWAY_UNREACHABLE /           (link > dhcp > gateway > internet > dns)           MEDIUM 2 / LOW 1
 UPSTREAM_FAILURE / DNS_FAILURE
