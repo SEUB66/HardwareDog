@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{DefaultBodyLimit, Path, Request, State};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Path, Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -109,7 +109,52 @@ pub fn origin_allowed(origin: &str, cfg: &Config) -> bool {
     cfg.allow_origins.iter().any(|a| a == o)
 }
 
+/// The token a request shows: `Authorization: Bearer <t>`, or `?token=<t>`
+/// (a browser cannot set headers on a WebSocket).
+fn shown_token(req: &Request) -> Option<String> {
+    if let Some(t) = req
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+    {
+        return Some(t.trim().to_string());
+    }
+    req.uri().query().and_then(|q| {
+        q.split('&')
+            .find_map(|kv| kv.strip_prefix("token="))
+            .map(str::to_string)
+    })
+}
+
+/// Compared in constant time: how much of a guess matched never shows.
+fn same_token(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |d, (x, y)| d | (x ^ y)) == 0
+}
+
+/// A peer on this machine. Unknown is not local.
+fn from_this_machine(req: &Request) -> bool {
+    req.extensions()
+        .get::<ConnectInfo<std::net::SocketAddr>>()
+        .is_some_and(|c| c.0.ip().is_loopback())
+}
+
 async fn guard(State(s): State<AppState>, req: Request, next: Next) -> Response {
+    // On the network (--listen-lan), another machine shows the token printed at start:
+    // without it, anyone on the LAN could read sessions and drive the device.
+    if s.cfg.lan && !from_this_machine(&req) {
+        let ok = match (&s.cfg.lan_token, shown_token(&req)) {
+            (Some(want), Some(got)) => same_token(want, &got),
+            _ => false,
+        };
+        if !ok {
+            return (
+                StatusCode::UNAUTHORIZED,
+                "dogd on the network: show the token it printed at start (Authorization: Bearer, or ?token=)",
+            )
+                .into_response();
+        }
+    }
     let headers = req.headers();
     let host = headers
         .get(header::HOST)
@@ -158,7 +203,7 @@ async fn guard(State(s): State<AppState>, req: Request, next: Next) -> Response 
             );
             h.insert(
                 header::ACCESS_CONTROL_ALLOW_HEADERS,
-                HeaderValue::from_static("content-type"),
+                HeaderValue::from_static("content-type, authorization"),
             );
             if private_network {
                 // An allowed page served from the network may reach this machine's dogd.
@@ -412,6 +457,10 @@ mod http_tests {
     use tower::ServiceExt;
 
     fn app(args: &[&str]) -> Router {
+        app_with(args, None)
+    }
+
+    fn app_with(args: &[&str], lan_token: Option<&str>) -> Router {
         let dir = std::env::temp_dir().join(format!(
             "dogd-api-{}-{:?}",
             std::process::id(),
@@ -419,7 +468,8 @@ mod http_tests {
         ));
         let mut a: Vec<String> = args.iter().map(|s| s.to_string()).collect();
         a.extend(["--data".into(), dir.to_string_lossy().into()]);
-        let cfg = parse_serve(&a).unwrap();
+        let mut cfg = parse_serve(&a).unwrap();
+        cfg.lan_token = lan_token.map(str::to_string);
         let store = Arc::new(Store::open(&cfg.data_dir).unwrap());
         let links: Vec<Arc<Link>> = if cfg.links.is_empty() {
             vec![Link::new(
@@ -450,7 +500,21 @@ mod http_tests {
         path: &str,
         headers: &[(&str, &str)],
     ) -> (StatusCode, HeaderMapLite) {
-        let mut req = HttpRequest::builder().method(method).uri(path);
+        call_from(app, "127.0.0.1:50000", method, path, headers).await
+    }
+
+    /// A request from a peer at `peer` (this machine, or another one on the LAN).
+    async fn call_from(
+        app: Router,
+        peer: &str,
+        method: &str,
+        path: &str,
+        headers: &[(&str, &str)],
+    ) -> (StatusCode, HeaderMapLite) {
+        let mut req = HttpRequest::builder()
+            .method(method)
+            .uri(path)
+            .extension(ConnectInfo(peer.parse::<std::net::SocketAddr>().unwrap()));
         for (k, v) in headers {
             req = req.header(*k, *v);
         }
@@ -629,6 +693,91 @@ mod http_tests {
         assert!(upgrade(two(), "/v1/hdp/D2").await.contains("101"));
         assert!(upgrade(two(), "/v1/hdp").await.contains("101")); // D1, as before packs
         assert!(upgrade(two(), "/v1/hdp/D3").await.contains("404"));
+    }
+
+    #[tokio::test]
+    async fn on_the_network_another_machine_shows_the_token() {
+        let lan = || app_with(&["--listen-lan"], Some("0123456789abcdef0123456789abcdef"));
+        let host = ("host", "192.168.1.20:4782");
+        let peer = "192.168.1.77:50123";
+        // without it, nothing: no session, no device
+        for path in ["/v1/sessions", "/v1/link", "/v1/hdp"] {
+            let (s, _) = call_from(lan(), peer, "GET", path, &[host]).await;
+            assert_eq!(s, StatusCode::UNAUTHORIZED, "{path}");
+        }
+        let (s, _) = call_from(lan(), peer, "PUT", "/v1/devices/HW-X/alias", &[host]).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+        // a wrong one, or one of another length
+        for bad in [
+            "Bearer 0123456789abcdef0123456789abcdee",
+            "Bearer 0123",
+            "Basic xyz",
+        ] {
+            let (s, _) = call_from(
+                lan(),
+                peer,
+                "GET",
+                "/v1/sessions",
+                &[host, ("authorization", bad)],
+            )
+            .await;
+            assert_eq!(s, StatusCode::UNAUTHORIZED, "{bad}");
+        }
+        // the token, as a header or in the query (a browser WebSocket cannot set headers)
+        let (s, _) = call_from(
+            lan(),
+            peer,
+            "GET",
+            "/v1/sessions",
+            &[
+                host,
+                ("authorization", "Bearer 0123456789abcdef0123456789abcdef"),
+            ],
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK);
+        let (s, _) = call_from(
+            lan(),
+            peer,
+            "GET",
+            "/v1/sessions?token=0123456789abcdef0123456789abcdef",
+            &[host],
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK);
+        // a browser on another machine still needs an allowed origin too
+        let (s, _) = call_from(
+            lan(),
+            peer,
+            "GET",
+            "/v1/sessions?token=0123456789abcdef0123456789abcdef",
+            &[host, ("origin", "https://evil.example")],
+        )
+        .await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+        // this machine needs no token, as before
+        let (s, _) = call_from(lan(), "127.0.0.1:50000", "GET", "/v1/sessions", &[host]).await;
+        assert_eq!(s, StatusCode::OK);
+        // a peer that cannot be told apart is not this machine
+        let res = lan()
+            .oneshot(
+                HttpRequest::get("/v1/sessions")
+                    .header("host", "192.168.1.20:4782")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn tokens_are_new_each_time_and_long_enough() {
+        let a = crate::config::new_token().unwrap();
+        let b = crate::config::new_token().unwrap();
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
     }
 
     #[tokio::test]
