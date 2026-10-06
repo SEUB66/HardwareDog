@@ -1,5 +1,5 @@
 import { clock, duration, hex, milliamps, ms, volts } from '../../core/format';
-import type { System } from '../../core/system';
+import { NO_HARDWARE_DOG, type System } from '../../core/system';
 import { Empty } from '../components/Empty';
 import { ErrorBlock } from '../components/ErrorBlock';
 import { KV } from '../components/KV';
@@ -23,7 +23,7 @@ export function Status({ system }: { system: System }) {
       <h1 class="screen-title">
         STATUS <span class="sub">what is happening right now</span>
       </h1>
-      {system.lastError && system.link !== 'ONLINE' && <ErrorBlock error={system.lastError} />}
+      {system.lastError && (system.link !== 'ONLINE' || system.lastError.what === NO_HARDWARE_DOG) && <ErrorBlock error={system.lastError} />}
       {/* A pack: every Dog in place of the one device. */}
       {system.pack && <PackPanel system={system} />}
       <div class="grid even">
@@ -39,6 +39,13 @@ export function Status({ system }: { system: System }) {
                 'STATE',
                 system.replayOf ? (
                   <Tag status="UNKNOWN" label={system.link === 'LOST' ? 'RECORDED, LINK LOST' : 'RECORDED'} />
+                ) : system.link === 'ONLINE' && device.id === '--' ? (
+                  // The port is open; a Hardware Dog has not said who it is.
+                  system.lastError?.what === NO_HARDWARE_DOG ? (
+                    <Tag status="FAIL" label="NOT A HARDWARE DOG" />
+                  ) : (
+                    <Tag status="UNKNOWN" label="WAITING FOR HELLO" />
+                  )
                 ) : (
                   <Tag status={system.link === 'ONLINE' ? 'PASS' : system.link === 'LOST' ? 'FAIL' : 'UNKNOWN'} label={system.link} />
                 ),

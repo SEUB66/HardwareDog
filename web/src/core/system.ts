@@ -97,6 +97,10 @@ export const RULES = [
 ] as const;
 
 const POWER_WINDOW_MS = 15_000;
+/** A Hardware Dog says hello as soon as its port opens: past this, the port is something else. */
+export const HELLO_WAIT_MS = 3_000;
+/** Shown on STATUS while the link is up: the port answered, but not as a Hardware Dog. */
+export const NO_HARDWARE_DOG = 'NO HARDWARE DOG ON THIS PORT';
 const HYSTERESIS_V = 0.05;
 const SERIAL_LINES = 500;
 
@@ -221,6 +225,8 @@ export class System {
   storageOk: boolean;
   lastError: LinkError | null = null;
   frameErrors = 0;
+  /** Waiting for the first hello of a live link. */
+  private helloTimer: ReturnType<typeof setTimeout> | null = null;
   /** Structured record the diagnostic engine reads. Survives trace clears. */
   facts: SessionFacts = emptyFacts();
   /** Current output of the diagnostic engine. */
@@ -445,6 +451,7 @@ export class System {
       this.transportLabel = transport.label;
       this.link = 'ONLINE';
       this.log(this.now(), 'SYS', 'PASS', `link up: ${transport.kind}`, transport.label);
+      if (!this.replayOf) this.waitForHello(transport, this.frameErrors);
       this.changed();
       return true;
     } catch (e) {
@@ -458,7 +465,44 @@ export class System {
     }
   }
 
+  /**
+   * A port that opens is not yet a Hardware Dog: any USB serial device
+   * opens. Without a hello, say so, and what came instead, rather than
+   * showing an empty screen as if all were well.
+   */
+  private waitForHello(transport: Transport, errorsBefore: number): void {
+    this.stopWaitingForHello();
+    this.helloTimer = setTimeout(() => {
+      this.helloTimer = null;
+      if (this.transport !== transport || this.link !== 'ONLINE') return;
+      const silent = this.pack ? this.dogs.filter((d) => d.device === null).map((d) => d.id) : this.device.id === '--' ? [''] : [];
+      if (silent.length === 0) return;
+      const refused = this.frameErrors - errorsBefore;
+      const secs = HELLO_WAIT_MS / 1000;
+      const which = this.pack ? `${silent.join(' ')}: ` : '';
+      const detail =
+        refused > 0
+          ? `${which}the port talks, but not HDP (${refused} line${refused === 1 ? '' : 's'} refused, see TRACE). It is another serial device, or a board without the Hardware Dog firmware (docs/FIRMWARE.md).`
+          : `${which}the port opened and stayed silent for ${secs} s. A Hardware Dog says hello at once: this is another serial device, a board without the Hardware Dog firmware, or a board in download mode (press RESET).`;
+      this.lastError = { what: NO_HARDWARE_DOG, where: this.transportLabel || transport.kind, when: this.now(), detail };
+      this.log(this.now(), 'SYS', 'FAIL', 'no Hardware Dog answered', detail);
+      this.changed();
+    }, HELLO_WAIT_MS);
+  }
+
+  private stopWaitingForHello(): void {
+    if (this.helloTimer !== null) clearTimeout(this.helloTimer);
+    this.helloTimer = null;
+  }
+
+  /** A hello arrived: a late one clears the warning it had caused. */
+  private heardHello(): void {
+    if (this.pack ? this.dogs.every((d) => d.device !== null) : true) this.stopWaitingForHello();
+    if (this.lastError?.what === NO_HARDWARE_DOG && (!this.pack || this.dogs.every((d) => d.device !== null))) this.lastError = null;
+  }
+
   async disconnect(): Promise<void> {
+    this.stopWaitingForHello();
     if (!this.transport) return;
     const t = this.transport;
     this.transport = null;
@@ -505,6 +549,7 @@ export class System {
 
   /** A recording has been fully played: final diagnosis, link closed. */
   private onReplayEnded(): void {
+    this.stopWaitingForHello();
     this.flushPack();
     const t = this.now();
     this.transport = null;
@@ -515,6 +560,7 @@ export class System {
   }
 
   private onLost(reason: string): void {
+    this.stopWaitingForHello();
     this.flushPack();
     const t = this.now();
     this.transport = null;
@@ -588,6 +634,7 @@ export class System {
     state.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: t - f.t, caps: f.caps ?? null };
     state.observes = kept;
     state.lost = false;
+    this.heardHello();
     // The first Dog stands for the pack where one device is expected.
     if (this.dogs[0]!.id === dog || this.device.id === '--') this.device = { ...state.device, caps: [...this.owners.keys()] };
     else this.device = { ...this.device, caps: [...this.owners.keys()] };
@@ -689,6 +736,7 @@ export class System {
       this.device = { id: f.device, rev: f.rev, firmware: f.fw, bootedAt: this.now() - f.t, caps: f.caps ?? null };
       // A (re)booted device declares its meter again; until then it is unknown.
       this.meter = null;
+      this.heardHello();
       this.log(this.hostTime(f.t), 'SYS', 'INFO', `device ${f.device} rev ${f.rev}`, `fw ${f.fw} / proto ${f.proto}`);
       this.changed();
       return;
