@@ -335,7 +335,10 @@ describe.runIf(BIN)('dogd --source host (real binary, this computer)', { timeout
     await until('hello', () => sys.device.id === 'HOST');
     expect(sys.observes('net')).toBe(true);
     expect(sys.observes('probe')).toBe(true);
-    for (const cap of ['power', 'usb', 'uart', 'i2c']) expect(sys.observes(cap)).toBe(false);
+    for (const cap of ['power', 'uart', 'i2c']) expect(sys.observes(cap)).toBe(false);
+    // USB: declared exactly when this machine's USB list is read (no bus, as in a container: not declared).
+    const usb = (await (await fetch(`${base}/v1/usb`)).json()) as { supported: boolean };
+    expect(sys.observes('usb')).toBe(usb.supported);
 
     // Passive: what the system knows, nothing judged that needs a packet.
     await until('a first net.status', () => sys.net.updatedAt !== null);
