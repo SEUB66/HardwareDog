@@ -4,6 +4,7 @@ import { Hint } from './Hint';
 import { Icon } from './Icon';
 
 interface ConnectBannerProps {
+  onConsole: () => void;
   onSerial: () => void;
   onDogd: () => void;
   onOpen: (file: File) => void;
@@ -12,13 +13,13 @@ interface ConnectBannerProps {
 }
 
 const WHY =
-  'Hardware Dog reads the Hardware Dogs you connect (Web Serial, or dogd on this machine): one, or several as a pack. It never lists or measures the USB ports of this computer. Nothing runs until you choose a source: no data is invented while you look around.';
+  'Hardware Dog reads the serial console of a board, or the Hardware Dog probes you connect (Web Serial, or dogd on this machine). It never lists or measures the USB ports of this computer. Nothing runs until you choose a source: no data is invented while you look around.';
 
 /**
  * Nothing is connected: say it, and offer every source. The demo is one of
  * them, chosen on purpose, never started behind the operator's back.
  */
-export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo, onTour }: ConnectBannerProps) {
+export function ConnectBanner({ onConsole, onSerial, onDogd, onOpen, onDemo, onTour }: ConnectBannerProps) {
   const file = useRef<HTMLInputElement>(null);
   const serialOk = webSerialSupported();
   const tile = (icon: string, title: string, text: string, onClick: () => void, extra = '', disabled = false, why?: string) => (
@@ -36,18 +37,18 @@ export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo, onTour }: Conn
         </Hint>
         <h2 class="start-title">Start here</h2>
         <p class="start-text">
-          Hardware Dog watches a board through a Hardware Dog probe, puts everything it sees on one timeline, and tells you what went wrong. Nothing is
-          measured until you choose a source. First time?{' '}
+          Hardware Dog reads what your hardware says, puts it on one timeline, and tells you what went wrong. <b>No probe needed to start</b>: plug in
+          a board and read its serial console. A Hardware Dog probe adds power, USB, I2C and network. First time?{' '}
           <button class="link" onClick={onTour}>
             take the tour
           </button>
         </p>
         <ol class="start-steps">
           <li>
-            <b>Connect</b> a Hardware Dog: by USB, or through dogd.
+            <b>Plug&nbsp;in</b> a board with a USB serial port: Arduino, ESP32, a USB-UART adapter.
           </li>
           <li>
-            <b>Watch</b> power, USB, serial, I2C and network, live.
+            <b>Watch</b> its console live: resets, crashes, wrong baud rate.
           </li>
           <li>
             <b>Read</b> the diagnosis: what happened, how sure, what to check next.
@@ -56,13 +57,22 @@ export function ConnectBanner({ onSerial, onDogd, onOpen, onDemo, onTour }: Conn
       </div>
       <div class="sources">
         {tile(
+          'SERIAL',
+          'SERIAL CONSOLE',
+          'Any board on a USB serial port: Arduino, ESP32, a router console. No probe needed.',
+          onConsole,
+          ' primary',
+          !serialOk,
+          serialOk ? 'Chrome lists the serial ports of this computer; pick the board' : 'Web Serial needs Chrome or Edge on a computer, over https or localhost',
+        )}
+        {tile(
           'WEB_SERIAL',
-          'CONNECT WEB SERIAL',
-          'A Hardware Dog on a USB port of this computer.',
+          'HARDWARE DOG PROBE',
+          'A Hardware Dog on USB: power, USB, serial, I2C, network.',
           onSerial,
           '',
           !serialOk,
-          serialOk ? 'A Hardware Dog on a USB serial port' : 'Web Serial needs a Chromium-based browser over https or localhost',
+          serialOk ? 'A Hardware Dog probe on a USB serial port' : 'Web Serial needs Chrome or Edge on a computer, over https or localhost',
         )}
         {tile('DOGD', 'CONNECT DOGD', 'Through the local daemon: one Dog, or several as a pack.', onDogd, '', false, 'The local daemon on this machine (127.0.0.1:4782)')}
         {tile('RECORDING', 'OPEN A RECORDING', 'Replay a saved session (.hdlog), read-only.', () => file.current?.click(), '', false, 'Replay a recorded session (.hdlog)')}

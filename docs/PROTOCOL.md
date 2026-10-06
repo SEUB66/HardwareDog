@@ -132,6 +132,13 @@ power     BUS | SELF
 
 One `uart.rx` per received line, without the line terminator.
 
+`kind` is what the UART reported: `framing`, `parity`, `overrun`,
+`break`. A serial console read by the browser (CONSOLE.md) adds
+`garbled`: a line that does not read as text (30 % or more replacement
+or control characters), what a wrong baud rate looks like when the
+port itself reports nothing. It counts for SERIAL_CONFIGURATION_MISMATCH
+like a framing error, and the diagnosis says which it saw.
+
 ### i2c.scan
 
 ```json

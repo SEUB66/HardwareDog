@@ -15,8 +15,10 @@ export function Status({ system }: { system: System }) {
   const now = useClock(system);
   const { device, power, usb, net, serial, bus } = system;
   const recent = system.trace.all().slice(-8).reverse();
-  const powerTag =
-    power.condition === 'STABLE' ? <Tag status="PASS" label="STABLE" /> : power.condition === 'NO SIGNAL' ? <Tag status="UNKNOWN" label="NO SIGNAL" /> : <Tag status="WARN" label={power.condition} />;
+  const unwatched = <Tag status="UNKNOWN" label="NOT MONITORED" />;
+  const powerTag = !system.observes('power')
+    ? unwatched
+    : power.condition === 'STABLE' ? <Tag status="PASS" label="STABLE" /> : power.condition === 'NO SIGNAL' ? <Tag status="UNKNOWN" label="NO SIGNAL" /> : <Tag status="WARN" label={power.condition} />;
 
   return (
     <>
@@ -89,7 +91,7 @@ export function Status({ system }: { system: System }) {
         <Panel title="NETWORK">
           <KV
             rows={[
-              ['LINK', net.link ? <Tag status={net.link.up ? 'PASS' : 'FAIL'} label={net.link.up ? 'UP' : 'DOWN'} /> : <Tag status="UNKNOWN" />],
+              ['LINK', !system.observes('net') ? unwatched : net.link ? <Tag status={net.link.up ? 'PASS' : 'FAIL'} label={net.link.up ? 'UP' : 'DOWN'} /> : <Tag status="UNKNOWN" />],
               ['DHCP', <Tag status={net.dhcp} />],
               ['DNS', <Tag status={net.dns.status} />],
               ['LATENCY', ms(net.latencyMs), true],
