@@ -21,6 +21,10 @@ import type { Clk } from './pack';
 import { relation } from './pack';
 import { clock, milliamps, ms, volts } from './format';
 
+/** "5 framing errors", "5 garbled lines", or both: said as observed. */
+const errorsText = (all: number, garbled: number): string =>
+  garbled === 0 ? `${all} framing errors` : garbled === all ? `${all} garbled lines` : `${all} framing errors or garbled lines`;
+
 /**
  * Version of the rules below. Bump it whenever a rule, a default threshold
  * or a confidence definition changes: recordings carry the version they
@@ -163,7 +167,8 @@ export interface SessionFacts {
     rxLines: number;
     /** Counters reset whenever the baud rate changes. */
     rxAtBaud: number;
-    framingAtBaud: { t: number; seq: number }[];
+    /** Framing errors from a UART, and lines that do not read as text (kind garbled). */
+    framingAtBaud: { t: number; seq: number; kind?: 'garbled' }[];
     resets: ResetFact[];
   };
   net: NetFact[];
@@ -398,8 +403,8 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
         id: 'SERIAL_CONFIGURATION_MISMATCH',
         title: 'SERIAL CONFIGURATION MISMATCH',
         confidence: e >= 5 && ratio >= 0.8 ? 'HIGH' : 'MEDIUM',
-        basis: `${e} framing errors on ${f.uart.rxAtBaud} lines (${pct(e, f.uart.rxAtBaud)} %)`,
-        observed: [`${e} framing errors at ${f.uart.baud} baud, on ${pct(e, f.uart.rxAtBaud)} % of received lines.`],
+        basis: `${errorsText(e, f.uart.framingAtBaud.filter((x) => x.kind === 'garbled').length)} on ${f.uart.rxAtBaud} lines (${pct(e, f.uart.rxAtBaud)} %)`,
+        observed: [`${errorsText(e, f.uart.framingAtBaud.filter((x) => x.kind === 'garbled').length)} at ${f.uart.baud} baud, on ${pct(e, f.uart.rxAtBaud)} % of received lines.`],
         correlation: null,
         cause: 'The target UART runs at another baud rate (or data / parity / stop bits differ).',
         next: 'Try common rates on SERIAL: 9600, 57600, 115200, 921600. Errors stop at the right one.',

@@ -1040,9 +1040,11 @@ export class System {
   private onUartError(t: number, kind: string): void {
     this.serial.errors++;
     this.log(t, 'UART', 'WARN', `${kind} error`);
+    // A line that does not read as text (a console read by this browser) is the same clue.
     if (kind === 'framing') this.remember(this.facts.uart.framingAtBaud, { t, seq: this.seq });
+    if (kind === 'garbled') this.remember(this.facts.uart.framingAtBaud, { t, seq: this.seq, kind: 'garbled' });
     // Rule: repeated framing errors -> baud mismatch is a hypothesis, not a fact.
-    if (kind !== 'framing') return;
+    if (kind !== 'framing' && kind !== 'garbled') return;
     this.framingErrorTimes = this.framingErrorTimes.filter((x) => t - x < 5000);
     this.framingErrorTimes.push(t);
     if (this.framingErrorTimes.length >= 3 && t - this.lastBaudHypothesisAt > 10_000) {

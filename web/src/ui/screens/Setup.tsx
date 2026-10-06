@@ -4,6 +4,7 @@ import type { System } from '../../core/system';
 import { RULES } from '../../core/system';
 import type { Settings, TransportKind } from '../../core/types';
 import { webSerialSupported } from '../../core/webserial';
+import { CONSOLE_DEVICE } from '../../core/console';
 import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from '../../core/scenarios';
 import { bytes } from '../../core/format';
 import { KV } from '../components/KV';
@@ -21,6 +22,8 @@ interface SetupProps {
   /** Active simulator scenario, or null on real hardware. */
   scenario: ScenarioId | null;
   onSwitch: (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario?: ScenarioId) => void;
+  /** Any board's serial console, read by this browser. */
+  onConsole: () => void;
   /** Whether the demo running is a pack of simulated Dogs. */
   demoPack: boolean;
   /** Start a demo pack (three simulated Dogs) on a scenario. */
@@ -93,7 +96,7 @@ function recordingCell(system: System, recording: SetupProps['recording']) {
   return <Tag status="LIVE" label={`REC ${recording.entries.toLocaleString('en-US')} EVENTS / ${bytes(recording.bytes)}`} />;
 }
 
-export function Setup({ system, scenario, demoPack, onSwitch, onDemoPack, packBuilder, onDisconnect, sessions, recording }: SetupProps) {
+export function Setup({ system, scenario, demoPack, onSwitch, onConsole, onDemoPack, packBuilder, onDisconnect, sessions, recording }: SetupProps) {
   const s = system.settings;
   const set = (patch: Partial<Settings>) => system.updateSettings(patch);
   const serialOk = webSerialSupported();
@@ -134,8 +137,21 @@ export function Setup({ system, scenario, demoPack, onSwitch, onDemoPack, packBu
             <button class={`btn ${system.transportKind === 'DOGD' ? 'active' : ''}`} onClick={() => onSwitch('DOGD')} title="The local daemon on this machine (127.0.0.1:4782)">
               CONNECT DOGD
             </button>
-            <button class={`btn ${system.transportKind === 'WEB SERIAL' ? 'active' : ''}`} onClick={() => onSwitch('WEB SERIAL')} disabled={!serialOk}>
-              CONNECT WEB SERIAL
+            <button
+              class={`btn ${system.device.id === CONSOLE_DEVICE ? 'active' : ''}`}
+              onClick={onConsole}
+              disabled={!serialOk}
+              title="Any board on a USB serial port: no probe needed"
+            >
+              SERIAL CONSOLE
+            </button>
+            <button
+              class={`btn ${system.transportKind === 'WEB SERIAL' && system.device.id !== CONSOLE_DEVICE ? 'active' : ''}`}
+              onClick={() => onSwitch('WEB SERIAL')}
+              disabled={!serialOk}
+              title="A Hardware Dog probe on a USB serial port"
+            >
+              HARDWARE DOG PROBE
             </button>
             {onDisconnect && (
               <button class="btn" onClick={onDisconnect} title="End this session; nothing runs until you choose a source again">

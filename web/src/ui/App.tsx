@@ -18,6 +18,7 @@ import { PackTransport, type Transport } from '../core/transport';
 import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
+import { ConsoleTransport } from '../core/console';
 import { connectDogd, dogdStore, viaDogd } from '../core/dogd';
 import headSrc1x from '../../../assets/brand/web/hd-head-1x.webp';
 import headSrc2x from '../../../assets/brand/web/hd-head-2x.webp';
@@ -287,6 +288,19 @@ export function App({ archive }: { archive: SessionArchive }) {
     await start(transport);
   };
 
+  /** Any board's serial console, read by this browser: no probe needed. Its console is the screen to watch. */
+  const openConsole = async () => {
+    let transport: ConsoleTransport;
+    try {
+      transport = await ConsoleTransport.pick();
+    } catch (e) {
+      system.mark(`serial console: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    await start(transport);
+    setScreen('SERIAL');
+  };
+
   /** A pack of boards on USB, one port per click: D1, D2... in the order picked. */
   const [building, setBuilding] = useState<PackBuilder<WebSerialTransport> | null>(null);
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
@@ -514,6 +528,7 @@ export function App({ archive }: { archive: SessionArchive }) {
             scenario={demoOf(session.transport)?.id ?? null}
             demoPack={session.transport instanceof SimulatedPack}
             onSwitch={(k, id) => void switchTransport(k, id)}
+            onConsole={() => void openConsole()}
             onDemoPack={(id) => void start(simulatedPack(id ?? demoOf(session.transport)?.id ?? DEFAULT_SCENARIO))}
             packBuilder={{
               picked: building?.links.map((l) => l.label) ?? [],
@@ -644,6 +659,7 @@ export function App({ archive }: { archive: SessionArchive }) {
       <main class="work" id="workspace">
         {session.transport === null && (
           <ConnectBanner
+            onConsole={() => void openConsole()}
             onSerial={() => void switchTransport('WEB SERIAL')}
             onDogd={() => void switchTransport('DOGD')}
             onOpen={(file) => void openFile(file)}

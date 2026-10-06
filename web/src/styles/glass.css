@@ -505,6 +505,18 @@ body::before {
   opacity: 0.45;
   cursor: not-allowed;
 }
+.source-tile.primary {
+  grid-column: 1 / -1;
+  border-color: #ff4fa366;
+}
+.source-tile.primary .icon,
+.source-tile.primary .source-title {
+  color: var(--pink);
+}
+.source-tile.primary:hover:not(:disabled) {
+  border-color: var(--pink);
+  box-shadow: 0 10px 30px #ff4fa324;
+}
 .source-tile.demo .icon,
 .source-tile.demo .source-title {
   color: var(--amber);
