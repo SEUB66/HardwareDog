@@ -50,6 +50,26 @@ jobs:
           curl -fs http://127.0.0.1:4799/v1/health | grep -q '"status":"ok"'
           kill "$pid"
           sudo apt-get remove -y hwdog-dogd
+      # curl -fsSL hwdog.netlify.app/install | bash, against a release served
+      # from here: it installs what the sum vouches for, and nothing else.
+      - name: the one-command installer
+        run: |
+          r="$RUNNER_TEMP/rel"; mkdir -p "$r/api" "$r/dl/dogd-v0.0.0"
+          cp dist/hwdog-dogd_*_amd64.deb "$r/dl/dogd-v0.0.0/hwdog-dogd_0.0.0_amd64.deb"
+          (cd "$r/dl/dogd-v0.0.0" && sha256sum * > SHA256SUMS)
+          printf '[{"tag_name": "other-v9"}, {"tag_name": "dogd-v0.0.0"}]' > "$r/api/releases"
+          python3 -m http.server 8766 --directory "$r" >/dev/null 2>&1 </dev/null &
+          srv=$!
+          sleep 1
+          export HWDOG_API=http://127.0.0.1:8766/api HWDOG_DOWNLOAD=http://127.0.0.1:8766/dl
+          bash -n web/public/install
+          bash web/public/install
+          dogd --version
+          sudo apt-get remove -y hwdog-dogd
+          sed -i 's/^[0-9a-f]\{8\}/deadbeef/' "$r/dl/dogd-v0.0.0/SHA256SUMS"
+          if bash web/public/install; then echo "installed despite a wrong sum"; exit 1; fi
+          if [ -e /usr/bin/dogd ]; then echo "dogd is there"; exit 1; fi
+          kill "$srv" || true
       - uses: actions/setup-node@v4
         with:
           node-version: 22

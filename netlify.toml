@@ -18,3 +18,10 @@
     Referrer-Policy = "no-referrer"
     Permissions-Policy = "serial=(self), camera=(), microphone=(), geolocation=(), usb=()"
     Cross-Origin-Opener-Policy = "same-origin"
+
+# The dogd installer: curl -fsSL hwdog.netlify.app/install | bash
+[[headers]]
+  for = "/install"
+  [headers.values]
+    Content-Type = "text/plain; charset=utf-8"
+    Cache-Control = "no-cache"

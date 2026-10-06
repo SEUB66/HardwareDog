@@ -90,8 +90,8 @@ landing page (official branding, project laws, light/dark theme),
 and measures nothing until you choose a source: the SERIAL CONSOLE of any
 board (no probe needed: an Arduino, an ESP32, a USB-UART adapter;
 docs/CONSOLE.md), this computer, its network and its USB devices
-(`dogd --source host`, no probe needed; docs/DOGD.md; on Kali, Debian or
-Ubuntu, one package: docs/INSTALL.md), a Hardware Dog probe over Web Serial or dogd, a recorded
+(`dogd --source host`, no probe needed; docs/DOGD.md; on Linux, one command:
+`curl -fsSL hwdog.netlify.app/install | bash`, docs/INSTALL.md), a Hardware Dog probe over Web Serial or dogd, a recorded
 `.hdlog`, or DEMO MODE (the simulator, only when you ask for it; a link can
 ask with `?demo` or `?scenario=HD-T004`).
 They use bundled assets and fonts; the landing page has no account,

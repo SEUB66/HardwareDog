@@ -2,7 +2,7 @@
 
 ```text
 THE INTERFACE   nothing to install: open it in Chrome or Edge
-DOGD            the local daemon: one package, or one command to build it
+DOGD            the local daemon: curl -fsSL hwdog.netlify.app/install | bash
 ```
 
 The interface runs in the browser. dogd is what lets it see this
@@ -11,7 +11,26 @@ or TCP. Everything stays on this machine: dogd listens on 127.0.0.1 only.
 
 ---
 
-## KALI, DEBIAN, UBUNTU (amd64, arm64)
+## ONE COMMAND (Kali, Debian, Ubuntu, other Linux; amd64, arm64)
+
+```sh
+curl -fsSL hwdog.netlify.app/install | bash
+```
+
+It reads the system and the processor, takes the latest `dogd-v*` release
+from github.com/SEUB66/HardwareDog, checks the package against that
+release's `SHA256SUMS` (any difference: nothing is installed), and installs
+it with apt. Without apt, or with `--user`, it puts the binary in
+`~/.local/bin` and needs no sudo. It contacts github.com and nothing else,
+and it does not start dogd. Read it first if you like: it is one file,
+`web/public/install`.
+
+```sh
+curl -fsSL hwdog.netlify.app/install | bash -s -- --user        # no sudo
+bash install --deb ./hwdog-dogd_0.1.0_amd64.deb                 # a package you have
+```
+
+## KALI, DEBIAN, UBUNTU, BY HAND
 
 From the project's **Releases** page, take `hwdog-dogd_VERSION_ARCH.deb`
 and `SHA256SUMS`, then:
