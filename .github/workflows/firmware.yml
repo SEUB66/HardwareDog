@@ -63,3 +63,11 @@ jobs:
           target: esp32s3
           path: firmware
           command: idf.py -B build-w5500 -D SDKCONFIG=build-w5500/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci.w5500" build
+      # Reproducible: the same sources, built again elsewhere, give the same image.
+      - name: ESP-IDF build again, compared byte for byte
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.1
+          target: esp32s3
+          path: firmware
+          command: idf.py -B build-again build && cmp build/hwdog.bin build-again/hwdog.bin && sha256sum build/hwdog.bin

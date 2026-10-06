@@ -15,6 +15,8 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 tokio-serial = { version = "5", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# The LAN access token: 128 bits from the operating system.
+getrandom = "0.3"
 
 # USB location (topology) and interface number from the OS: the Windows
 # location path, the macOS location id. Linux reads sysfs itself
