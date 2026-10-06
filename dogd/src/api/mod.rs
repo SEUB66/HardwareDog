@@ -62,6 +62,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/link", get(link))
         .route("/v1/links", get(links))
         .route("/v1/devices", get(devices))
+        .route("/v1/usb", get(usb_devices))
         .route("/v1/devices/events", get(device_events))
         .route("/v1/devices/{id}/alias", axum::routing::put(put_alias))
         .route("/v1/devices/{id}/bind", axum::routing::put(put_bind))
@@ -230,6 +231,15 @@ async fn link(State(s): State<AppState>) -> Json<serde_json::Value> {
 async fn links(State(s): State<AppState>) -> Json<serde_json::Value> {
     let all: Vec<_> = s.links.iter().map(|l| l.status()).collect();
     Json(json!({ "links": all }))
+}
+
+/// The USB devices plugged into this computer, read from the system:
+/// nothing is opened or written. For the host source's USB screen.
+async fn usb_devices() -> Json<serde_json::Value> {
+    let found = tokio::task::spawn_blocking(crate::hostnet::usb::scan)
+        .await
+        .unwrap_or(None);
+    Json(json!({ "supported": found.is_some(), "devices": found.unwrap_or_default() }))
 }
 
 async fn devices(State(s): State<AppState>) -> Json<serde_json::Value> {

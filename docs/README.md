@@ -16,7 +16,7 @@ WHERE WE ARE   ENGINEERING_PLAN.md     the levels, LVL 40 to MAX, and their gate
 
 ```text
 NO PROBE       CONSOLE.md              any board's serial console, read by the browser
-               DOGD.md                 this computer's network: dogd --source host
+               DOGD.md                 this computer, its network and USB: dogd --source host
 THE DEVICE     FIRMWARE.md             build, flash, update, recover, bring-up
 THE DAEMON     DOGD.md                 dogd: the device link and the session store
 SEVERAL DOGS   PACK.md                 one timeline, one clock for several Dogs

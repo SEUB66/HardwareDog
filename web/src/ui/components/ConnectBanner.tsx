@@ -40,17 +40,17 @@ export function ConnectBanner({ onConsole, onSerial, onDogd, onNetwork, onOpen, 
         <h2 class="start-title">Start here</h2>
         <p class="start-text">
           Hardware Dog reads what your hardware says, puts it on one timeline, and tells you what went wrong. <b>No probe needed to start</b>: read a
-          board's serial console, or this computer's network. A Hardware Dog probe adds power, USB, I2C, and the network of the board itself. First time?{' '}
+          board's serial console, or this computer: its network and its USB devices. A Hardware Dog probe adds power, USB, I2C, and the network of the board itself. First time?{' '}
           <button class="link" onClick={onTour}>
             take the tour
           </button>
         </p>
         <ol class="start-steps">
           <li>
-            <b>Plug&nbsp;in</b> a board with a USB serial port (Arduino, ESP32, a USB-UART adapter), or check this computer's network.
+            <b>Plug&nbsp;in</b> a board with a USB serial port (Arduino, ESP32, a USB-UART adapter), or watch this computer: its network, its USB devices.
           </li>
           <li>
-            <b>Watch</b> it live: resets, crashes, wrong baud rate; link, DHCP, gateway, DNS, Internet.
+            <b>Watch</b> it live: resets, crashes, wrong baud rate; link, DHCP, gateway, DNS, Internet; USB devices that drop.
           </li>
           <li>
             <b>Read</b> the diagnosis: what happened, how sure, what to check next.
@@ -74,12 +74,12 @@ export function ConnectBanner({ onConsole, onSerial, onDogd, onNetwork, onOpen, 
         )}
         {tile(
           'NET',
-          'THIS COMPUTER\'S NETWORK',
-          'Link, DHCP, gateway, DNS, Internet, checked from here. No probe: dogd serve --source host.',
+          'THIS COMPUTER',
+          'Its network (link, DHCP, gateway, DNS, Internet) and the USB devices plugged into it. No probe: dogd serve --source host.',
           onNetwork,
           ' primary-alt',
           false,
-          'The network as this computer sees it, through dogd on this machine (docs/DOGD.md)',
+          'This computer, through dogd on this machine: its network, and its USB devices (Linux) (docs/DOGD.md)',
         )}
         {tile(
           'WEB_SERIAL',

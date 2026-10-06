@@ -177,3 +177,27 @@ describe('capabilities (hello.caps)', () => {
     expect((await poweredNoUsb(undefined)).diagnoses.map((d) => d.id)).toContain('USB_NOT_ENUMERATED');
   });
 });
+
+describe('USB of a computer (no supply measured)', () => {
+  it('says the disconnects as they are: the supply can be neither blamed nor cleared', async () => {
+    let now = 1_000_000;
+    const sys = new System(memoryStore(), () => now);
+    const transport = new FakeTransport();
+    await sys.connect(transport);
+    transport.push({ type: 'hello', t: 0, proto: 1, device: 'HOST', rev: 'HOST', fw: 'dogd-0.1.0', caps: ['net', 'probe', 'usb'] });
+    const pad = { ...attach(0), vid: 0x045e, pid: 0x0b12, cls: 'VENDOR', manufacturer: 'Microsoft', product: 'Controller' };
+    for (let k = 0; k < 3; k++) {
+      transport.push({ ...pad, t: 1000 + k * 4000 });
+      now = 1_000_000 + 1000 + k * 4000 + 2000;
+      transport.push({ type: 'usb.detach', t: 3000 + k * 4000 });
+    }
+    sys.evaluate(now);
+    const d = sys.diagnoses.find((x) => x.id === 'USB_INTERMITTENT')!;
+    expect(d).toBeDefined();
+    expect(d.confidence).toBe('MEDIUM');
+    expect(d.basis).toBe('3 disconnects of the same device (supply not observed)');
+    expect(d.observed.join(' ')).toMatch(/neither shown nor ruled out/);
+    // Nothing about a rail it never measured.
+    expect(JSON.stringify(d)).not.toMatch(/rail|4\.75/);
+  });
+});

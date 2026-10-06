@@ -15,6 +15,7 @@ struct Fake {
     open: Vec<(Ipv4Addr, u16)>,
     http: Option<String>,
     pinged: Mutex<Vec<Ipv4Addr>>,
+    usb: std::sync::Arc<Mutex<Option<Vec<usb::UsbDevice>>>>,
 }
 
 impl Net for Fake {
@@ -31,6 +32,9 @@ impl Net for Fake {
     async fn connect(&self, host: &str, port: u16) -> Result<bool, ()> {
         let ip = self.resolve(host).await.ok_or(())?;
         Ok(self.open.contains(&(ip, port)))
+    }
+    fn usb(&self) -> Option<Vec<usb::UsbDevice>> {
+        self.usb.lock().unwrap().clone()
     }
     async fn http_status(&self, host: &str) -> Result<Option<String>, ()> {
         self.resolve(host).await.ok_or(())?;
@@ -351,4 +355,168 @@ async fn passive_until_asked() {
         layers(&f),
         (Value::Bool(true), "PASS", "UNKNOWN", "UNKNOWN", "UNKNOWN")
     );
+}
+
+fn pad(port: &str, serial: Option<&str>) -> usb::UsbDevice {
+    usb::UsbDevice {
+        port: port.into(),
+        vid: 0x045e,
+        pid: 0x0b12,
+        manufacturer: Some("Microsoft".into()),
+        product: Some("Controller".into()),
+        serial: serial.map(String::from),
+        speed: Some("FULL"),
+        cls: "VENDOR".into(),
+        power: Some("BUS"),
+        max_ma: Some(500),
+    }
+}
+
+fn mouse() -> usb::UsbDevice {
+    usb::UsbDevice {
+        port: "1-2".into(),
+        vid: 0x046d,
+        pid: 0xc52b,
+        manufacturer: Some("Logitech".into()),
+        product: Some("USB Receiver".into()),
+        serial: None,
+        speed: Some("FULL"),
+        cls: "HID".into(),
+        power: Some("BUS"),
+        max_ma: Some(98),
+    }
+}
+
+#[test]
+fn every_device_on_the_timeline_the_followed_one_as_the_target() {
+    let mut w = UsbWatch::default();
+    // First read: one summary line, no event per device.
+    let f = w.tick(0, vec![mouse(), pad("1-3", Some("A1"))]);
+    assert_eq!(f.len(), 1);
+    assert!(f[0]["message"].as_str().unwrap().contains("2 device(s)"));
+
+    // Follow the game pad: it is there, so it attaches at once.
+    let f = w.follow(
+        10,
+        Some(usb::Follow {
+            vid: 0x045e,
+            pid: 0x0b12,
+            serial: None,
+            port: None,
+        }),
+    );
+    let a = f.iter().find(|x| x["type"] == "usb.attach").unwrap();
+    assert_eq!(
+        (
+            a["vid"].as_u64(),
+            a["speed"].as_str(),
+            a["power"].as_str(),
+            a["cls"].as_str()
+        ),
+        (Some(0x045e), Some("FULL"), Some("BUS"), Some("VENDOR"))
+    );
+
+    // The pad drops: a detach, and a line for people.
+    let f = w.tick(1000, vec![mouse()]);
+    assert!(f.iter().any(|x| x["type"] == "usb.detach"));
+    assert!(f.iter().any(|x| x["message"]
+        .as_str()
+        .is_some_and(|m| m.starts_with("usb detached: 045E:0B12 Microsoft Controller"))));
+    // Back: attach again.
+    let f = w.tick(2000, vec![mouse(), pad("1-3", Some("A1"))]);
+    assert!(f.iter().any(|x| x["type"] == "usb.attach"));
+
+    // Another device coming and going: on the timeline, never as the target.
+    let f = w.tick(3000, vec![pad("1-3", Some("A1"))]);
+    assert!(f.iter().all(|x| x["type"] == "log"));
+    assert!(f[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("046D:C52B Logitech USB Receiver"));
+
+    // Nothing changed: nothing said.
+    assert!(w.tick(4000, vec![pad("1-3", Some("A1"))]).is_empty());
+
+    // usb.enumerate: the descriptor again.
+    assert_eq!(w.enumerate(5000)[0]["type"], "usb.attach");
+    // Stop following: said, and not a disconnect.
+    let f = w.follow(6000, None);
+    assert!(f.iter().all(|x| x["type"] == "log"));
+}
+
+#[test]
+fn two_identical_devices_are_told_apart_by_serial() {
+    let mut w = UsbWatch::default();
+    w.tick(0, vec![pad("1-3", Some("A1")), pad("1-4", Some("B2"))]);
+    w.follow(
+        1,
+        Some(usb::Follow {
+            vid: 0x045e,
+            pid: 0x0b12,
+            serial: Some("B2".into()),
+            port: None,
+        }),
+    );
+    // A1 unplugged: not the followed one.
+    let f = w.tick(1000, vec![pad("1-4", Some("B2"))]);
+    assert!(!f.iter().any(|x| x["type"] == "usb.detach"));
+    let f = w.tick(2000, vec![]);
+    assert!(f.iter().any(|x| x["type"] == "usb.detach"));
+}
+
+#[test]
+fn follow_commands_are_checked() {
+    assert_eq!(
+        parse_follow(&serde_json::json!({ "cmd": "usb.follow" })).unwrap(),
+        None
+    );
+    assert!(parse_follow(&serde_json::json!({ "cmd": "usb.follow", "vid": 1 })).is_err());
+    assert!(
+        parse_follow(&serde_json::json!({ "cmd": "usb.follow", "vid": 70000, "pid": 1 })).is_err()
+    );
+    let f = parse_follow(
+        &serde_json::json!({ "cmd": "usb.follow", "vid": 1, "pid": 2, "serial": "X" }),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!((f.vid, f.pid, f.serial.as_deref()), (1, 2, Some("X")));
+}
+
+/// The device with USB: declares it, and answers usb.follow over HDP.
+#[tokio::test]
+async fn the_device_follows_a_usb_device() {
+    let net = healthy();
+    *net.usb.lock().unwrap() = Some(vec![mouse()]);
+    let usb_now = net.usb.clone();
+    let (ours, theirs) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(run(net, theirs, Watch::off()));
+    let (r, mut w) = tokio::io::split(ours);
+    let mut lines = BufReader::new(r).lines();
+    macro_rules! until {
+        ($pred:expr) => {{
+            loop {
+                let l = tokio::time::timeout(std::time::Duration::from_secs(5), lines.next_line())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+                let f: Value = serde_json::from_str(&l).unwrap();
+                if $pred(&f) {
+                    break f;
+                }
+            }
+        }};
+    }
+    w.write_all(b"{\"cmd\":\"hello\",\"proto\":1}\n")
+        .await
+        .unwrap();
+    let h = until!(|f: &Value| f["type"] == "hello");
+    assert_eq!(h["caps"], serde_json::json!(["net", "probe", "usb"]));
+    w.write_all(b"{\"cmd\":\"usb.follow\",\"vid\":1133,\"pid\":50475}\n")
+        .await
+        .unwrap();
+    let a = until!(|f: &Value| f["type"] == "usb.attach");
+    assert_eq!(a["product"], "USB Receiver");
+    *usb_now.lock().unwrap() = Some(vec![]);
+    until!(|f: &Value| f["type"] == "usb.detach");
 }

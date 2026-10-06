@@ -221,6 +221,7 @@ host says so.
 ```json
 {"cmd":"hello","proto":1}
 {"cmd":"usb.enumerate"}
+{"cmd":"usb.follow","vid":1118,"pid":2834,"serial":"A1"}
 {"cmd":"uart.config","baud":115200}
 {"cmd":"uart.tx","data":"AT+RST"}
 {"cmd":"i2c.scan"}
@@ -244,6 +245,14 @@ less than 1000). `net.watch` (0 stops; at least 2000) pings the gateway,
 resolves `dns` and opens TCP 443 to `upstream`, and reports the results in
 `net.status` (gateway, dns, internet, latency, loss). Without `dns` or
 `upstream`, those stay UNKNOWN: nothing is checked that was not asked.
+
+`usb.follow` is for a device that sees several USB devices (a computer:
+`dogd --source host`): it follows the one named (`vid` and `pid`, and
+`serial` or `port` to tell two identical ones apart) as its target, and
+sends `usb.attach` / `usb.detach` for that one only. Without `vid` and
+`pid` it follows none. Changing the target is not a disconnect. A probe,
+with its one downstream port, answers with a log line. It is an addition:
+older devices refuse it the same way.
 
 `time` asks for the device clock (`id` 0 to 4294967295); the device answers
 with a `time` frame. It changes nothing on the device or the target.

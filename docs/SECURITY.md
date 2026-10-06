@@ -59,7 +59,9 @@ DOGD: HOST       --source host reads the network state without sending
                  anything; pings, lookups and connections run only when the
                  interface asks (net.watch, probe), to host names only
                  (letters, digits, dots, dashes: never a shell); the ping
-                 is the system's, run without a shell (dogd/src/hostnet)
+                 is the system's, run without a shell (dogd/src/hostnet).
+                 Its USB list is read from sysfs: no device is opened,
+                 claimed or written to
 DOGD: STORAGE    a stored file is named by its recording id (32 hex), never
                  by anything a client chooses; size limited; a finalized
                  recording is never overwritten

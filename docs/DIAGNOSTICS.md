@@ -74,6 +74,8 @@ SUPPLY_SAG                      undervoltage events, none followed by a         
                                 disconnect                                         LOW    otherwise
 OVERCURRENT                     current above the limit (0.9 A)                    HIGH >= 3 / MEDIUM 2 / LOW 1 event
 USB_INTERMITTENT                >= 2 disconnects the supply does not explain       HIGH >= 3 / MEDIUM 2
+                                (supply not observed, a computer's own USB:        MEDIUM, and it says
+                                said as such: neither blamed nor cleared)          the supply was not seen
 USB_NOT_ENUMERATED              target draws >= 50 mA for >= 3 s with no USB       HIGH  >= 10 s and never enumerated
                                 device                                             MEDIUM otherwise
 TARGET_RESET_LOOP               >= 2 target resets that are not power-on or        HIGH >= 3 / MEDIUM 2

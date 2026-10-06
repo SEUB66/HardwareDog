@@ -174,3 +174,24 @@ export class DogdTransport implements Transport {
   }
 }
 
+
+/** A USB device plugged into the computer dogd runs on (GET /v1/usb). */
+export interface HostUsbDevice {
+  port: string;
+  vid: number;
+  pid: number;
+  manufacturer: string | null;
+  product: string | null;
+  serial: string | null;
+  speed: string | null;
+  cls: string;
+  power: string | null;
+  max_ma: number | null;
+}
+
+/** The USB devices of dogd's computer. supported false: not read on that system. */
+export async function dogdUsb(base = DOGD_URL): Promise<{ supported: boolean; devices: HostUsbDevice[] }> {
+  const res = await fetch(`${base}/v1/usb`);
+  if (!res.ok) throw new Error(`dogd usb: ${res.status}`);
+  return (await res.json()) as { supported: boolean; devices: HostUsbDevice[] };
+}

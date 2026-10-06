@@ -84,6 +84,7 @@ export function capabilityOf(type: DeviceFrame['type']): Capability | null {
 export type HostCommand =
   | { cmd: 'hello'; proto: number }
   | { cmd: 'usb.enumerate' }
+  | { cmd: 'usb.follow'; vid?: number; pid?: number; serial?: string; port?: string }
   | { cmd: 'uart.config'; baud: number }
   | { cmd: 'uart.tx'; data: string }
   | { cmd: 'i2c.scan' }
