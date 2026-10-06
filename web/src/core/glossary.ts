@@ -49,6 +49,7 @@ const TERMS: Record<string, string> = {
   'USB/POWER': 'Whether the device says it is bus-powered (from the USB cable) or self-powered.',
   'USB/CURRENT': 'Current drawn on the monitored rail, measured now.',
   'USB/VBUS': 'Voltage on VBUS, the 5 V line of the USB cable, measured now.',
+  'USB/SUPPLY': 'What the device draws and at what voltage. A computer does not measure it for its own ports: not observed, so a power cause can be neither shown nor ruled out. A Hardware Dog probe measures it.',
   'USB/MANUFACTURER': 'Manufacturer name, as the device reports it. Self-declared, not verified.',
   'USB/PRODUCT': 'Product name, as the device reports it. Self-declared, not verified.',
   'USB/SERIAL': 'Serial number string, as the device reports it.',

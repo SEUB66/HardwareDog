@@ -19,7 +19,7 @@ import type { Source, TransportKind } from '../core/types';
 import { thresholdsOf } from '../core/types';
 import { WebSerialTransport } from '../core/webserial';
 import { ConsoleTransport } from '../core/console';
-import { DOGD_URL, HOST_DEVICE, connectDogd, dogdStore, viaDogd } from '../core/dogd';
+import { DOGD_URL, DogdTransport, HOST_DEVICE, connectDogd, dogdStore, viaDogd } from '../core/dogd';
 import headSrc1x from '../../../assets/brand/web/hd-head-1x.webp';
 import headSrc2x from '../../../assets/brand/web/hd-head-2x.webp';
 import headSrc3x from '../../../assets/brand/web/hd-head-3x.webp';
@@ -554,7 +554,14 @@ export function App({ archive }: { archive: SessionArchive }) {
       case 'POWER':
         return <Power system={system} />;
       case 'USB':
-        return <Usb system={system} onTrace={(only) => navigate('TRACE', only)} onExport={exportDescriptors} />;
+        return (
+          <Usb
+            system={system}
+            dogdBase={session.transport instanceof DogdTransport ? session.transport.base : null}
+            onTrace={(only) => navigate('TRACE', only)}
+            onExport={exportDescriptors}
+          />
+        );
       case 'SERIAL':
         return <Serial system={system} />;
       case 'BUS':

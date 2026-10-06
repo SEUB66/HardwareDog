@@ -124,6 +124,8 @@ export interface DetachFact {
   dropMin: number | null;
   /** Target current ~100 ms after the disconnect: still running or not. */
   currentAfter: number | null;
+  /** No supply sample had been seen: a power cause can be neither shown nor ruled out (a computer's own USB). */
+  supplyUnseen?: true;
   clk?: Clk;
   /**
    * In a pack: the drop and the disconnect came from two clocks whose
@@ -327,7 +329,24 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
 
   // USB: disconnects the supply does not explain.
   const unexplained = f.detaches.filter((d) => d.dropAt === null && d.undetermined === undefined);
-  if (unexplained.length >= 2) {
+  // Without a supply measurement, the disconnects are said as they are:
+  // the supply can be neither blamed nor cleared.
+  const blind = unexplained.filter((d) => d.supplyUnseen);
+  if (blind.length >= 2 && blind.length === unexplained.length) {
+    const u = blind.length;
+    add({
+      id: 'USB_INTERMITTENT',
+      title: 'INTERMITTENT USB',
+      confidence: 'MEDIUM',
+      basis: `${u} disconnects of the same device (supply not observed)`,
+      observed: [`${u} USB disconnect(s) of the device followed.`, 'The supply is not observed here: a power cause can be neither shown nor ruled out.'],
+      correlation: null,
+      cause: 'The device drops off USB and comes back: connector, cable, a hub or port, or the device itself. Its supply was not measured.',
+      next: 'Try another cable and another port (not through a hub), then watch whether the disconnects follow the cable, the port or the device.',
+      since: blind[0]!.t,
+      evidence: evidence(...blind.map((d) => d.seq)),
+    });
+  } else if (unexplained.length >= 2) {
     const u = unexplained.length;
     const kept = unexplained.filter((d) => d.currentAfter !== null && d.currentAfter >= RUNNING_CURRENT).length;
     add({

@@ -47,6 +47,7 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'i2c watch <seconds|off>', summary: 'ACTIVE: scan the I2C bus periodically, log what changes' },
   { usage: 'net watch <seconds|off> [dns-name] [upstream-host]', summary: 'ACTIVE: ping gateway, resolve, reach upstream, periodically' },
   { usage: 'usb enumerate', summary: 'ACTIVE: re-read USB descriptors' },
+  { usage: 'usb follow <VID:PID [serial]|off>', summary: "this computer: the USB device to follow as the target" },
   { usage: 'serial <baud>', summary: 'set UART baud rate' },
   { usage: 'meter', summary: 'what the power numbers are worth: sensor, range, accuracy' },
   { usage: 'meter point <V> <mA>', summary: 'calibration: what the reference instrument reads now' },
@@ -189,9 +190,15 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
       return result(sys.watchNet(sec, args[2], args[3]), sec ? `net watch every ${sec} s (ACTIVE)` : 'net watch off');
     }
 
-    case 'usb':
-      if (a0 !== 'enumerate') return fail('usage: usb enumerate');
-      return result(sys.enumerateUsb(), 'enumeration requested');
+    case 'usb': {
+      if (a0 === 'enumerate') return result(sys.enumerateUsb(), 'enumeration requested');
+      if (a0 !== 'follow' || !args[1]) return fail('usage: usb enumerate | usb follow <VID:PID [serial]|off>');
+      if (args[1].toLowerCase() === 'off') return result(sys.followUsb(null), 'usb follow off');
+      const m = /^([0-9a-f]{4}):([0-9a-f]{4})$/i.exec(args[1]);
+      if (!m) return fail('usage: usb follow <VID:PID [serial]|off>', 'VID and PID in hex, e.g. 046D:C52B');
+      const target = { vid: parseInt(m[1]!, 16), pid: parseInt(m[2]!, 16), serial: args[2] ?? null };
+      return result(sys.followUsb(target), `usb follow ${args[1].toUpperCase()}`);
+    }
 
     case 'serial': {
       if (a0 === 'send') {

@@ -361,3 +361,62 @@ describe.runIf(BIN)('dogd --source host (real binary, this computer)', { timeout
     await sys.disconnect();
   });
 });
+
+/** A fake /sys/bus/usb/devices: a game pad that can be unplugged. */
+async function usbTree() {
+  const fs = await node<{
+    mkdirSync(p: string, o: { recursive: boolean }): void;
+    writeFileSync(p: string, d: string): void;
+    rmSync(p: string, o: { recursive: boolean; force: boolean }): void;
+  }>('fs');
+  const os = await node<{ tmpdir(): string }>('os');
+  const root = `${os.tmpdir()}/hwdog-usb-it-${Date.now()}`;
+  const plug = (port: string, files: Record<string, string>) => {
+    fs.mkdirSync(`${root}/${port}/${port}:1.0`, { recursive: true });
+    for (const [f, v] of Object.entries(files)) fs.writeFileSync(`${root}/${port}/${f}`, `${v}\n`);
+  };
+  const pad = () =>
+    plug('1-3', { idVendor: '045e', idProduct: '0b12', manufacturer: 'Microsoft', product: 'Controller', serial: 'A1', speed: '12', bDeviceClass: 'ff', bmAttributes: 'a0', bMaxPower: '500mA' });
+  plug('1-2', { idVendor: '046d', idProduct: 'c52b', manufacturer: 'Logitech', product: 'USB Receiver', speed: '12', bDeviceClass: '00', bmAttributes: 'a0', bMaxPower: '98mA', '1-2:1.0/bInterfaceClass': '03' });
+  pad();
+  return { root, plugPad: pad, unplugPad: () => fs.rmSync(`${root}/1-3`, { recursive: true, force: true }) };
+}
+
+describe.runIf(BIN)('dogd --source host, USB of this computer (real binary, fake sysfs)', { timeout: 60_000 }, () => {
+  it('lists the devices, follows one, and its drops become a diagnosis that does not claim a supply', async () => {
+    const tree = await usbTree();
+    const os = await node<{ tmpdir(): string }>('os');
+    const env = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env;
+    env['HWDOG_USB_SYSFS'] = tree.root;
+    const { base } = await startDogd(['--source', 'host', '--data', `${os.tmpdir()}/dogd-usb-${Date.now()}`]);
+    delete env['HWDOG_USB_SYSFS'];
+    await until('host link online', () => online(base));
+
+    const list = (await (await fetch(`${base}/v1/usb`)).json()) as { supported: boolean; devices: { port: string; product: string }[] };
+    expect(list.supported).toBe(true);
+    expect(list.devices.map((d) => `${d.port} ${d.product}`)).toEqual(['1-2 USB Receiver', '1-3 Controller']);
+
+    const sys = new System(memoryStore());
+    expect(await sys.connect(await DogdTransport.prepare(base))).toBe(true);
+    await until('hello', () => sys.device.id === 'HOST');
+    expect(sys.observes('usb')).toBe(true);
+
+    expect(sys.followUsb({ vid: 0x045e, pid: 0x0b12, serial: 'A1' })).toBeNull();
+    await until('followed device attached', () => sys.usb.connected);
+    expect(sys.usb.descriptor).toMatchObject({ vid: 0x045e, pid: 0x0b12, product: 'Controller', speed: 'FULL', powerSource: 'BUS' });
+
+    for (let k = 0; k < 3; k++) {
+      tree.unplugPad();
+      await until(`drop ${k + 1}`, () => !sys.usb.connected && sys.usb.disconnects === k + 1);
+      tree.plugPad();
+      await until(`back ${k + 1}`, () => sys.usb.connected);
+    }
+    sys.evaluate();
+    const d = sys.diagnoses.find((x) => x.id === 'USB_INTERMITTENT');
+    expect(d?.basis).toBe('3 disconnects of the same device (supply not observed)');
+    // The other devices are on the timeline too, as lines for people.
+    expect(sys.trace.all().some((e) => e.message.includes('usb detached: 045E:0B12 Microsoft Controller'))).toBe(true);
+    expect(sys.frameErrors).toBe(0);
+    await sys.disconnect();
+  });
+});

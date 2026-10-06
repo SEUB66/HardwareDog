@@ -1131,3 +1131,29 @@ body {
     flex-wrap: nowrap;
   }
 }
+
+/* This computer's USB devices: the followed one stands out. */
+.usb-list td,
+.usb-list th {
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+.usb-list td:first-child {
+  white-space: normal;
+}
+.usb-list tr.followed td {
+  color: var(--cyan);
+  background: #00e5ff10;
+}
+.usb-list .btn {
+  padding: 3px 10px;
+  font-size: var(--fs-meta);
+}
+@media (max-width: 760px) {
+  .usb-list th:nth-child(4),
+  .usb-list td:nth-child(4),
+  .usb-list th:nth-child(5),
+  .usb-list td:nth-child(5) {
+    display: none;
+  }
+}

@@ -73,6 +73,9 @@ describe('HDP v1 contract', () => {
       { cmd: 'i2c.watch', every_ms: 0 },
       { cmd: 'net.watch', every_ms: 10000, dns: 'example.com', upstream: 'example.org' },
       { cmd: 'net.watch', every_ms: 0 },
+      { cmd: 'usb.follow', vid: 0x046d, pid: 0xc52b },
+      { cmd: 'usb.follow', vid: 0x045e, pid: 0x0b12, serial: 'A1', port: '1-3' },
+      { cmd: 'usb.follow' },
     ];
     for (const c of commands) {
       expect(validateCommand(JSON.parse(encodeCommand(c))), `${c.cmd}: ${lastErrors(validateCommand)}`).toBe(true);

@@ -137,9 +137,10 @@ flashes anything. Note: opening a serial port can reset some boards (DTR).
 Then in the interface: **START HERE → THIS COMPUTER'S NETWORK**.
 
 `host` is a device that lives in dogd and speaks HDP v1 like a probe,
-with the capabilities it really has: `net` and `probe`. Its hello says
-`device HOST, rev HOST`. Power, USB, serial and I2C are not observed,
-and STATUS says NOT MONITORED. The timeline, the network rules
+with the capabilities it really has: `net`, `probe`, and `usb` where the
+system's USB list is read (Linux). Its hello says `device HOST, rev
+HOST`. Power, serial and I2C are not observed, and STATUS says NOT
+MONITORED. The timeline, the network rules
 (NO_LINK, DHCP_FAILURE, GATEWAY_UNREACHABLE, DNS_FAILURE,
 UPSTREAM_FAILURE, NETWORK_UNSTABLE), the recording, the replay and the
 report are the same as with a probe.
@@ -168,11 +169,22 @@ ACTIVE (when asked)  the interface asks with net.watch: THIS COMPUTER'S
                      latency, loss: of the four pings
 PROBE                PING, DNS, TCP (port 80), HTTP (GET /, the status line):
                      what the PROBE screen asks, from this computer
+USB (Linux)          the devices plugged into this computer, read every 1 s
+                     from /sys/bus/usb/devices: nothing is opened, claimed
+                     or written. Every device plugged in or out is a line
+                     on the timeline (id, name, class, speed, port). USB ->
+                     FOLLOW makes one the target (usb.follow): its
+                     usb.attach / usb.detach go to the USB rules, which say
+                     the supply was not observed. GET /v1/usb is the list.
+                     macOS and Windows: not read yet, no `usb` declared.
 ```
 
 Nothing ACTIVE runs before the interface asks, and the timeline says
-when it did. A computer is not a probe: it sees its own network, not the
-board's; it measures no power. A probe adds that.
+when it did. A computer is not a probe: it sees its own network and its
+own USB ports, not the board's; it measures no power. A probe adds that.
+
+HWDOG_USB_SYSFS points the USB reading at another tree that looks like
+/sys/bus/usb/devices: for tests and demos (web/test/dogd.test.ts).
 
 ---
 
