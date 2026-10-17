@@ -50,9 +50,11 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
   if (!tr) return;
   const e = Math.max(0, now - tr.from);
   const b = buffer.getContext('2d')!;
+  // The scene the screen opens on, and closes from: where the companion is.
+  const rest = c.hardware === 'CONNECTED' ? 'idle' : 'wait';
   if (c.power === 'BOOTING') {
     if (reduced) {
-      sprites.drawScene(b, 'idle', now);
+      sprites.drawScene(b, rest, now);
       ctx.globalAlpha = Math.min(1, e / tr.ms);
       ctx.drawImage(buffer, 0, 0);
       ctx.globalAlpha = 1;
@@ -85,7 +87,7 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
       sprites.drawSplash(ctx, e - 1000);
     } else {
       sprites.drawSplash(ctx, 650);
-      sprites.drawScene(b, 'idle', now);
+      sprites.drawScene(b, rest, now);
       ctx.globalAlpha = Math.min(1, (e - 1650) / 300);
       ctx.drawImage(buffer, 0, 0);
       ctx.globalAlpha = 1;
@@ -93,7 +95,7 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
     return;
   }
   // SHUTTING_DOWN: squeeze to a line, then to a dot, then dark
-  sprites.drawScene(b, 'idle', now);
+  sprites.drawScene(b, rest, now);
   const p = e / tr.ms;
   if (reduced) {
     ctx.globalAlpha = Math.max(0, 1 - p);
@@ -144,7 +146,8 @@ function TvCanvas({ companion, sprites, reduced }: { companion: Companion; sprit
         return;
       }
       if (companion.power !== 'ON') drawPower(ctx, buffer, companion, sprites, now, reduced);
-      else sprites.drawScene(ctx, reduced ? (companion.anim === 'error' || companion.anim === 'warning' ? companion.anim : 'idle') : companion.anim, reduced ? 0 : now - companion.animSince);
+      // Reduced motion: the same scene, held still on a representative moment.
+      else sprites.drawScene(ctx, companion.anim, reduced ? 1200 : now - companion.animSince);
     };
     const loop = (now: number) => {
       frame = 0;

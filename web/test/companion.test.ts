@@ -26,7 +26,7 @@ describe('companion: TV power', () => {
     expect(c.power).toBe('ON');
     expect(c.anim).toBe('greet');
     time.advance(TIMING.greet);
-    expect(c.anim).toBe('idle');
+    expect(c.anim).toBe('wait'); // nothing connected: it dozes
   });
 
   it('clicks during a transition: the sequence finishes, the last click decides', () => {
@@ -83,7 +83,7 @@ describe('companion: follows real events', () => {
     expect(c.anim).toBe('error');
     expect(c.message?.code).toBe('ERROR_STORAGE_NOT_EXIST');
     time.advance(TIMING.error);
-    expect(c.anim).toBe('idle');
+    expect(c.anim).toBe('wait');
   });
 
   it('a lost link ends its operations on screen', () => {
@@ -109,7 +109,9 @@ describe('companion: follows real events', () => {
     emit({ type: 'op.end', op: 'b', severity: 'PASS' });
     expect(c.anim).toBe('success');
     time.advance(TIMING.success);
-    expect(c.anim).toBe('idle');
+    expect(c.anim).toBe('wait');
+    emit({ type: 'link.state', params: { state: 'CONNECTED' } });
+    expect(c.anim).toBe('idle'); // a link up and nothing to do: it keeps busy
   });
 
   it('progress is never invented: indeterminate stays indeterminate', () => {

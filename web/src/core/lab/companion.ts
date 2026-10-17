@@ -34,7 +34,7 @@ export const DIAL_MODES = ['COMPANION', 'TOOL', 'EVENT'] as const;
 export type DialMode = (typeof DIAL_MODES)[number];
 
 /** The animation the screen should play now. `none`: the screen is dark. */
-export type Anim = 'none' | 'idle' | 'greet' | 'connect' | 'search' | 'read' | 'transfer' | 'success' | 'warning' | 'error' | 'disconnect';
+export type Anim = 'none' | 'idle' | 'wait' | 'greet' | 'connect' | 'search' | 'read' | 'transfer' | 'success' | 'warning' | 'error' | 'disconnect';
 
 export const HARDWARE_STATES: readonly HardwareState[] = ['UNKNOWN', 'ABSENT', 'CONNECTING', 'CONNECTED', 'DISCONNECTED'];
 
@@ -327,7 +327,8 @@ export class Companion {
     if (this.hardware === 'CONNECTING' || [...this.active.values()].some((o) => o.kind === 'connect')) return 'connect';
     if (this.op === 'SUCCESS') return 'success';
     if (this.greeting) return 'greet';
-    return 'idle';
+    // Nothing to do with a link up: it keeps busy. No link: it sits and dozes.
+    return this.hardware === 'CONNECTED' ? 'idle' : 'wait';
   }
 
   // ------------------------------------------------------------ plumbing
