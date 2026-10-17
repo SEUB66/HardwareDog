@@ -1,0 +1,108 @@
+/**
+ * HARDWARE DOG / COMPANION RULES
+ *
+ * Local rules turn a lab event into a short suggestion: what happened, the
+ * next thing to check. No remote AI, no guess dressed as a fact: a rule
+ * matches an exact code or state, and the code is shown as it was given.
+ * An event with no matching rule says nothing on the TV (the log keeps it).
+ */
+
+import type { LabAction, LabEvent } from './events';
+import type { Suggestion } from './messages';
+
+export type Lang = 'en' | 'fr';
+
+export const browserLang = (): Lang => (typeof navigator !== 'undefined' && navigator.language?.toLowerCase().startsWith('fr') ? 'fr' : 'en');
+
+type Text = Record<Lang, string>;
+
+/** Messages by key. `{x}` is replaced by the event's param x. */
+const TEXT: Record<string, Text> = {
+  'link.lost': { en: 'Connection lost. Check the USB cable.', fr: 'Connexion interrompue. Vérifie le câble USB.' },
+  'link.connected': { en: 'Flipper connected. Read-only until you ask.', fr: 'Flipper connecté. Lecture seule tant que tu ne demandes rien.' },
+  'link.absent': { en: 'No Flipper picked. Plug it in, then CONNECT.', fr: 'Aucun Flipper choisi. Branche-le, puis CONNECT.' },
+  'serial.unsupported': { en: 'This browser has no Web Serial. Use Chrome, Edge or Opera.', fr: 'Ce navigateur n’a pas Web Serial. Utilise Chrome, Edge ou Opera.' },
+  'serial.cancelled': { en: 'No port chosen.', fr: 'Aucun port choisi.' },
+  'serial.denied': { en: 'Access to the port was refused.', fr: 'Accès au port refusé.' },
+  'serial.busy': { en: 'The port may be open elsewhere (qFlipper, a terminal). Close it, retry.', fr: 'Le port est peut-être ouvert ailleurs (qFlipper, un terminal). Ferme-le, réessaie.' },
+  'rpc.timeout': { en: 'No answer from the Flipper in time.', fr: 'Pas de réponse du Flipper à temps.' },
+  'rpc.busy': { en: 'The Flipper is busy: an app holds it. Exit the app on the device.', fr: 'Le Flipper est occupé : une app le retient. Quitte-la sur l’appareil.' },
+  'rpc.sd': { en: 'The SD card is not ready. Is it inserted?', fr: 'La carte SD n’est pas prête. Est-elle insérée ?' },
+  'rpc.exists': { en: 'That name already exists on the Flipper. Nothing was overwritten.', fr: 'Ce nom existe déjà sur le Flipper. Rien n’a été écrasé.' },
+  'rpc.notexist': { en: 'That path does not exist on the Flipper.', fr: 'Ce chemin n’existe pas sur le Flipper.' },
+  'rpc.denied': { en: 'The Flipper refused access to that path.', fr: 'Le Flipper a refusé l’accès à ce chemin.' },
+  'rpc.notimpl': { en: 'This firmware does not implement that command.', fr: 'Ce firmware n’implémente pas cette commande.' },
+  'rpc.other': { en: 'The Flipper answered with an error.', fr: 'Le Flipper a répondu par une erreur.' },
+  'file.invalid': { en: 'This file could not be read as a known format.', fr: 'Ce fichier n’a pas pu être lu dans un format connu.' },
+  'copy.done': { en: 'Copied to this computer: {name}.', fr: 'Copié sur cet ordinateur : {name}.' },
+  'ble.unsupported': { en: 'Web Bluetooth is not available here. dogd can scan on Linux.', fr: 'Web Bluetooth n’est pas disponible ici. dogd peut scanner sous Linux.' },
+  'ble.noadapter': { en: 'No Bluetooth adapter found.', fr: 'Aucun adaptateur Bluetooth trouvé.' },
+  'ble.denied': { en: 'Bluetooth permission was refused.', fr: 'Permission Bluetooth refusée.' },
+  'ble.gattlost': { en: 'The BLE device disconnected. Nothing will be resent on its own.', fr: 'L’appareil BLE s’est déconnecté. Rien ne sera renvoyé tout seul.' },
+  'op.failed': { en: 'Failed: {what}.', fr: 'Échec : {what}.' },
+};
+
+const fill = (template: string, params: LabEvent['params']) => template.replace(/\{(\w+)\}/g, (_, k: string) => String(params?.[k] ?? ''));
+
+const retry = (command: string, lang: Lang): LabAction => ({ label: lang === 'fr' ? 'Réessayer' : 'Retry', command });
+const details = (lang: Lang): LabAction => ({ label: lang === 'fr' ? 'Voir les détails' : 'Details', command: 'lab.log' });
+
+function say(key: string, e: LabEvent, lang: Lang, actions?: LabAction[]): Suggestion {
+  const s: Suggestion = { key: `${e.source}:${key}:${e.code ?? ''}`, severity: e.severity, text: fill(TEXT[key]![lang], e.params) };
+  if (e.code) s.code = e.code;
+  if (actions) s.actions = actions;
+  return s;
+}
+
+/** Codes a Flipper RPC answer can carry (CommandStatus), mapped to a message. */
+const RPC_CODES: Record<string, string> = {
+  ERROR_BUSY: 'rpc.busy',
+  ERROR_APP_SYSTEM_LOCKED: 'rpc.busy',
+  ERROR_STORAGE_NOT_READY: 'rpc.sd',
+  ERROR_STORAGE_EXIST: 'rpc.exists',
+  ERROR_STORAGE_NOT_EXIST: 'rpc.notexist',
+  ERROR_STORAGE_DENIED: 'rpc.denied',
+  ERROR_NOT_IMPLEMENTED: 'rpc.notimpl',
+  ERROR_STORAGE_NOT_IMPLEMENTED: 'rpc.notimpl',
+};
+
+export function suggest(e: LabEvent, lang: Lang): Suggestion | null {
+  if (e.type === 'link.state') {
+    const state = e.params?.['state'];
+    if (e.source === 'FLIPPER') {
+      if (state === 'DISCONNECTED' && e.params?.['reason'] === 'lost') return say('link.lost', { ...e, severity: 'FAIL' }, lang, [retry('flipper.connect', lang), details(lang)]);
+      if (state === 'CONNECTED') return say('link.connected', { ...e, severity: 'PASS' }, lang);
+    }
+    if (e.source === 'BLE' && state === 'DISCONNECTED' && e.params?.['reason'] === 'lost') return say('ble.gattlost', { ...e, severity: 'WARN' }, lang, [details(lang)]);
+    return null;
+  }
+  if (e.type !== 'op.end' || e.severity === 'PASS' || e.severity === 'INFO') {
+    if (e.type === 'op.end' && e.severity === 'PASS' && e.params?.['copied']) return say('copy.done', e, lang);
+    return null;
+  }
+  const code = e.code ?? '';
+  const connect = e.source === 'FLIPPER' ? 'flipper.connect' : 'ble.start';
+  switch (code) {
+    case 'SERIAL_UNSUPPORTED':
+      return say('serial.unsupported', e, lang);
+    case 'NotFoundError':
+      return e.source === 'BLE' ? say('ble.noadapter', e, lang, [details(lang)]) : say('serial.cancelled', { ...e, severity: 'INFO' }, lang);
+    case 'SecurityError':
+    case 'NotAllowedError':
+      return say(e.source === 'BLE' ? 'ble.denied' : 'serial.denied', e, lang, [details(lang)]);
+    case 'NetworkError':
+    case 'InvalidStateError':
+      return e.source === 'FLIPPER' ? say('serial.busy', e, lang, [retry(connect, lang), details(lang)]) : say('ble.gattlost', e, lang, [details(lang)]);
+    case 'TIMEOUT':
+      return say('rpc.timeout', e, lang, [retry(connect, lang), details(lang)]);
+    case 'BLE_UNSUPPORTED':
+      return say('ble.unsupported', e, lang, [details(lang)]);
+    case 'BLE_NO_ADAPTER':
+      return say('ble.noadapter', e, lang, [details(lang)]);
+    case 'FORMAT_INVALID':
+      return say('file.invalid', e, lang, [details(lang)]);
+  }
+  if (RPC_CODES[code]) return say(RPC_CODES[code], e, lang, [details(lang)]);
+  if (code.startsWith('ERROR')) return say('rpc.other', e, lang, [details(lang)]);
+  return say('op.failed', { ...e, params: { ...e.params, what: e.message } }, lang, [details(lang)]);
+}

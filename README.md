@@ -74,6 +74,11 @@ I want one instrument that can help answer a very simple question:
 [ OK ] SESSIONS          recorded locally, sealed (SHA-256), replayed exactly
 [ OK ] CASES             recorded incidents as regression tests, cases/
 [ OK ] DOGD              local daemon: device link, session store (docs/DOGD.md)
+[ .. ] FLIPPER LAB       optional Flipper Zero tools + companion TV, tested on
+                         the demo device, not yet on a real Flipper
+                         (docs/FLIPPER_LAB.md)
+[ .. ] BLUETOOTH LAB     our own BLE scanner, inspector, GATT; dogd scans on
+                         Linux (BlueZ); tested in simulation (docs/BLUETOOTH_LAB.md)
 [ .. ] FIRMWARE          ESP32-S3 + INA226: core verified on PC + CI,
                          board bring-up pending (docs/FIRMWARE.md)
 [ -- ] HARDWARE          NOT STARTED
@@ -158,6 +163,8 @@ PROTOCOL           docs/PROTOCOL.md, protocol/hdp_v1.json
 DIAGNOSTICS        docs/DIAGNOSTICS.md
 DESIGN / BRAND     docs/DESIGN_SPEC.md, docs/BRAND.md
 LIBRARY            docs/LIBRARY.md, cases/INDEX.md
+FLIPPER LAB        docs/FLIPPER_LAB.md
+BLUETOOTH LAB      docs/BLUETOOTH_LAB.md
 SECURITY           docs/SECURITY.md
 1.0                docs/RELEASE.md
 EVERY DOCUMENT     docs/README.md
