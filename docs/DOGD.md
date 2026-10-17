@@ -214,6 +214,38 @@ not: [`BLUETOOTH_LAB.md`](BLUETOOTH_LAB.md).
 
 ---
 
+## LOCAL NETWORK (THE CAMERA SNIFFER SCANNER)
+
+```text
+GET  /v1/lan/interfaces             IPv4 networks of this computer, each with
+                                    why a scan would be refused (null: allowed)
+GET  /v1/lan/status                 state, step, checks done / total, OUI file
+PUT  /v1/lan/scan                   {"action":"start","iface":"wlan0",
+                                     "methods":["neighbors","mdns","ssdp","wsd","services"]}
+                                    or {"action":"stop"}; 409 with the reason
+                                    when refused
+GET  /v1/lan/observations?since=N   what devices said about themselves after N,
+                                    the next N, and how many fell off (lost)
+```
+
+Linux only for now. One scan at a time, on one interface the person
+picked, private (RFC 1918 or link-local) and never wider than a /16; it
+never sweeps the subnet nor scans ports: neighbor table, one mDNS/DNS-SD
+question, one SSDP M-SEARCH (and the descriptions it points at), one ONVIF
+WS-Discovery Probe, then a short list of ports (554, 8554, 80, 8080, 8000,
+443) on hosts that showed themselves, with one RTSP OPTIONS where RTSP
+answers. No password, no stream. Every step has a deadline, 16 connections
+at most, a stop aborts at once. Records keep their method and raw answer
+(2 KB). Manufacturers come from the system's OUI file when installed
+(`HWDOG_OUI` names another). `HWDOG_LAN_IP_JSON` (an `ip -j -4 addr` file)
+and `HWDOG_LAN_ARP` (a /proc/net/arp file) point the readings elsewhere
+for tests. What it means: [`CAMERA_SNIFFER.md`](CAMERA_SNIFFER.md).
+
+`GET /v1/usb` also lists every interface of a device by class
+(`interfaces`: VIDEO, MSC, CDC...), read from sysfs.
+
+---
+
 ## PROVENANCE
 
 A serial port is real hardware: `PHYSICAL`. dogd cannot tell a simulator on

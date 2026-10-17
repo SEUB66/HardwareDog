@@ -58,6 +58,15 @@ DOGD: NETWORK    with --listen-lan, a request from another machine must show
 DOGD: HOST       --source host reads the network state without sending
                  anything; pings, lookups and connections run only when the
                  interface asks (net.watch, probe), to host names only
+DOGD: LAN SCAN   Camera Sniffer's discovery runs only when the interface
+                 asks, on one interface the person picked, private (RFC
+                 1918 / link-local) and at most a /16; no subnet sweep, no
+                 port scan, no password, no stream (RTSP OPTIONS only);
+                 deadlines, 16 connections at most, a stop aborts; answers
+                 from outside the network are dropped; every parser is
+                 bounded and tested on malformed input (dogd/src/lan)
+CAMERA SNIFFER   photos and notes stay in the browser; the report export is
+                 previewed and can mask addresses, MACs and names
                  (letters, digits, dots, dashes: never a shell); the ping
                  is the system's, run without a shell (dogd/src/hostnet).
                  Its USB list is read from sysfs: no device is opened,

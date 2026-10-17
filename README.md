@@ -79,6 +79,10 @@ I want one instrument that can help answer a very simple question:
                          (docs/FLIPPER_LAB.md)
 [ .. ] BLUETOOTH LAB     our own BLE scanner, inspector, GATT; dogd scans on
                          Linux (BlueZ); tested in simulation (docs/BLUETOOTH_LAB.md)
+[ .. ] CAMERA SNIFFER    clues of cameras: local network (dogd), Bluetooth, USB,
+                         offline catalog, guided inspection, local report;
+                         parsers and demo tested, no real camera yet
+                         (docs/CAMERA_SNIFFER.md)
 [ .. ] FIRMWARE          ESP32-S3 + INA226: core verified on PC + CI,
                          board bring-up pending (docs/FIRMWARE.md)
 [ -- ] HARDWARE          NOT STARTED
@@ -165,6 +169,7 @@ DESIGN / BRAND     docs/DESIGN_SPEC.md, docs/BRAND.md
 LIBRARY            docs/LIBRARY.md, cases/INDEX.md
 FLIPPER LAB        docs/FLIPPER_LAB.md
 BLUETOOTH LAB      docs/BLUETOOTH_LAB.md
+CAMERA SNIFFER     docs/CAMERA_SNIFFER.md
 SECURITY           docs/SECURITY.md
 1.0                docs/RELEASE.md
 EVERY DOCUMENT     docs/README.md

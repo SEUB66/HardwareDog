@@ -5,13 +5,18 @@
  * the dog's brand accent.
  */
 
-.lab {
+.lab,
+.whatsnew-backdrop,
+.nav-new,
+.tv-floating {
   --lab-bg: #101112;
   --lab-surface: #181a1b;
   --lab-cream: #f2f0e9;
   --lab-orange: #ff8a1e;
   --lab-orange-dim: #a8540f;
   --lab-line: #2b2e30;
+}
+.lab {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
@@ -20,8 +25,8 @@
 :root:not([data-theme='light']):not([data-field='on']) .lab {
   color: var(--lab-cream);
 }
-:root[data-theme='light'] .lab,
-:root[data-field='on'] .lab {
+:root[data-theme='light'] :is(.lab, .whatsnew-backdrop, .nav-new, .tv-floating),
+:root[data-field='on'] :is(.lab, .whatsnew-backdrop, .nav-new, .tv-floating) {
   --lab-bg: var(--bg);
   --lab-surface: var(--panel);
   --lab-cream: var(--text);
@@ -859,5 +864,485 @@
   .tv-toolbar .tv-detach:disabled,
   .tv-floating .tv-size {
     display: none;
+  }
+}
+
+/* ---------------------------------------------------------- camera sniffer */
+
+.camera-banner img {
+  object-position: 50% 50%;
+}
+.camera-intro {
+  margin: 8px 0 4px;
+}
+.camera-subtitle {
+  margin: 0 0 2px;
+  font: 600 var(--fs-title) var(--cond);
+  letter-spacing: 0.08em;
+  color: var(--lab-orange);
+}
+.camera-msg {
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--cyan);
+  background: var(--lab-surface);
+}
+.camera-msg.sev-FAIL {
+  border-left-color: var(--red, #ff5f56);
+}
+.camera-actions .btn {
+  min-height: 36px;
+}
+.camera-list {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.camera-list li {
+  margin: 2px 0;
+}
+.camera-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 2px 12px;
+}
+.camera-steps li {
+  color: var(--text-dim);
+}
+.camera-steps li.done {
+  color: var(--green);
+}
+.camera-ifaces {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+.camera-iface {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+}
+.camera-iface.refused {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.camera-methods {
+  margin: 8px 0;
+  border: 1px solid var(--lab-line, var(--border));
+  padding: 6px 10px;
+}
+.camera-methods legend {
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+}
+.camera-devices tr,
+.camera-devices button.linkish {
+  cursor: pointer;
+}
+.camera-devices tr.selected td {
+  background: color-mix(in srgb, var(--cyan) 10%, transparent);
+}
+button.linkish {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--cyan);
+  text-decoration: underline dotted;
+  font: inherit;
+  cursor: pointer;
+}
+.camera-h3 {
+  margin: 12px 0 4px;
+  font: 600 var(--fs-meta) var(--mono);
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+.camera-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.camera-reasons li {
+  margin: 4px 0;
+  padding-left: 4px;
+  border-left: 2px solid var(--border);
+}
+.camera-reasons li.role-STATE {
+  border-left-color: var(--cyan);
+}
+.camera-reasons li.role-USER {
+  border-left-color: var(--lab-orange);
+}
+.tag-mini {
+  display: inline-block;
+  min-width: 42px;
+  font: 600 10px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.camera-raw,
+.camera-report {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 8px;
+  font-size: var(--fs-log);
+}
+.camera-report {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.camera-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+  font-size: var(--fs-meta);
+  color: var(--text-dim);
+  min-width: 0;
+}
+.camera-field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.camera-field .input {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+}
+.camera-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.camera-room {
+  border: 1px solid var(--lab-line, var(--border));
+  padding: 8px;
+  background: var(--lab-surface);
+}
+.camera-room > header,
+.camera-item > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+}
+.camera-room > header .btn,
+.camera-item > header .btn {
+  margin-left: auto;
+}
+.camera-item {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  background: var(--panel);
+}
+.camera-item.status-NEEDS_CHECK {
+  border-left-color: var(--amber, #e4b04a);
+}
+.camera-item.status-EXAMINED_NOTHING_NOTED {
+  border-left-color: var(--green);
+}
+.camera-item.status-CONFIRMED_DOCUMENTED {
+  border-left-color: var(--red, #ff5f56);
+}
+.camera-item-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 16px;
+}
+.camera-checks summary {
+  cursor: pointer;
+  color: var(--cyan);
+  margin: 6px 0;
+}
+.camera-capture video {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+  object-fit: contain;
+}
+.camera-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.camera-photo {
+  margin: 0;
+  width: 110px;
+}
+.camera-photo.open {
+  width: 100%;
+}
+.camera-photo-frame {
+  position: relative;
+  cursor: pointer;
+}
+.camera-photo-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.camera-mark {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--lab-orange);
+  color: #101112;
+  font: 700 12px/20px var(--mono);
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px #101112;
+}
+.camera-order {
+  margin: 0;
+  padding-left: 22px;
+}
+.camera-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.camera-filters .input {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.camera-families {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+.camera-family {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 6px;
+  border: 1px solid var(--border);
+  background: var(--lab-surface);
+  min-width: 0;
+}
+.camera-illu {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  color: var(--lab-orange);
+}
+.camera-sheet-head {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.camera-sheet-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.camera-model {
+  border-top: 1px dashed var(--border);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+.camera-conclusion {
+  margin: 0;
+  font: 600 var(--fs-title) var(--cond);
+  letter-spacing: 0.04em;
+  color: var(--green);
+}
+.camera-conclusion.some {
+  color: var(--amber, #e4b04a);
+}
+
+/* ---------------------------------------------------------- what's new */
+
+.nav-new {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--lab-orange);
+  color: #101112;
+  font: 700 9px/14px var(--mono);
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+.whatsnew-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.62);
+  overflow-y: auto;
+}
+.whatsnew {
+  width: min(720px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* opaque: the page behind must not show through the text */
+  background: var(--bg);
+  border: 1px solid var(--lab-orange);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.whatsnew-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+.whatsnew-head h2 {
+  margin: 0;
+  font: 600 var(--fs-title) var(--cond);
+  letter-spacing: 0.12em;
+  color: var(--lab-orange);
+}
+.whatsnew-hero {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #0c0d0e;
+  cursor: pointer;
+}
+.whatsnew-hero img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.whatsnew-new {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 2px 8px;
+  background: var(--lab-orange);
+  color: #101112;
+  font: 700 12px var(--mono);
+  letter-spacing: 0.1em;
+}
+.whatsnew-body {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  align-items: start;
+}
+.whatsnew-pitch {
+  margin: 0 0 8px;
+}
+.whatsnew-list ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.whatsnew-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.whatsnew-item span {
+  color: var(--text-dim);
+  font-size: var(--fs-meta);
+}
+@media (max-width: 600px) {
+  .whatsnew-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .whatsnew-tv {
+    width: 100%;
+    max-width: 240px;
+    margin: 0 auto;
+  }
+  .camera-item-grid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .camera-families {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .camera-item .btn,
+  .camera-room .btn {
+    min-height: 36px;
+  }
+}
+
+/* wide tables scroll in their own box, never over the TV column */
+.camera-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.camera-scroll > table {
+  min-width: 100%;
+}
+.camera-devices td.msg,
+.camera-ble td.msg,
+.camera-usb td.msg {
+  word-break: normal;
+  overflow-wrap: anywhere;
+  min-width: 140px;
+}
+
+/* on a phone, device tables become cards: one block per device, labeled lines */
+@media (max-width: 600px) {
+  :is(table.camera-devices, table.camera-ble, table.camera-usb) {
+    display: block;
+    overflow: visible;
+    border: 0;
+    background: none;
+  }
+  :is(.camera-devices, .camera-ble, .camera-usb) thead {
+    display: none;
+  }
+  :is(.camera-devices, .camera-ble, .camera-usb) :is(tbody, tr, td) {
+    display: block;
+  }
+  :is(.camera-devices, .camera-ble, .camera-usb) tr {
+    margin: 0 0 8px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+  }
+  :is(.camera-devices, .camera-ble, .camera-usb) td {
+    padding: 2px 0 !important;
+    border: 0 !important;
+    min-width: 0 !important;
+  }
+  :is(.camera-devices, .camera-ble, .camera-usb) td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
   }
 }

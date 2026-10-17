@@ -31,6 +31,9 @@ import { IntegrityTag } from './components/IntegrityTag';
 import { ConnectBanner, ConnectStrip } from './components/ConnectBanner';
 import { SimBanner } from './components/SimBanner';
 import { Tour } from './Tour';
+import { WhatsNew } from './WhatsNew';
+import { CameraSniffer, type CameraTool } from './camera/CameraSniffer';
+import { isNewScreen } from '../core/features';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
 import { Bus } from './screens/Bus';
@@ -191,6 +194,9 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   useTvPower(lab.companion, placement);
   const [flipperTool, setFlipperTool] = useState<FlipperTool>('FILES');
   const [bleTool, setBleTool] = useState<BleTool>('SCAN');
+  const [cameraTool, setCameraTool] = useState<CameraTool>('OVERVIEW');
+  // What's new: shown every time the interface opens, after the intro.
+  const [whatsNew, setWhatsNew] = useState(true);
   const reducedMotion = system.settings.reducedMotion || (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   // What the companion's messages can offer: commands, run once at a time by the registry.
@@ -656,11 +662,13 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         return <FlipperLab lab={lab} placement={placement} reducedMotion={reducedMotion} tool={flipperTool} onTool={setFlipperTool} />;
       case 'BLE':
         return <BluetoothLab lab={lab} tool={bleTool} onTool={setBleTool} />;
+      case 'CAMERA':
+        return <CameraSniffer lab={lab} placement={placement} reducedMotion={reducedMotion} tool={cameraTool} onTool={setCameraTool} />;
       case 'HELP':
         return <Help />;
     }
   })();
-  const labScreen = screen === 'FLIPPER' || screen === 'BLE';
+  const labScreen = screen === 'FLIPPER' || screen === 'BLE' || screen === 'CAMERA';
 
   return (
     <div class="shell">
@@ -740,7 +748,10 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
                 <button aria-current={screen === s ? 'page' : undefined} onClick={() => navigate(s)} title={SCREEN_PURPOSE[s]}>
                   <Icon name={s} />
                   <span class="nav-label">
-                    <span class="nav-name">{s}</span>
+                    <span class="nav-name">
+                      {s}
+                      {isNewScreen(s) && <span class="nav-new">NEW</span>}
+                    </span>
                     <span class="nav-purpose">{SCREEN_PURPOSE[s]}</span>
                   </span>
                   <span class="key">{digit >= 0 ? digit + 1 : ''}</span>
@@ -823,6 +834,17 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
 
       {touring && <Tour onEnd={() => setTouring(false)} />}
+      {whatsNew && !touring && (
+        <WhatsNew
+          lab={lab}
+          reducedMotion={reducedMotion}
+          onClose={() => setWhatsNew(false)}
+          onGo={(s) => {
+            setWhatsNew(false);
+            navigate(s);
+          }}
+        />
+      )}
 
       {palette && (
         <CommandPalette

@@ -455,6 +455,9 @@ export function sceneFor(scene: SceneName, t: number, subject: Subject | null = 
     case 'connect':
       return { id: 'connect', t };
     case 'read':
+      // Camera Sniffer: an object examined with the lamp and the magnifier; a sheet compared is read like a printout
+      if (tool === 'camera.compare') return { id: 'report', t };
+      if (tool.startsWith('camera.')) return { id: 'analyze', t };
       if (topic === 'ir') return { id: 'infrared', t };
       if (topic === 'nfc' || topic === 'rfid' || topic === 'ibutton') return { id: 'rfid', t };
       if (topic === 'subghz') return { id: 'scan', t };
@@ -463,7 +466,7 @@ export function sceneFor(scene: SceneName, t: number, subject: Subject | null = 
     case 'transfer':
       return { id: tool === 'flipper.copy' ? 'backup' : 'transfer', t };
     case 'success':
-      return { id: tool === 'lab.report' ? 'report' : 'success', t };
+      return { id: tool === 'lab.report' || tool === 'camera.report' || tool === 'camera.inspect' ? 'report' : 'success', t };
     case 'warning':
       return { id: 'analyze', t };
     case 'error':
