@@ -1,17 +1,20 @@
 /**
- * HARDWARE DOG / TV SPRITES — THE COMPANION AND ITS LITTLE LIFE
+ * HARDWARE DOG / TV SPRITES — THE COMPANION AT ITS DESK
  *
- * What plays inside the TV screen: a small cartoon dolphin, upright, with
- * a big readable head, living in little scenes. Its gestures tell what the
- * tool is doing: it works at a computer while the tool analyses, handles a
- * cable while it connects, examines with a magnifier while it reads,
- * carries a floppy while it transfers, celebrates a success, scratches its
- * head at a warning, takes a wrench to an error, dozes while it waits.
+ * What plays inside the TV screen: the companion, a little cartoon
+ * dolphin seen from the chest up at its desk, in a cozy lab. Its gestures
+ * tell what the tool is doing: it codes with headphones on when the link
+ * is up and all is quiet, turns the knob of a radio scanner while the tool
+ * analyses, leans over a board with a magnifier while it reads, pushes the
+ * cable into the Flipper while it connects, watches the blocks travel
+ * between two computers while it transfers, throws its arms up at a
+ * success, crosses them at an error, holds two cable ends when the link
+ * drops, and sleeps on the desk when nothing is connected.
  *
  * Drawn on a 136 x 100 canvas, one canvas pixel per art pixel, scaled up
- * without smoothing. The character is built from simple shapes plus an
- * outline pass, so every pose (arms, eyes, mouth, sitting, walking) stays
- * in one style; props and rooms are drawn the same way, in full color.
+ * without smoothing, in full color. The companion is one profile (melon
+ * flowing into a thick beak, big eye, cream throat) built from shapes plus
+ * an outline pass, so every pose stays in one style.
  *
  * A SpriteSet is replaceable: a Hardware Dog TV with the dog would supply
  * its own drawScene and drawSplash, and nothing in the engine changes.
@@ -40,69 +43,6 @@ export const PALETTE = {
   green: '#79d98a',
   amber: '#e4b04a',
   red: '#ff5f56',
-} as const;
-
-/** Room colors: full color, warm, never a monochrome screen. */
-const C = {
-  wallTeal: '#2c6e8a',
-  wallTealDark: '#255c74',
-  wallPurple: '#5d4a91',
-  wallPurpleDark: '#4f3e7d',
-  wallWarm: '#b0524a',
-  wallWarmDark: '#9a4640',
-  wallNight: '#1f2a4d',
-  wallNightDark: '#1a2342',
-  wallGray: '#4a5664',
-  wallGrayDark: '#404b57',
-  base: '#e9dcc0',
-  floor: '#9a6239',
-  floorDark: '#7e4e2c',
-  floorLight: '#b0754a',
-  sky: '#8fd8ff',
-  skyLow: '#c8f0ff',
-  dusk: '#5a4b8f',
-  duskLow: '#b06a8a',
-  frame: '#efe6d2',
-  frameDark: '#c7b99a',
-  cloud: '#ffffff',
-  sun: '#ffd447',
-  moon: '#fff3b0',
-  leaf: '#4caf50',
-  leafDark: '#2e7d32',
-  leafLight: '#8bd36b',
-  pot: '#c8643a',
-  potDark: '#9e4b2a',
-  wood: '#a7703f',
-  woodDark: '#7d522c',
-  beige: '#ddd5c0',
-  beigeDark: '#b3aa92',
-  screen: '#0d2b20',
-  screenText: '#6cff8a',
-  screenText2: '#36c15a',
-  metal: '#b9c0c7',
-  metalDark: '#7d858c',
-  gold: '#f2c14e',
-  goldDark: '#b88a23',
-  glass: '#bff3ff',
-  device: '#f4f1ea',
-  deviceDark: '#c9c3b6',
-  deviceScreen: '#ff9a3c',
-  chair: '#d84a4a',
-  chairDark: '#a83434',
-  cushion: '#4fb3a9',
-  cushionDark: '#38877f',
-  mug: '#ffffff',
-  coffee: '#6b3f22',
-  smoke: '#c9ced6',
-  book1: '#e85d75',
-  book2: '#57b5e7',
-  book3: '#f2c14e',
-  book4: '#79d98a',
-  floppy1: '#4a7bd8',
-  floppy2: '#e85d75',
-  floppy3: '#79d98a',
-  label: '#f2f0e9',
-  cream: '#f2f0e9',
 } as const;
 
 export interface SpriteSet {
@@ -215,184 +155,172 @@ export class Layer {
   }
 }
 
+
 // ---------------------------------------------------------- the character
 
-export type Eye = 'open' | 'blink' | 'happy' | 'sad' | 'angry' | 'sleep' | 'focus' | 'wide';
-export type Mouth = 'closed' | 'smile' | 'open' | 'frown' | 'tongue';
+export type Eye = 'open' | 'blink' | 'happy' | 'closed' | 'focus' | 'wide';
+export type Brow = 'none' | 'mad' | 'worried';
+export type Mouth = 'closed' | 'smile' | 'open' | 'frown' | 'grin';
 
+/**
+ * The companion from the chest up, as it sits at its desk, facing right
+ * (mirrored to face left). Its look comes from one profile: a big melon
+ * flowing into a thick bottle-nose beak, a big eye, a cream throat and
+ * belly, flippers it uses as hands.
+ */
 export interface Pose {
   eye: Eye;
   /** Where the pupil looks, -1..1 each way. */
   look?: Pt;
+  brow?: Brow;
   mouth?: Mouth;
-  /** Hand positions in character coordinates; null: resting at the side. */
+  /** Hands, in bust coordinates (null: resting on the desk). */
   front?: Pt | null;
   back?: Pt | null;
-  /** Elbows, for arms that bend (raised beside the head, never across the face). */
   frontElbow?: Pt;
   backElbow?: Pt;
-  sit?: boolean;
-  /** Walking: which foot is up (0: both down). */
-  step?: 0 | 1 | 2;
+  /** The near flipper goes up behind the head (both arms up: hooray). */
+  frontBehind?: boolean;
+  headphones?: boolean;
   blush?: boolean;
-  tear?: boolean;
   sweat?: boolean;
 }
 
-/** The character's box, and its landmarks (facing right). */
-export const CW = 52;
-export const CH = 56;
-const SHOULDER_BACK: Pt = [16, 31];
-const SHOULDER_FRONT: Pt = [27, 31];
-const REST_BACK: Pt = [13, 40];
-const REST_FRONT: Pt = [29, 40];
-/** Bottom of the feet, in character coordinates: put it on the floor. */
-export const FEET_Y = 51;
+export const BW = 64;
+export const BH = 66;
+const SHOULDER_FRONT: Pt = [36, 50];
+const SHOULDER_BACK: Pt = [18, 50];
+const DESK_FRONT: Pt = [48, 62];
+const DESK_BACK: Pt = [12, 63];
 
 const cache = new Map<string, Layer>();
 
-export function character(p: Pose): Layer {
+export function bust(p: Pose): Layer {
   const key = JSON.stringify(p);
   const hit = cache.get(key);
   if (hit) return hit;
   const P = PALETTE;
-  const L = new Layer(CW, CH);
-  const back = p.back ?? REST_BACK;
-  const front = p.front ?? REST_FRONT;
-
-  const arm = (l: Layer, shoulder: Pt, elbow: Pt | undefined, hand: Pt, r: number, c: string) => {
+  const L = new Layer(BW, BH);
+  const front = p.front ?? DESK_FRONT;
+  const back = p.back ?? DESK_BACK;
+  const arm = (l: Layer, shoulder: Pt, elbow: Pt | undefined, hand: Pt, c: string) => {
     if (elbow) {
-      l.capsule(shoulder, elbow, r, c);
-      l.capsule(elbow, hand, r, c);
-    } else l.capsule(shoulder, hand, r, c);
-    l.ellipse(hand[0], hand[1], r + 0.3, r + 0.1, c);
+      l.capsule(shoulder, elbow, 4.8, c);
+      l.capsule(elbow, hand, 4.4, c);
+    } else l.capsule(shoulder, hand, 4.6, c);
+    l.ellipse(hand[0], hand[1], 5.2, 4.4, c);
   };
-  // back arm, behind everything
-  arm(L, SHOULDER_BACK, p.backElbow, back, 2.3, P.shade);
-  // a straight front arm raised above the shoulder goes up behind the head, never across the face
-  const raised = !p.frontElbow && front[1] < 24;
-  if (raised) arm(L, SHOULDER_FRONT, undefined, front, 2.4, P.body);
-  // tail and feet
-  if (p.sit) {
-    L.capsule([14, 47], [31, 49.5], 2.2, P.body);
-    L.tri([30, 49], [38, 43], [36, 49], P.body);
-    L.tri([30, 50], [38, 54], [36, 49], P.body);
-  } else {
-    L.capsule([14, 45], [9, 47.5], 2.1, P.body);
-    // small horizontal flukes, a V
-    L.tri([10, 47], [3, 42], [6, 48], P.body);
-    L.tri([10, 48], [3, 53], [6, 47], P.body);
-    const up1 = p.step === 1 ? 2 : 0;
-    const up2 = p.step === 2 ? 2 : 0;
-    L.ellipse(16, 49.5 - up1, 3.4, 1.9, P.shade);
-    L.ellipse(26, 49.5 - up2, 3.4, 1.9, P.shade);
-  }
-  // body and belly
-  if (p.sit) L.ellipse(21, 40, 11, 9.5, P.body);
-  else L.ellipse(21, 38, 10, 10, P.body);
-  L.ellipse(25, p.sit ? 41 : 40, 6, 7, P.belly, [P.body]);
-  // head: a big round melon
-  L.ellipse(22, 16.5, 15, 13, P.body);
-  L.ellipse(18, 8.5, 7, 3, P.light, [P.body]);
-  // a short, rounded bottle-nose beak; the chin and throat pale
-  L.capsule([33, 21], [40, 22.5], 4.6, P.body);
-  L.ellipse(30, 26, 11, 4.5, P.belly, [P.body]);
-  L.ellipse(39, 25.5, 4, 1.7, P.belly, [P.body]);
-  L.ellipse(38, 18.6, 2.6, 1, P.light, [P.body]);
-  L.outline(P.outline);
-  // the crease where the beak meets the melon
-  L.set(34, 16, P.shade);
-  L.set(33, 17, P.shade);
 
-  // front arm, outlined on its own so it reads over the body
-  if (!raised) {
-    const F = new Layer(CW, CH);
-    arm(F, SHOULDER_FRONT, p.frontElbow, front, 2.4, P.body);
-    F.ellipse(front[0] - 0.5, front[1] - 0.8, 1.2, 0.8, P.light, [P.body]);
+  // the far flipper, behind (and the near one too, when it is raised behind the head)
+  arm(L, SHOULDER_BACK, p.backElbow, back, P.shade);
+  if (p.frontBehind) arm(L, SHOULDER_FRONT, p.frontElbow, front, P.body);
+  // one smooth silhouette: a wide melon sloping into a tapered beak, the back, the chest
+  L.ellipse(28, 22, 19.5, 18.5, P.body);
+  L.capsule([26, 26], [22, 52], 18, P.body);
+  L.ellipse(28, 60, 25, 14, P.body);
+  L.ellipse(43, 33, 8, 7, P.body);
+  L.tri([36, 23], [56, 34.5], [36, 44], P.body);
+  L.ellipse(53.5, 37.6, 4.4, 3.9, P.body);
+  // shading on the back, a highlight on the melon and along the beak
+  L.ellipse(7, 42, 8, 28, P.shade, [P.body]);
+  L.ellipse(24, 9, 10, 3.4, P.light, [P.body]);
+  L.line([44, 29], [52, 33], P.light);
+  // the cream jaw, throat and belly, from under the mouth down
+  L.tri([38, 39.5], [57, 39], [38, 46], P.belly);
+  L.ellipse(41, 47, 10, 7, P.belly, [P.body]);
+  L.ellipse(40, 60, 15, 18, P.belly, [P.body]);
+  L.outline(P.outline);
+
+  // the near flipper, over the body, outlined on its own
+  if (!p.frontBehind) {
+    const F = new Layer(BW, BH);
+    arm(F, SHOULDER_FRONT, p.frontElbow, front, P.body);
+    F.ellipse(front[0] - 1, front[1] - 1.5, 2, 1.2, P.light, [P.body]);
     F.outline(P.outline);
     L.over(F);
   }
 
-  // eye: a big one, the face of the character
+  // headphones: the band over the melon, a cup behind the eye
+  if (p.headphones) {
+    const H = new Layer(BW, BH);
+    for (let a = 3.6; a <= 5.1; a += 0.04) H.capsule([28 + Math.cos(a) * 19.8, 22 + Math.sin(a) * 18.8], [28 + Math.cos(a + 0.04) * 19.8, 22 + Math.sin(a + 0.04) * 18.8], 1.4, '#2b3a55');
+    H.ellipse(21, 28, 5.5, 7, '#1d6f7a');
+    H.ellipse(21, 28, 3.4, 5, '#0b3c44');
+    H.ellipse(19.5, 25.5, 1, 1.6, P.cyan);
+    H.outline(P.outline);
+    L.over(H);
+  }
+
+  // the eye
+  const ex = 37;
+  const ey = 19;
   const [lx, ly] = p.look ?? [0, 0];
-  const ex = 29;
-  const ey = 12;
-  const eyeRing = (rx: number, ry: number) => {
-    L.ellipse(ex, ey, rx + 1, ry + 1, P.outline);
-    L.ellipse(ex, ey, rx, ry, P.white);
+  const lid = (y: number) => {
+    L.line([ex - 4, y], [ex - 2, y + 1], P.outline);
+    L.line([ex - 2, y + 1], [ex + 2, y + 1], P.outline);
+    L.line([ex + 2, y + 1], [ex + 4, y], P.outline);
   };
   switch (p.eye) {
     case 'blink':
-    case 'sleep':
-      L.line([ex - 3, ey + 1], [ex + 3, ey + 1], P.outline);
-      L.set(ex - 3, ey, P.outline);
-      L.set(ex + 3, ey, P.outline);
-      if (p.eye === 'sleep') L.line([ex - 2, ey + 2], [ex + 2, ey + 2], P.shade);
+    case 'closed':
+      lid(ey + 1);
+      L.line([ex - 2, ey + 3], [ex + 2, ey + 3], P.shade);
       break;
     case 'happy':
+      L.line([ex - 4, ey + 2], [ex - 2, ey - 1], P.outline);
+      L.line([ex - 2, ey - 1], [ex + 2, ey - 1], P.outline);
+      L.line([ex + 2, ey - 1], [ex + 4, ey + 2], P.outline);
       L.line([ex - 3, ey + 2], [ex - 1, ey], P.outline);
-      L.line([ex - 1, ey], [ex + 1, ey], P.outline);
       L.line([ex + 1, ey], [ex + 3, ey + 2], P.outline);
       break;
-    case 'wide':
-      eyeRing(3.8, 4.4);
-      L.rect(ex + Math.round(lx), ey + Math.round(ly), 2, 2, P.pupil);
-      break;
     default: {
-      eyeRing(3.1, 3.8);
-      const px = ex - 1 + Math.round(lx * 1.4);
-      const py = ey - 1 + Math.round(ly * 1.4);
-      L.rect(px, py, 3, 3 + (p.eye === 'sad' ? 0 : 1), P.pupil);
-      L.set(px, py, P.white);
-      if (p.eye === 'sad') L.line([ex - 3, ey - 6], [ex + 3, ey - 8], P.outline);
-      if (p.eye === 'angry') L.line([ex - 3, ey - 8], [ex + 3, ey - 5], P.outline);
+      const big = p.eye === 'wide' ? 1 : 0;
+      L.ellipse(ex, ey, 6.2 + big, 7.2 + big, P.outline);
+      L.ellipse(ex, ey, 5.2 + big, 6.2 + big, P.white);
+      const pw = p.eye === 'wide' ? 4 : 5;
+      const px = ex - 2 + Math.round(lx * 1.6);
+      const py = ey - 2 + Math.round(ly * 1.8);
+      L.rect(px, py, pw, pw + 1, P.pupil);
+      L.rect(px, py, 2, 2, P.white);
+      L.set(px + pw - 1, py + pw, P.white);
     }
   }
-  // mouth along the beak: a long smile line, the dolphin's own
-  const m = p.mouth ?? 'closed';
-  if (m === 'open') {
-    L.line([34, 23], [36, 24], P.outline);
-    L.line([36, 24], [43, 23], P.outline);
-    L.rect(36, 25, 7, 2, P.outline);
-    L.rect(37, 25, 4, 1, P.tongue);
+  if (p.brow === 'mad') {
+    L.line([ex - 5, ey - 9], [ex + 5, ey - 5], P.outline);
+    L.line([ex - 5, ey - 8], [ex + 5, ey - 4], P.outline);
+  } else if (p.brow === 'worried') {
+    L.line([ex - 5, ey - 6], [ex + 4, ey - 9], P.outline);
+  }
+
+  // the mouth: from the tip of the beak back into the cheek, curving up (the dolphin's smile)
+  const m = p.mouth ?? 'smile';
+  if (m === 'open' || m === 'grin') {
+    L.line([56, 38], [42, 40], P.outline);
+    L.tri([43, 40.5], [54, 39.5], [45, 44], P.outline);
+    L.rect(46, 41, 4, 1, P.tongue);
+    L.line([42, 40], [39, 37], P.outline);
   } else {
-    L.line([35, 24], [37, 24], P.outline);
-    L.line([37, 24], [43, 23.5], P.outline);
-    if (m === 'smile') {
-      L.set(34, 23, P.outline);
-      L.set(33, 22, P.outline);
-    }
-    if (m === 'frown') L.set(34, 25, P.outline);
-    if (m === 'tongue') {
-      L.set(41, 25, P.tongue);
-      L.set(42, 25, P.tongue);
-      L.set(41, 26, P.tongue);
-    }
+    L.line([56, 38.5], [41, 39.5], P.outline);
+    if (m === 'frown') L.line([41, 39.5], [38, 41], P.outline);
+    else if (m === 'smile') L.line([41, 39.5], [38, 36.5], P.outline);
+    else L.set(40, 39, P.outline);
   }
   if (p.blush) {
-    L.set(25, 19, P.pink);
-    L.set(26, 19, P.pink);
-    L.set(27, 19, P.pink);
-  }
-  if (p.tear) {
-    L.set(30, 17, P.tear);
-    L.set(30, 18, P.tear);
-    L.set(29, 19, P.tear);
+    L.rect(38, 30, 3, 1, P.pink);
+    L.rect(39, 31, 2, 1, P.pink);
   }
   if (p.sweat) {
-    L.set(12, 6, P.tear);
-    L.set(11, 7, P.tear);
-    L.set(12, 7, P.tear);
-    L.set(12, 8, P.tear);
+    L.set(18, 8, P.tear);
+    L.rect(17, 9, 3, 2, P.tear);
   }
   cache.set(key, L);
-  if (cache.size > 400) cache.delete(cache.keys().next().value!);
+  if (cache.size > 300) cache.delete(cache.keys().next().value!);
   return L;
 }
 
-/** A hand of the character, in screen coordinates, wherever it stands and faces. */
+/** A point of the bust in screen coordinates, wherever it sits and faces. */
 function at(origin: Pt, local: Pt, flip = false): Pt {
-  return [origin[0] + (flip ? CW - 1 - local[0] : local[0]), origin[1] + local[1]];
+  return [origin[0] + (flip ? BW - 1 - local[0] : local[0]), origin[1] + local[1]];
 }
 
 // ----------------------------------------------------------- canvas bits
@@ -418,6 +346,12 @@ const rnd = (n: number) => {
   return x - Math.floor(x);
 };
 
+function glow(ctx: CanvasRenderingContext2D, c: string, alpha: number, x: number, y: number, w: number, h: number): void {
+  ctx.globalAlpha = alpha;
+  rect(ctx, c, x, y, w, h);
+  ctx.globalAlpha = 1;
+}
+
 // ------------------------------------------------------------------ font
 
 /** 5 x 7 pixel letters, for the splash and little signs. */
@@ -435,7 +369,6 @@ const FONT: Record<string, string[]> = {
   D: ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
   O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
   G: ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.###.'],
-  K: ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
   Y: ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
   Z: ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
   '!': ['..#..', '..#..', '..#..', '..#..', '..#..', '.....', '..#..'],
@@ -460,471 +393,478 @@ export function pixelText(ctx: CanvasRenderingContext2D, text: string, x: number
 
 export const pixelTextWidth = (text: string, scale = 1) => text.length * 6 * scale - scale;
 
-/** A speech bubble with a few letters or a sign in it. */
-function bubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string): void {
-  const w = pixelTextWidth(text) + 6;
-  thing(ctx, x, y, w + 2, 15, (l) => {
-    l.rect(1, 1, w, 10, C.cloud);
-    l.tri([4, 10], [9, 10], [3, 14], C.cloud);
-  });
-  pixelText(ctx, text, x + 4, y + 3, color);
-}
+// -------------------------------------------------------------- the lab
 
-// ----------------------------------------------------------------- rooms
+/** The desk the companion sits at: its top, and how far down the bust goes behind it. */
+const DESK_Y = 80;
+/** Where the bust sits: its bottom edge hides behind the desk front. */
+const BUST_Y = DESK_Y + 6 - BH;
 
-const FLOOR_Y = 76;
+const L_ = {
+  wall: '#1e2244',
+  wallDark: '#181b38',
+  wallLine: '#262b55',
+  shelf: '#4a3a52',
+  shelfDark: '#33283a',
+  desk: '#9a6239',
+  deskLight: '#bf8150',
+  deskFront: '#5c3922',
+  deskFrontDark: '#4a2d1b',
+  beige: '#e2d8bf',
+  beigeDark: '#b7ab8f',
+  screen: '#0b2420',
+  code1: '#4de2ff',
+  code2: '#ff6fae',
+  code3: '#79d98a',
+  code4: '#ffd447',
+  lamp: '#ffcf5a',
+  lampDark: '#2c3550',
+  leaf: '#3fa45a',
+  leafDark: '#2a7340',
+  pot: '#b85c38',
+  poster: '#ff6fae',
+  box1: '#3f7fa8',
+  box2: '#a8466e',
+  box3: '#c9a14a',
+  metal: '#aab3bd',
+  metalDark: '#6e7782',
+  pcb: '#2f8a4a',
+  pcbDark: '#1f6334',
+  chip: '#22262b',
+  gold: '#e8c25a',
+  brick: '#6a3b3b',
+  brickDark: '#552d2e',
+  night: '#152048',
+  rain: '#5f86c9',
+  cityLit: '#ffd86b',
+  cable: '#21a9c4',
+  device: '#f3efe6',
+  deviceDark: '#c7c0b1',
+  deviceScreen: '#ff9a3c',
+  radio: '#3d4148',
+  radioDark: '#2a2d33',
+  check: '#79d98a',
+  white: '#ffffff',
+  mug: '#f2ede2',
+} as const;
 
-function room(ctx: CanvasRenderingContext2D, wall: string, wallDark: string): void {
-  rect(ctx, wall, 0, 0, SCREEN_W, FLOOR_Y);
-  for (let x = 4; x < SCREEN_W; x += 10) rect(ctx, wallDark, x, 0, 2, FLOOR_Y);
-  rect(ctx, C.base, 0, FLOOR_Y - 3, SCREEN_W, 3);
-  rect(ctx, C.floor, 0, FLOOR_Y, SCREEN_W, SCREEN_H - FLOOR_Y);
-  for (let y = FLOOR_Y + 5, row = 0; y < SCREEN_H; y += 6, row++) {
-    rect(ctx, C.floorDark, 0, y, SCREEN_W, 1);
-    for (let x = (row % 2) * 11; x < SCREEN_W; x += 22) rect(ctx, C.floorDark, x, y - 5, 1, 5);
-  }
-  rect(ctx, C.floorLight, 0, FLOOR_Y, SCREEN_W, 1);
-}
-
-function window_(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, night = false): void {
-  const w = 34;
-  const h = 28;
-  rect(ctx, C.frameDark, x - 1, y - 1, w + 2, h + 3);
-  rect(ctx, C.frame, x, y, w, h);
-  for (let j = 0; j < h - 4; j++) rect(ctx, j < (h - 4) / 2 ? (night ? C.dusk : C.sky) : night ? C.duskLow : C.skyLow, x + 2, y + 2 + j, w - 4, 1);
-  if (night) {
-    rect(ctx, C.moon, x + 22, y + 5, 4, 4);
-    rect(ctx, C.dusk, x + 21, y + 4, 2, 2);
-    for (let i = 0; i < 5; i++) rect(ctx, C.cloud, x + 4 + Math.round(rnd(i) * 26), y + 4 + Math.round(rnd(i + 9) * 8), 1, 1);
-  } else {
-    rect(ctx, C.sun, x + 24, y + 5, 5, 5);
-    const cx = x + 2 + ((t / 260) % (w + 10)) - 10;
-    for (const [dx, dy, ww] of [
-      [0, 10, 9],
-      [2, 8, 5],
-      [12, 15, 7],
-    ] as const)
-      for (let i = 0; i < ww; i++) {
-        const px = cx + dx + i;
-        if (px > x + 1 && px < x + w - 2) rect(ctx, C.cloud, px, y + dy, 1, 2);
+function lab(ctx: CanvasRenderingContext2D, t: number, opts: { lamp?: 'left' | 'right' | null; plants?: boolean; shelf?: boolean; poster?: number | null } = {}): void {
+  rect(ctx, L_.wall, 0, 0, SCREEN_W, DESK_Y);
+  for (let x = 0; x < SCREEN_W; x += 17) rect(ctx, L_.wallDark, x, 0, 1, DESK_Y);
+  rect(ctx, L_.wallLine, 0, 48, SCREEN_W, 1);
+  if (opts.shelf !== false) {
+    // shelves with boxes and books, muted
+    for (const sy of [14, 34]) {
+      rect(ctx, L_.shelf, 0, sy, SCREEN_W, 2);
+      rect(ctx, L_.shelfDark, 0, sy + 2, SCREEN_W, 1);
+      for (let i = 0; i < 9; i++) {
+        const x = 4 + i * 15 + Math.round(rnd(sy + i) * 4);
+        const kind = Math.floor(rnd(i * 3 + sy) * 3);
+        const h = 5 + Math.round(rnd(i + sy * 2) * 5);
+        rect(ctx, [L_.box1, L_.box2, L_.box3][kind]!, x, sy - h, 4 + (kind === 2 ? 4 : 0), h);
+        if (kind === 1) rect(ctx, L_.wallDark, x + 1, sy - h + 1, 2, 1);
       }
+    }
   }
-  rect(ctx, C.frame, x + w / 2 - 1, y, 2, h - 2);
-  rect(ctx, C.frame, x, y + h / 2 - 2, w, 2);
-  rect(ctx, C.frameDark, x - 2, y + h - 2, w + 4, 3);
+  if (opts.plants !== false) {
+    for (const px of [8, 118]) {
+      rect(ctx, L_.pot, px, 6, 8, 6);
+      for (let k = 0; k < 5; k++) rect(ctx, k % 2 ? L_.leafDark : L_.leaf, px - 3 + k * 3, 1 + (k % 2) * 2 + Math.round(Math.sin(t / 1100 + k)), 2, 5);
+    }
+  }
+  if (opts.poster != null) {
+    const px = opts.poster;
+    rect(ctx, L_.poster, px, 18, 10, 13);
+    rect(ctx, L_.wall, px + 2, 20, 6, 1);
+    rect(ctx, L_.wall, px + 2, 23, 4, 1);
+    rect(ctx, L_.wall, px + 2, 26, 6, 1);
+  }
+  if (opts.lamp) {
+    const lx = opts.lamp === 'left' ? 4 : 106;
+    rect(ctx, L_.lampDark, lx + 18, 2, 2, 14);
+    thing(ctx, lx + 8, 12, 24, 10, (l) => l.tri([1, 9], [22, 9], [12, 0], L_.lampDark));
+    rect(ctx, L_.lamp, lx + 12, 20, 16, 2);
+    glow(ctx, L_.lamp, 0.13, lx - 4, 22, 48, DESK_Y - 22);
+  }
+}
+
+function deskTop(ctx: CanvasRenderingContext2D): void {
+  rect(ctx, L_.desk, 0, DESK_Y, SCREEN_W, 4);
+  rect(ctx, L_.deskLight, 0, DESK_Y, SCREEN_W, 1);
+  rect(ctx, L_.deskFront, 0, DESK_Y + 4, SCREEN_W, SCREEN_H - DESK_Y - 4);
+  for (let x = 20; x < SCREEN_W; x += 48) rect(ctx, L_.deskFrontDark, x, DESK_Y + 9, 28, 1);
+}
+
+/** The bust at x (left edge), facing right or left, behind the desk. `dy` lifts it. */
+function sit(ctx: CanvasRenderingContext2D, x: number, pose: Pose, flip = false, dy = 0): Pt {
+  const o: Pt = [Math.round(x), BUST_Y - Math.round(dy)];
+  bust(pose).blit(ctx, o[0], o[1], flip);
+  return o;
+}
+
+// ---------------------------------------------------------------- props
+
+function crt(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, show: 'code' | 'dark' | 'check' | 'alert' | 'folder' | 'send'): void {
+  thing(ctx, x, y, 38, 34, (l) => {
+    l.rect(1, 1, 35, 28, L_.beige);
+    l.rect(1, 25, 35, 4, L_.beigeDark);
+    l.rect(12, 29, 13, 4, L_.beigeDark);
+  });
+  rect(ctx, L_.screen, x + 5, y + 5, 27, 18);
+  const sx = x + 7;
+  const sy = y + 7;
+  if (show === 'code') {
+    const scroll = tick(t, 220);
+    for (let i = 0; i < 5; i++) {
+      const n = scroll + i;
+      const c = [L_.code1, L_.code2, L_.code3, L_.code4][Math.floor(rnd(n + 7) * 4)]!;
+      rect(ctx, c, sx + (n % 3 === 0 ? 0 : 3), sy + i * 3, 4 + Math.round(rnd(n) * 14), 1);
+    }
+    if (tick(t, 400) % 2) rect(ctx, L_.white, sx + 2, sy + 14, 2, 2);
+  } else if (show === 'check') {
+    for (const [dx, dy] of [
+      [6, 7],
+      [7, 8],
+      [8, 9],
+      [9, 8],
+      [10, 7],
+      [11, 6],
+      [12, 5],
+      [13, 4],
+      [14, 3],
+    ] as const)
+      rect(ctx, L_.check, sx + dx, sy + dy, 3, 2);
+  } else if (show === 'alert') {
+    if (tick(t, 350) % 2 === 0) pixelText(ctx, '!', sx + 9, sy + 4, PALETTE.amber);
+  } else if (show === 'folder') {
+    rect(ctx, L_.code1, sx + 6, sy + 4, 6, 2);
+    rect(ctx, L_.code1, sx + 6, sy + 6, 13, 8);
+    rect(ctx, L_.screen, sx + 7, sy + 7, 11, 6);
+  } else if (show === 'send') {
+    for (let i = 0; i < 3; i++) rect(ctx, L_.code3, sx + 2, sy + 2 + i * 4, 6 + ((tick(t, 200) + i) % 3) * 4, 2);
+  }
+  rect(ctx, PALETTE.green, x + 30, y + 26, 2, 1);
+}
+
+function keyboard(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  thing(ctx, x, y, 30, 6, (l) => l.rect(1, 1, 28, 4, L_.beige));
+  for (let i = 0; i < 6; i++) rect(ctx, L_.beigeDark, x + 3 + i * 4, y + 2, 3, 1);
+}
+
+function mug(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, steam = true): void {
+  thing(ctx, x, y, 11, 11, (l) => {
+    l.rect(1, 1, 7, 9, L_.mug);
+    l.rect(8, 3, 2, 4, L_.mug);
+    l.rect(3, 4, 3, 3, PALETTE.body);
+  });
+  if (steam) for (let i = 0; i < 2; i++) rect(ctx, '#c9ced6', x + 3 + i * 2 + Math.round(Math.sin(t / 300 + i)), y - 2 - ((t / 110 + i * 3) % 6), 1, 2);
 }
 
 function plant(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
-  const sway = Math.round(Math.sin(t / 900));
-  thing(ctx, x - 9, y - 22, 26, 32, (l) => {
-    for (const [dx, dy, r] of [
-      [0, 10, 0],
-      [-5, 6, 1],
-      [5, 5, 2],
-      [-2, 1, 3],
-      [3, 0, 4],
-    ] as const) {
-      l.ellipse(13 + dx + (r % 2 ? sway : 0), 8 + dy, 3, 6, r % 2 ? C.leafDark : C.leaf);
-      l.line([13 + dx, 12 + dy], [13, 21], C.leafDark);
-    }
-    l.ellipse(15, 4, 1.5, 3, C.leafLight);
-    l.rect(7, 21, 13, 9, C.pot);
-    l.rect(6, 20, 15, 3, C.potDark);
+  thing(ctx, x, y, 14, 18, (l) => {
+    l.rect(3, 11, 8, 6, L_.pot);
+    for (let k = 0; k < 4; k++) l.ellipse(3 + k * 2.6 + Math.sin(t / 1000 + k) * 0.6, 6 + (k % 2) * 2, 1.6, 4, k % 2 ? L_.leafDark : L_.leaf);
   });
 }
 
-const HEART: Pt[] = [
-  [6, 7],
-  [7, 7],
-  [10, 7],
-  [11, 7],
-  [5, 8],
-  [6, 8],
-  [7, 8],
-  [8, 8],
-  [9, 8],
-  [10, 8],
-  [11, 8],
-  [12, 8],
-  [6, 9],
-  [7, 9],
-  [8, 9],
-  [9, 9],
-  [10, 9],
-  [11, 9],
-  [7, 10],
-  [8, 10],
-  [9, 10],
-  [10, 10],
-  [8, 11],
-  [9, 11],
-];
-
-function poster(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  rect(ctx, C.cream, x, y, 20, 24);
-  rect(ctx, C.wallTealDark, x + 2, y + 2, 16, 20);
-  for (const [dx, dy] of HEART) rect(ctx, PALETTE.pink, x + dx, y + dy);
-  rect(ctx, PALETTE.cyan, x + 4, y + 15, 12, 1);
-  rect(ctx, PALETTE.cyan, x + 4, y + 18, 8, 1);
-}
-
-function shelf(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  rect(ctx, C.woodDark, x, y + 12, 30, 3);
-  const books = [C.book1, C.book2, C.book3, C.book4, C.book2, C.book1];
-  books.forEach((b, i) => rect(ctx, b, x + 2 + i * 4, y + (i % 3), 3, 12 - (i % 3)));
-}
-
-function desk(ctx: CanvasRenderingContext2D, x: number, y: number, w: number): void {
-  rect(ctx, C.wood, x, y, w, 4);
-  rect(ctx, C.woodDark, x, y + 4, w, 1);
-  rect(ctx, C.woodDark, x + 3, y + 5, 3, FLOOR_Y + 8 - y);
-  rect(ctx, C.woodDark, x + w - 6, y + 5, 3, FLOOR_Y + 8 - y);
-}
-
-/** A beige retro computer; its screen shows what the tool is doing. */
-function computer(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, mode: 'code' | 'error' | 'ok' = 'code'): void {
-  thing(ctx, x, y, 40, 36, (l) => {
-    l.rect(2, 1, 34, 25, C.beige);
-    l.rect(2, 22, 34, 4, C.beigeDark);
-    l.rect(13, 26, 12, 3, C.beigeDark);
-    l.rect(0, 29, 38, 6, C.beige);
-    l.rect(0, 33, 38, 2, C.beigeDark);
+/** The Flipper: a white device, an orange screen with a little dolphin, the orange d-pad. */
+function flipperDevice(ctx: CanvasRenderingContext2D, x: number, y: number, on: boolean, t: number): void {
+  thing(ctx, x, y, 40, 20, (l) => {
+    l.ellipse(6, 10, 6, 9, L_.device);
+    l.ellipse(33, 10, 6, 9, L_.device);
+    l.rect(6, 1, 27, 18, L_.device);
+    l.rect(3, 15, 34, 3, L_.deviceDark);
+    l.ellipse(31, 9, 4.5, 4.5, PALETTE.body);
+    l.ellipse(31, 9, 1.6, 1.6, '#c25a10');
   });
-  rect(ctx, C.screen, x + 6, y + 5, 28, 17);
-  if (mode === 'code') {
-    const scroll = tick(t, 180);
-    for (let i = 0; i < 5; i++) {
-      const n = scroll + i;
-      rect(ctx, i === 4 && tick(t, 300) % 2 ? C.screen : C.screenText, x + 8, y + 7 + i * 3, 3 + Math.round(rnd(n) * 18), 1);
-      rect(ctx, C.screenText2, x + 8 + 4 + Math.round(rnd(n + 50) * 6), y + 7 + i * 3, 2, 1);
-    }
-  } else if (mode === 'error') {
-    if (tick(t, 400) % 2 === 0) {
-      for (let i = 0; i < 7; i++) {
-        rect(ctx, PALETTE.red, x + 16 + i, y + 9 + i, 2, 1);
-        rect(ctx, PALETTE.red, x + 22 - i, y + 9 + i, 2, 1);
-      }
-    }
-  } else {
-    for (const [dx, dy] of [
-      [12, 13],
-      [13, 14],
-      [14, 15],
-      [15, 14],
-      [16, 13],
-      [17, 12],
-      [18, 11],
-      [19, 10],
-    ] as const)
-      rect(ctx, C.screenText, x + dx, y + dy, 2, 2);
+  rect(ctx, on ? L_.deviceScreen : '#4a3426', x + 8, y + 4, 15, 9);
+  if (on) {
+    rect(ctx, '#7a3d10', x + 12, y + 7, 6, 3);
+    rect(ctx, '#7a3d10', x + 17, y + 6, 2, 1);
+    rect(ctx, '#ffe2bf', x + 10 + (tick(t, 250) % 3), y + 5, 1, 1);
   }
-  for (let i = 0; i < 8; i++) rect(ctx, C.beigeDark, x + 3 + i * 4, y + 30, 3, 2);
-  rect(ctx, PALETTE.green, x + 32, y + 24, 2, 1);
+  rect(ctx, '#2a1a12', x, y + 8, 2, 4); // the USB port
 }
 
-/** The Flipper itself: a small white device with an orange screen. */
-function device(ctx: CanvasRenderingContext2D, x: number, y: number, screenOn: boolean, t: number, smoke = false): void {
-  thing(ctx, x, y, 30, 18, (l) => {
-    l.rect(1, 1, 27, 15, C.device);
-    l.rect(1, 13, 27, 3, C.deviceDark);
-    l.ellipse(23, 8, 3.5, 3.5, C.deviceDark);
-    l.ellipse(23, 8, 1.5, 1.5, PALETTE.body);
+function pcb(ctx: CanvasRenderingContext2D, x: number, y: number, w = 44): void {
+  thing(ctx, x, y, w, 10, (l) => {
+    l.rect(1, 1, w - 2, 8, L_.pcb);
+    l.rect(1, 7, w - 2, 2, L_.pcbDark);
   });
-  rect(ctx, screenOn ? C.deviceScreen : '#3a2a20', x + 4, y + 4, 13, 8);
-  if (screenOn) rect(ctx, '#ffd9a8', x + 6, y + 6, 4 + (tick(t, 300) % 5), 2);
-  rect(ctx, '#2a1a12', x, y + 7, 2, 3); // the USB port
-  if (smoke)
-    for (let i = 0; i < 4; i++) {
-      const p = (((t / 900 + i / 4) % 1) + 1) % 1;
-      const r = 1 + Math.round(p * 2);
-      rect(ctx, C.smoke, x + 12 + Math.round(Math.sin(p * 6 + i) * 3), y - 2 - p * 22, r, r);
-    }
+  rect(ctx, L_.chip, x + 6, y + 2, 9, 5);
+  rect(ctx, L_.chip, x + 22, y + 3, 7, 4);
+  for (let i = 0; i < w - 6; i += 3) rect(ctx, L_.gold, x + 3 + i, y + 8, 1, 1);
+  for (let i = 0; i < 4; i++) rect(ctx, L_.metal, x + 7 + i * 2, y + 1, 1, 1);
 }
 
-function floppy(ctx: CanvasRenderingContext2D, x: number, y: number, color: string): void {
-  thing(ctx, x, y, 11, 11, (l) => {
-    l.rect(1, 1, 9, 9, color);
-    l.rect(3, 1, 5, 3, C.metal);
-    l.rect(3, 6, 5, 4, C.label);
+function radio(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
+  thing(ctx, x, y, 50, 30, (l) => {
+    l.rect(1, 1, 48, 28, L_.radio);
+    l.rect(1, 25, 48, 4, L_.radioDark);
   });
-}
-
-function cable(ctx: CanvasRenderingContext2D, from: Pt, to: Pt, t: number, sag = 8): void {
-  const n = 28;
-  for (let i = 0; i <= n; i++) {
-    const u = i / n;
-    const x = from[0] + (to[0] - from[0]) * u;
-    const y = from[1] + (to[1] - from[1]) * u + Math.sin(u * Math.PI) * sag + Math.sin(u * 9 + t / 260) * 0.6;
-    rect(ctx, '#2a1a12', x, y, 2, 2);
-    rect(ctx, '#3a8fa8', x, y, 1, 1);
+  rect(ctx, '#06231e', x + 5, y + 4, 26, 15);
+  // the spectrum: bars that move, a peak that wanders
+  const peak = 4 + Math.round((Math.sin(t / 900) + 1) * 9);
+  for (let i = 0; i < 12; i++) {
+    const h = Math.min(13, 2 + Math.round(rnd(i + tick(t, 120) * 13) * 4 + Math.max(0, 9 - Math.abs(i * 2 - peak) * 2)));
+    rect(ctx, h > 9 ? L_.code4 : L_.code3, x + 6 + i * 2, y + 18 - h, 1, h);
   }
+  for (let i = 0; i < 3; i++) thing(ctx, x + 34 + (i % 2) * 7, y + 3 + Math.floor(i / 2) * 8, 7, 7, (l) => l.ellipse(3.5, 3.5, 2.8, 2.8, L_.metal));
+  for (let i = 0; i < 4; i++) rect(ctx, L_.radioDark, x + 6 + i * 6, y + 22, 4, 2);
+  rect(ctx, L_.metalDark, x + 44, y - 16, 1, 16); // antenna
 }
 
-function plug(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  thing(ctx, x, y, 12, 7, (l) => {
-    l.rect(1, 1, 6, 5, PALETTE.cyan);
-    l.rect(7, 2, 4, 3, C.metal);
+function walkie(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  thing(ctx, x, y, 11, 22, (l) => {
+    l.rect(1, 4, 9, 17, L_.beigeDark);
+    l.rect(6, 0, 2, 5, L_.metalDark);
   });
+  rect(ctx, L_.code3, x + 3, y + 7, 5, 4);
+  for (let i = 0; i < 6; i++) rect(ctx, L_.radioDark, x + 3 + (i % 3) * 2, y + 13 + Math.floor(i / 3) * 2, 1, 1);
 }
 
-function confetti(ctx: CanvasRenderingContext2D, t: number): void {
-  const colors = [PALETTE.pink, PALETTE.cyan, C.sun, PALETTE.green, '#b48cff', '#ff8a1e'];
-  for (let i = 0; i < 26; i++) {
-    const speed = 20 + rnd(i) * 30;
-    const y = (((t / 1000) * speed + rnd(i + 3) * 100) % 110) - 6;
-    const x = rnd(i + 7) * SCREEN_W + Math.sin(t / 300 + i) * 3;
-    rect(ctx, colors[i % colors.length]!, x, y, i % 3 ? 2 : 1, i % 3 ? 1 : 2);
-  }
+function cd(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  thing(ctx, x, y, 14, 6, (l) => {
+    l.ellipse(7, 3, 6, 2.4, '#d9e6f2');
+    l.ellipse(7, 3, 1.5, 0.8, L_.wall);
+  });
+  rect(ctx, '#ff9ad5', x + 3, y + 2, 2, 1);
+}
+
+function cableEnd(ctx: CanvasRenderingContext2D, x: number, y: number, kind: 'usb' | 'micro', flip = false): void {
+  thing(
+    ctx,
+    x,
+    y,
+    9,
+    8,
+    (l) => {
+      l.rect(1, 1, 5, 6, L_.cable);
+      l.rect(6, 2, 2, 4, kind === 'usb' ? L_.metal : L_.metalDark);
+    },
+    flip,
+  );
+}
+
+function sparkle(ctx: CanvasRenderingContext2D, x: number, y: number, c: string, size = 2): void {
+  rect(ctx, c, x - size, y, size * 2 + 1, 1);
+  rect(ctx, c, x, y - size, 1, size * 2 + 1);
 }
 
 function zzz(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
   for (let i = 0; i < 3; i++) {
     const p = (((t / 2400 + i / 3) % 1) + 1) % 1;
-    pixelText(ctx, 'Z', x + p * 10 + i, y - p * 18, p < 0.85 ? C.cloud : C.base);
+    pixelText(ctx, 'Z', x + p * 10 + i * 2, y - p * 16, p < 0.8 ? PALETTE.pink : L_.wallLine);
   }
 }
 
-// ---------------------------------------------------------------- scenes
-
-/** The character on the floor at x, facing right (or left), with a pose. */
-function stand(ctx: CanvasRenderingContext2D, x: number, pose: Pose, flip = false, lift = 0): Pt {
-  const origin: Pt = [Math.round(x), FLOOR_Y + 4 - FEET_Y - Math.round(lift)];
-  character(pose).blit(ctx, origin[0], origin[1], flip);
-  return origin;
+function mark(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, c: string): void {
+  pixelText(ctx, text, x, y, c, PALETTE.outline);
 }
 
-function sceneIdle(ctx: CanvasRenderingContext2D, t: number): void {
-  // Looks around, blinks, taps a foot, waters its plant.
-  room(ctx, C.wallTeal, C.wallTealDark);
-  window_(ctx, 92, 10, t);
-  poster(ctx, 8, 12);
-  plant(ctx, 14, 70, t);
-  const p = t % 9000;
-  const blink = blinking(t);
-  if (p < 2200) stand(ctx, 46, { eye: blink ? 'blink' : 'open', look: [1, -0.6], mouth: 'smile' });
-  else if (p < 4000) stand(ctx, 46, { eye: blink ? 'blink' : 'open', look: [1, 0], mouth: 'closed' }, true);
-  else if (p < 6000) {
-    const tap = tick(p, 250) % 2 === 0;
-    stand(ctx, 46, { eye: blink ? 'blink' : 'open', look: [0.6, 0.3], mouth: 'smile', step: tap ? 2 : 0, front: tap ? [31, 38] : null });
-  } else {
-    // watering the plant on the left
-    const o = stand(ctx, 34, { eye: 'happy', mouth: 'smile', front: [42, 30], back: [36, 33] }, true);
-    const can = at(o, [44, 26], true);
-    thing(ctx, can[0] - 10, can[1] - 4, 13, 10, (l) => {
-      l.rect(4, 2, 7, 6, PALETTE.cyan);
-      l.line([4, 3], [0, 0], PALETTE.cyan);
-      l.rect(6, 0, 3, 2, '#3a8fa8');
-    });
-    for (let i = 0; i < 3; i++) {
-      const d = (((t / 400 + i / 3) % 1) + 1) % 1;
-      rect(ctx, PALETTE.tear, can[0] - 12 - d * 2, can[1] - 3 + d * 14, 1, 2);
-    }
-  }
-}
+// --------------------------------------------------------------- scenes
 
-function sceneWait(ctx: CanvasRenderingContext2D, t: number): void {
-  // Nothing connected: it sits on its cushion by the window and dozes.
-  room(ctx, C.wallNight, C.wallNightDark);
-  window_(ctx, 92, 10, t, true);
-  shelf(ctx, 10, 14);
-  rect(ctx, C.woodDark, 22, 48, 2, 28);
-  thing(ctx, 15, 40, 16, 10, (l) => l.tri([1, 9], [14, 9], [8, 1], C.sun));
-  ctx.globalAlpha = 0.12;
-  rect(ctx, C.sun, 6, 50, 36, 26);
-  ctx.globalAlpha = 1;
-  thing(ctx, 36, 68, 44, 12, (l) => l.ellipse(22, 7, 21, 5, C.cushion));
-  rect(ctx, C.cushionDark, 40, 76, 36, 2);
-  const awake = t % 11_000 > 9800;
-  const breath = tick(t, 1600) % 2;
-  character({ eye: awake ? (blinking(t, 600) ? 'blink' : 'open') : 'sleep', look: [-0.6, 0], mouth: awake ? 'closed' : 'smile', sit: true, front: [30, 44], back: [14, 44] }).blit(ctx, 36, 25 + breath);
-  if (!awake) zzz(ctx, 76, 34, t);
+function sceneCoding(ctx: CanvasRenderingContext2D, t: number): void {
+  // Link up, nothing running: headphones on, it codes, nodding to the music.
+  lab(ctx, t, { poster: 112 });
+  crt(ctx, 10, 46, t, 'code');
+  walkie(ctx, 2, 58);
+  const nod = tick(t, 420) % 2;
+  const type = tick(t, 130) % 2;
+  sit(ctx, 66, { eye: blinking(t) ? 'blink' : 'focus', look: [1, 0.4], mouth: 'smile', headphones: true, front: [50, type ? 58 : 60], back: [36, type ? 61 : 59], frontElbow: [44, 54] }, true, nod);
+  deskTop(ctx);
+  keyboard(ctx, 36, 77);
+  cd(ctx, 6, 79);
+  cd(ctx, 18, 80);
 }
 
 function sceneGreet(ctx: CanvasRenderingContext2D, t: number): void {
-  // A little hop, then hello with its flipper.
-  room(ctx, C.wallTeal, C.wallTealDark);
-  window_(ctx, 92, 10, t);
-  poster(ctx, 8, 12);
-  const hop = t < 600 ? Math.sin((t / 600) * Math.PI) * 8 : 0;
-  const wave = tick(t, 200) % 2;
-  stand(ctx, 44, { eye: 'happy', mouth: 'open', blush: true, back: wave ? [2, 10] : [4, 7], backElbow: [7, 24] }, false, hop);
-  bubble(ctx, 86, 42, 'HI!', PALETTE.pink);
+  // After power-on: it turns to us and waves.
+  lab(ctx, t, { poster: 112 });
+  crt(ctx, 8, 46, t, 'code');
+  const wave = tick(t, 220) % 2;
+  sit(ctx, 52, { eye: 'happy', mouth: 'open', blush: true, back: wave ? [1, 12] : [3, 18], backElbow: [3, 38] }, false, t < 500 ? Math.sin((t / 500) * Math.PI) * 4 : 0);
+  deskTop(ctx);
+  keyboard(ctx, 36, 77);
+  sparkle(ctx, 128, 20 + (tick(t, 300) % 2), PALETTE.pink);
 }
 
-function sceneAnalyse(ctx: CanvasRenderingContext2D, t: number): void {
-  // At the computer, typing, eyes on the screen.
-  room(ctx, C.wallPurple, C.wallPurpleDark);
-  shelf(ctx, 6, 10);
-  desk(ctx, 62, 62, 70);
-  computer(ctx, 82, 27, t, 'code');
-  thing(ctx, 66, 54, 8, 9, (l) => {
-    l.rect(1, 1, 5, 7, C.mug);
-    l.rect(2, 2, 3, 2, C.coffee);
-    l.rect(6, 3, 1, 3, C.mug);
+function sceneScan(ctx: CanvasRenderingContext2D, t: number): void {
+  // Analysing: at the radio scanner, a hand on the knob, eyes on the spectrum.
+  lab(ctx, t, { poster: 76 });
+  radio(ctx, 6, 50, t);
+  const turn = tick(t, 600) % 2;
+  sit(ctx, 68, { eye: blinking(t, 4000) ? 'blink' : 'focus', look: [1, 0.2], mouth: 'smile', front: [56, turn ? 58 : 60], frontElbow: [46, 56], back: [38, 64] }, true);
+  deskTop(ctx);
+  rect(ctx, PALETTE.red, 20, 81, 7, 2);
+}
+
+function sceneAnalyze(ctx: CanvasRenderingContext2D, t: number): void {
+  // Reading: leaning over a board, a magnifier up to its eye.
+  lab(ctx, t, { lamp: 'right', poster: 20 });
+  plant(ctx, 92, 64, t);
+  const lean = Math.sin(t / 900);
+  const o = sit(ctx, 28 + lean * 3, { eye: 'wide', look: [1, 0.8], brow: 'worried', mouth: 'closed', front: [42, 40], frontElbow: [44, 56], back: [20, 62] }, false, -2);
+  deskTop(ctx);
+  pcb(ctx, 46, 76);
+  // the magnifier in its hand, over the board
+  const h = at(o, [42, 40]);
+  const lx = h[0] + 6;
+  const ly = h[1] - 4;
+  for (let i = 0; i < 5; i++) rect(ctx, '#7d522c', h[0] - 1 + i, h[1] + 2 - i, 2, 2);
+  thing(ctx, lx - 7, ly - 7, 15, 15, (l) => {
+    l.ellipse(7.5, 7.5, 7, 7, L_.metal);
+    l.ellipse(7.5, 7.5, 5.5, 5.5, '#9fe7ff');
   });
-  for (let i = 0; i < 2; i++) rect(ctx, C.smoke, 68 + i * 2 + Math.round(Math.sin(t / 300 + i)), 48 - ((t / 90 + i * 4) % 6), 1, 2);
-  rect(ctx, C.chairDark, 34, 66, 3, 12);
-  thing(ctx, 22, 60, 30, 7, (l) => l.rect(1, 1, 27, 4, C.chair));
-  const typing = tick(t, 140) % 2;
-  const think = t % 7000 > 6000;
-  character({
-    eye: think ? 'open' : blinking(t, 4100) ? 'blink' : 'focus',
-    look: think ? [0.2, -1] : [1, 0.6],
-    mouth: think ? 'closed' : 'tongue',
-    sit: true,
-    front: think ? [33, 22] : [48, typing ? 34 : 36],
-    back: think ? null : [44, typing ? 37 : 35],
-  }).blit(ctx, 20, 61 - FEET_Y + 2);
+  rect(ctx, L_.white, lx - 3, ly - 3, 2, 1);
+  rect(ctx, L_.white, lx - 3, ly - 2, 1, 1);
+  // the soldering kit
+  thing(ctx, 104, 74, 12, 8, (l) => {
+    l.ellipse(6, 4, 5, 3, '#cf4a4a');
+    l.ellipse(6, 4, 2, 1.2, L_.metal);
+  });
+  rect(ctx, '#c84a4a', 8, 82, 10, 2);
+  rect(ctx, L_.metal, 18, 82, 6, 1);
 }
 
 function sceneConnect(ctx: CanvasRenderingContext2D, t: number): void {
-  // Carrying the plug to the device's port, pushing it in.
-  room(ctx, C.wallGray, C.wallGrayDark);
-  shelf(ctx, 8, 12);
-  desk(ctx, 96, 60, 38);
-  const cyc = t % 2600;
-  const plugged = cyc > 1500;
-  device(ctx, 102, 42, plugged, t);
-  const u = Math.min(1, cyc / 1500);
-  const o = stand(ctx, 30 + u * 20, { eye: 'focus', look: [1, 0.4], mouth: plugged ? 'smile' : 'tongue', front: [48, 33], back: [44, 35], step: u < 1 ? (tick(cyc, 250) % 2 ? 1 : 2) : 0 });
-  const hand = at(o, [48, 33]);
-  const px = plugged ? 91 : hand[0];
-  const py = plugged ? 46 : hand[1] - 3;
-  cable(ctx, [0, 84], [px, py + 3], t, 10);
-  plug(ctx, px, py);
-  if (plugged && cyc < 1900)
-    for (const [dx, dy] of [
-      [0, -3],
-      [0, 3],
-      [-3, 0],
-      [3, 0],
-      [-2, -2],
-      [2, 2],
-    ] as const)
-      rect(ctx, C.sun, 102 + dx, 50 + dy, 1, 1);
-}
-
-function sceneRead(ctx: CanvasRenderingContext2D, t: number): void {
-  // Examining a card under a big magnifying glass: the lens enlarges what it is over.
-  room(ctx, C.wallPurple, C.wallPurpleDark);
-  window_(ctx, 96, 8, t);
-  desk(ctx, 58, 64, 76);
-  thing(ctx, 82, 56, 24, 10, (l) => {
-    l.rect(1, 1, 22, 8, C.cream);
-    l.rect(3, 3, 5, 4, C.gold);
-    l.rect(10, 3, 10, 1, PALETTE.cyan);
-    l.rect(10, 5, 7, 1, PALETTE.cyan);
-  });
-  const sweep = Math.sin(t / 700);
-  const o = stand(ctx, 36 + sweep * 3, { eye: 'wide', look: [1, 0.6], mouth: tick(t, 900) % 3 === 0 ? 'open' : 'closed', front: [50, 26], back: [44, 30] });
-  const hand = at(o, [50, 26]);
-  const lx = Math.round(94 + sweep * 8);
-  const ly = 50;
-  for (let i = 0; i <= 8; i++) rect(ctx, C.woodDark, hand[0] + ((lx - 6 - hand[0]) * i) / 8, hand[1] + ((ly + 4 - hand[1]) * i) / 8, 2, 2);
-  // the lens: what is under it, twice as big
-  for (let j = -8; j <= 8; j++)
-    for (let i = -8; i <= 8; i++) {
-      if (i * i + j * j > 64) continue;
-      const sx = Math.floor(lx - 82 + i / 2);
-      const sy = Math.floor(ly - 56 + j / 2 + 2);
-      const inCard = sx >= 1 && sx < 23 && sy >= 1 && sy < 9;
-      const chip = sx >= 3 && sx < 8 && sy >= 3 && sy < 7;
-      const line = sx >= 10 && sx < 20 && (sy === 3 || (sy === 5 && sx < 17));
-      rect(ctx, !inCard ? C.glass : chip ? ((i + j) & 2 ? C.gold : C.goldDark) : line ? PALETTE.cyan : C.cream, lx + i, ly + j);
-    }
-  thing(ctx, lx - 10, ly - 10, 21, 21, (l) => {
-    l.ellipse(10.5, 10.5, 10, 10, C.gold);
-    l.ellipse(10.5, 10.5, 8.2, 8.2, null);
-  });
-  rect(ctx, C.cloud, lx - 4, ly - 5, 2, 1);
+  // Connecting: it pushes the cable into the Flipper's port.
+  lab(ctx, t, { lamp: 'right', shelf: false });
+  // pegboard with tools
+  rect(ctx, '#2b3159', 52, 4, 44, 34);
+  for (let j = 0; j < 5; j++) for (let i = 0; i < 7; i++) rect(ctx, '#1d2244', 55 + i * 6, 7 + j * 6, 1, 1);
+  rect(ctx, '#d84a6a', 60, 8, 2, 16);
+  rect(ctx, L_.metal, 66, 8, 2, 12);
+  rect(ctx, '#d84a6a', 76, 10, 6, 2);
+  rect(ctx, '#d84a6a', 78, 12, 2, 12);
+  plant(ctx, 6, 30, t);
+  const cyc = t % 2400;
+  const push = Math.min(1, cyc / 1300);
+  const plugged = cyc > 1300;
+  sit(ctx, 8 + push * 6, { eye: 'focus', look: [1, 0.6], mouth: plugged ? 'grin' : 'closed', front: [56, 54], frontElbow: [46, 58], back: [50, 58] }, false);
+  deskTop(ctx);
+  flipperDevice(ctx, 90, 62, plugged, t);
+  // the cable, from the desk to its hand, the plug at the port
+  const px = plugged ? 82 : 76 + push * 4;
+  for (let i = 0; i < 18; i++) rect(ctx, L_.cable, 70 - i * 0.4, 72 + i * 0.5 + Math.sin(i / 3) * 1.5, 2, 1);
+  cableEnd(ctx, px, 66, 'usb');
+  if (plugged && cyc < 1700) {
+    sparkle(ctx, 90, 64, PALETTE.amber);
+    sparkle(ctx, 88, 72, L_.white, 1);
+  }
 }
 
 function sceneTransfer(ctx: CanvasRenderingContext2D, t: number): void {
-  // Carrying floppies from the shelf to the computer, one at a time.
-  room(ctx, C.wallTeal, C.wallTealDark);
-  desk(ctx, 92, 62, 42);
-  computer(ctx, 96, 27, t, 'code');
-  thing(ctx, 4, 50, 22, 28, (l) => {
-    l.rect(1, 1, 20, 3, C.woodDark);
-    l.rect(1, 13, 20, 3, C.woodDark);
-    l.rect(1, 25, 20, 2, C.woodDark);
-  });
-  const colors = [C.floppy1, C.floppy2, C.floppy3];
-  const trip = tick(t, 3600);
-  for (let i = 0; i < 3; i++) if (i !== trip % 3) rect(ctx, colors[i]!, 6 + i * 6, 56, 5, 7);
-  const cyc = t % 3600;
-  const going = cyc < 2200;
-  const u = going ? cyc / 2200 : 1 - (cyc - 2200) / 1400;
-  const step = tick(t, 220) % 2 ? 1 : 2;
-  const o = stand(ctx, 18 + u * 50, going ? { eye: 'open', look: [1, 0.4], mouth: 'smile', front: [41, 36], back: [37, 38], step } : { eye: 'happy', mouth: 'smile', step }, !going);
-  if (going) {
-    const h = at(o, [41, 36]);
-    floppy(ctx, h[0] - 5, h[1] - 9, colors[trip % 3]!);
-  }
+  // Transferring: from one computer to the other, blocks travel the wire.
+  lab(ctx, t, { shelf: true, poster: 124 });
+  crt(ctx, 98, 46, t, 'folder');
+  crt(ctx, 58, 46, t, 'send');
+  // the arrow of blocks between the screens, moving
+  const off = tick(t, 110) % 3;
+  for (let i = 0; i < 4; i++) rect(ctx, L_.code1, 95 + i * 3 - off, 40, 2, 3);
+  rect(ctx, L_.code1, 107, 39, 1, 5);
+  rect(ctx, L_.code1, 108, 40, 1, 3);
+  sit(ctx, -6, { eye: blinking(t) ? 'blink' : 'open', look: [1, 0.5], mouth: 'smile', front: [56, 60], frontElbow: [46, 58], back: [48, 62] }, false);
+  deskTop(ctx);
+  keyboard(ctx, 50, 77);
+  for (let i = 0; i < 18; i++) rect(ctx, L_.cable, 88 + i * 1.2, 82 + Math.sin(i / 3) * 1.2, 2, 1);
 }
 
 function sceneSuccess(ctx: CanvasRenderingContext2D, t: number): void {
-  // It worked: arms up, a jump, confetti.
-  room(ctx, C.wallWarm, C.wallWarmDark);
-  window_(ctx, 92, 10, t);
-  const jump = Math.abs(Math.sin((t / 700) * Math.PI)) * 10;
-  const up = tick(t, 350) % 2;
-  stand(ctx, 42, { eye: 'happy', mouth: 'open', blush: true, front: up ? [50, 13] : [49, 17], frontElbow: [45, 37], back: up ? [2, 8] : [3, 12], backElbow: [7, 24] }, false, jump);
-  confetti(ctx, t);
-  bubble(ctx, 88, 44, 'YAY!', PALETTE.green);
+  // It worked: arms up, eyes shut with joy, the screen says yes.
+  lab(ctx, t, { poster: null });
+  crt(ctx, 92, 46, t, 'check');
+  const up = tick(t, 300) % 2;
+  sit(ctx, 26, { eye: 'happy', mouth: 'open', blush: true, front: up ? [47, 3] : [48, 7], frontBehind: true, back: up ? [6, 3] : [5, 7] }, false, Math.abs(Math.sin((t / 600) * Math.PI)) * 4);
+  deskTop(ctx);
+  pcb(ctx, 30, 76, 38);
+  rect(ctx, '#c84a4a', 6, 81, 10, 2);
+  for (let i = 0; i < 4; i++) {
+    const on = (tick(t, 250) + i) % 3 !== 0;
+    if (on) sparkle(ctx, [16, 82, 24, 74][i]!, [30, 26, 54, 50][i]!, i % 2 ? PALETTE.amber : PALETTE.pink, 2);
+  }
+  mark(ctx, 20, 18 + (up ? 0 : 1), '!', PALETTE.pink);
+  mark(ctx, 84, 16 + (up ? 1 : 0), '!', PALETTE.pink);
 }
 
 function sceneWarning(ctx: CanvasRenderingContext2D, t: number): void {
-  // Something is off: it scratches its head, looking up.
-  room(ctx, C.wallGray, C.wallGrayDark);
-  const on = tick(t, 500) % 2 === 0;
-  thing(ctx, 104, 8, 12, 12, (l) => l.ellipse(6, 6, 5, 5, on ? PALETTE.amber : '#7a5c22'));
-  if (on) {
-    ctx.globalAlpha = 0.1;
-    rect(ctx, PALETTE.amber, 0, 0, SCREEN_W, FLOOR_Y);
-    ctx.globalAlpha = 1;
+  // A warning: the screen blinks "!", it scratches its head, worried.
+  lab(ctx, t, { poster: 112 });
+  crt(ctx, 10, 46, t, 'alert');
+  const scratch = tick(t, 180) % 2;
+  sit(ctx, 66, { eye: 'open', look: [1, -0.4], brow: 'worried', mouth: 'frown', sweat: true, back: [6, scratch ? 4 : 7], backElbow: [2, 34] }, true);
+  deskTop(ctx);
+  keyboard(ctx, 36, 77);
+  mark(ctx, 52, 22, '?', PALETTE.amber);
+}
+
+function sceneMad(ctx: CanvasRenderingContext2D, t: number): void {
+  // An error: arms crossed, cross brows; outside, the rain.
+  rect(ctx, L_.brick, 0, 0, SCREEN_W, DESK_Y);
+  for (let y = 0; y < DESK_Y; y += 6) {
+    rect(ctx, L_.brickDark, 0, y, SCREEN_W, 1);
+    for (let x = (y / 6) % 2 ? 0 : 6; x < SCREEN_W; x += 12) rect(ctx, L_.brickDark, x, y, 1, 6);
   }
-  plant(ctx, 120, 70, t);
-  const scratch = tick(t, 160) % 2;
-  stand(ctx, 44, { eye: 'open', look: [0.4, -1], mouth: 'frown', back: [8, scratch ? 3 : 5], backElbow: [6, 22], sweat: true });
-  bubble(ctx, 84, 30, '?', PALETTE.amber);
+  // the window: night, rain, the city
+  rect(ctx, '#3b2a2a', 84, 4, 48, 58);
+  rect(ctx, L_.night, 87, 7, 42, 52);
+  for (let i = 0; i < 6; i++) {
+    const h = 12 + Math.round(rnd(i) * 22);
+    rect(ctx, '#0d1430', 88 + i * 7, 59 - h, 6, h);
+    for (let w = 0; w < 4; w++) if (rnd(i * 9 + w) > 0.5) rect(ctx, L_.cityLit, 89 + i * 7 + (w % 2) * 3, 59 - h + 3 + Math.floor(w / 2) * 4, 1, 1);
+  }
+  for (let i = 0; i < 14; i++) {
+    const y = ((t / 18 + rnd(i) * 60) % 52) + 7;
+    rect(ctx, L_.rain, 88 + rnd(i + 3) * 40, y, 1, 3);
+  }
+  rect(ctx, '#3b2a2a', 107, 4, 2, 58);
+  plant(ctx, 92, 48, t);
+  const huff = tick(t, 700) % 2;
+  sit(ctx, 20, { eye: 'focus', look: [1, -0.2], brow: 'mad', mouth: 'frown', front: [40, 52], frontElbow: [48, 58], back: [44, 56], backElbow: [30, 60] }, false, huff);
+  deskTop(ctx);
+  mug(ctx, 68, 70, t, false);
+  // the anger mark, pulsing
+  if (tick(t, 300) % 2 === 0) {
+    rect(ctx, PALETTE.pink, 12, 20, 5, 1);
+    rect(ctx, PALETTE.pink, 14, 18, 1, 5);
+    rect(ctx, PALETTE.pink, 10, 24, 1, 3);
+    rect(ctx, PALETTE.pink, 18, 16, 1, 3);
+  }
 }
 
-function sceneError(ctx: CanvasRenderingContext2D, t: number): void {
-  // It failed: puzzled, it takes a wrench to the smoking device.
-  room(ctx, C.wallGray, C.wallGrayDark);
-  desk(ctx, 76, 62, 58);
-  computer(ctx, 94, 27, t, 'error');
-  device(ctx, 78, 46, false, t, true);
-  const swing = tick(t, 280) % 2;
-  const hand: Pt = swing ? [46, 24] : [48, 32];
-  const o = stand(ctx, 28, { eye: swing ? 'angry' : 'sad', look: [1, 0.6], mouth: 'frown', front: hand, back: [40, 36], sweat: true });
-  const h = at(o, hand);
-  thing(ctx, h[0] - 2, h[1] - 10, 12, 14, (l) => {
-    l.rect(2, 4, 2, 9, C.metal);
-    l.rect(0, 0, 6, 4, C.metal);
-    l.rect(2, 0, 2, 2, null);
-  });
-  if (!swing)
-    for (const [dx, dy] of [
-      [0, 0],
-      [2, -2],
-      [-2, -1],
-    ] as const)
-      rect(ctx, C.sun, h[0] + 8 + dx, h[1] - 2 + dy, 1, 1);
+function sceneDisconnected(ctx: CanvasRenderingContext2D, t: number): void {
+  // The link dropped: a cable end in each flipper, it looks from one to the other.
+  lab(ctx, t, { poster: 92 });
+  // the device poster: a little robot on a sheet
+  rect(ctx, '#d9d2bf', 90, 18, 12, 14);
+  rect(ctx, '#3d4a66', 94, 21, 4, 4);
+  rect(ctx, '#3d4a66', 95, 25, 2, 4);
+  const look = t % 3000 < 1500;
+  const o = sit(ctx, 34, { eye: 'open', look: look ? [1, 1] : [-0.6, 1], brow: 'worried', mouth: 'frown', front: [52, 54], frontElbow: [48, 60], back: [10, 54], backElbow: [12, 62] }, false);
+  deskTop(ctx);
+  thing(ctx, 104, 70, 26, 12, (l) => l.rect(1, 1, 24, 10, '#3d4148'));
+  const f = at(o, [52, 50]);
+  const b = at(o, [10, 50]);
+  cableEnd(ctx, f[0] - 2, f[1] - 2 + (tick(t, 500) % 2), 'micro');
+  cableEnd(ctx, b[0] - 6, b[1] - 2, 'usb', true);
+  for (let i = 0; i < 10; i++) {
+    rect(ctx, L_.cable, f[0] + 1 - i * 0.2, f[1] + 5 + i * 1.6, 2, 1);
+    rect(ctx, L_.cable, b[0] - 2 + i * 0.2, b[1] + 5 + i * 1.6, 2, 1);
+  }
+  mark(ctx, 92, 4 + (tick(t, 600) % 2), '?', PALETTE.pink);
 }
 
-function sceneDisconnect(ctx: CanvasRenderingContext2D, t: number): void {
-  // The link dropped: it holds the loose plug and looks at it, sad.
-  room(ctx, C.wallNight, C.wallNightDark);
-  desk(ctx, 96, 60, 38);
-  device(ctx, 102, 42, false, t);
-  const look = t % 4000 < 2600;
-  const o = stand(ctx, 34, { eye: 'sad', look: look ? [0.4, 1] : [1, 0], mouth: 'frown', front: [44, 34], back: null, tear: true });
-  const h = at(o, [44, 34]);
-  cable(ctx, [0, 86], [h[0] - 2, h[1] + 3], t, 6);
-  plug(ctx, h[0] - 1, h[1] - 3 + (tick(t, 600) % 2));
-  bubble(ctx, 90, 22, '?', C.wallPurple);
+function sceneAsleep(ctx: CanvasRenderingContext2D, t: number): void {
+  // Nothing connected: its head on the desk, under the lamp, asleep.
+  lab(ctx, t, { lamp: 'right', poster: null });
+  crt(ctx, 8, 46, t, 'dark');
+  const breathe = tick(t, 1500) % 2;
+  // slumped down, its chin on its folded flippers
+  sit(ctx, 60, { eye: 'closed', mouth: 'smile', front: [46, 46], frontElbow: [52, 50], back: [36, 47], backElbow: [28, 52] }, true, -14 + breathe);
+  deskTop(ctx);
+  keyboard(ctx, 12, 77);
+  mug(ctx, 40, 70, t, true);
+  zzz(ctx, 100, 36, t);
 }
 
 export function drawCompanionScene(ctx: CanvasRenderingContext2D, anim: Anim, t: number): void {
@@ -932,17 +872,17 @@ export function drawCompanionScene(ctx: CanvasRenderingContext2D, anim: Anim, t:
     case 'none':
       return rect(ctx, '#000', 0, 0, SCREEN_W, SCREEN_H);
     case 'idle':
-      return sceneIdle(ctx, t);
+      return sceneCoding(ctx, t);
     case 'wait':
-      return sceneWait(ctx, t);
+      return sceneAsleep(ctx, t);
     case 'greet':
       return sceneGreet(ctx, t);
     case 'search':
-      return sceneAnalyse(ctx, t);
+      return sceneScan(ctx, t);
     case 'connect':
       return sceneConnect(ctx, t);
     case 'read':
-      return sceneRead(ctx, t);
+      return sceneAnalyze(ctx, t);
     case 'transfer':
       return sceneTransfer(ctx, t);
     case 'success':
@@ -950,9 +890,9 @@ export function drawCompanionScene(ctx: CanvasRenderingContext2D, anim: Anim, t:
     case 'warning':
       return sceneWarning(ctx, t);
     case 'error':
-      return sceneError(ctx, t);
+      return sceneMad(ctx, t);
     case 'disconnect':
-      return sceneDisconnect(ctx, t);
+      return sceneDisconnected(ctx, t);
   }
 }
 
@@ -971,7 +911,7 @@ export function drawCompanionSplash(ctx: CanvasRenderingContext2D, t: number): v
   pixelText(ctx, 'HW DOG', Math.round((SCREEN_W - pixelTextWidth('HW DOG')) / 2), 64, PALETTE.cream);
 }
 
-/** The companion of Flipper Lab: the little dolphin and its scenes. */
+/** The companion of Flipper Lab: the little dolphin at its desk, and its scenes. */
 export const COMPANION: SpriteSet = { id: 'flipper-lab-companion', drawScene: drawCompanionScene, drawSplash: drawCompanionSplash };
 /** Older name, kept for imports. */
 export const DOLPHIN = COMPANION;
