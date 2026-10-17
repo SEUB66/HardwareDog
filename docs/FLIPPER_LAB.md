@@ -181,30 +181,29 @@ offers. The companion observes; it never runs a tool. Animations follow
 the events: an operation that fails stops its working animation at once, a
 link that drops ends every operation of that link on screen.
 
-The companion is a small cartoon dolphin, upright, with a big readable
-head, living in little full-color scenes; its gestures tell what the tool
-is doing (`sprites.ts`):
+The companion is a little cartoon dolphin seen from the chest up at its
+desk, in a cozy lab, in full color; its gestures tell what the tool is
+doing (`sprites.ts`, after the owner's sketch sheet):
 
 ```text
-IDLE        link up, nothing running: looks around, blinks, taps a foot,
-            waters its plant
-WAIT        nothing connected: sits on its cushion by the window and dozes
-GREET       after power-on: a hop and a wave
-SEARCH      analysing: types at its retro computer, eyes on the screen
-CONNECT     carries the USB plug to the device and pushes it in
-READ        examines a card under a magnifier that enlarges what it is over
-TRANSFER    carries floppies from the shelf to the computer
-SUCCESS     arms up, a jump, confetti
-WARNING     scratches its head, looking up
-ERROR       takes a wrench to the smoking device
-DISCONNECT  holds the loose plug and looks at it, sad
+IDLE        link up, nothing running: headphones on, it codes, nodding
+WAIT        nothing connected: asleep on the desk under the lamp (Z z)
+GREET       after power-on: it turns to us and waves
+SEARCH      analysing: a hand on the radio scanner's knob, the spectrum moving
+CONNECT     pushes the cable into the Flipper's port (the screen lights up)
+READ        leans over a board with a magnifier up to its eye
+TRANSFER    at the keyboard, blocks travel from one computer to the other
+SUCCESS     both arms up, eyes shut with joy, a check on the screen
+WARNING     the screen blinks "!", it scratches its head, worried
+ERROR       arms crossed, cross brows, the rain outside
+DISCONNECT  a cable end in each flipper, it looks from one to the other
 ```
 
-The character is built from simple shapes plus an outline pass (head,
-beak, eye expressions, arms with elbows, sitting, walking), so new poses
-stay in one style. Scenes are pure functions of time; replacing them is
-replacing a SpriteSet. Reduced motion holds each scene still on a
-representative moment.
+One profile (a wide melon sloping into a thick beak, a big eye, a cream
+throat, flippers it uses as hands) built from shapes plus an outline
+pass, so every pose stays in one style. Scenes are pure functions of
+time; replacing them is replacing a SpriteSet. Reduced motion holds each
+scene still on a representative moment.
 
 ### Messages
 
