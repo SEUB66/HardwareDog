@@ -13,6 +13,10 @@
 //! Linux only (BlueZ over the system D-Bus, pure Rust). Elsewhere the
 //! status says `unsupported`, and the interface says why.
 
+// The ring, the clock and the hex helpers feed the BlueZ backend: off Linux
+// they exist (the API and its tests are the same everywhere) but go unused.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
+
 #[cfg(target_os = "linux")]
 mod bluez;
 
