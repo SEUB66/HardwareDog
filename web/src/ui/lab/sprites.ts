@@ -22,7 +22,7 @@
  * (another section, a detached window) resumes, it never restarts.
  */
 
-import type { Anim } from '../../core/lab/companion';
+import type { Anim, Subject } from '../../core/lab/companion';
 
 export const SCREEN_W = 136;
 export const SCREEN_H = 100;
@@ -45,9 +45,13 @@ export const PALETTE = {
   red: '#ff5f56',
 } as const;
 
+/** A scene: an animation of the companion, or the TV switching off. */
+export type SceneName = Anim | 'shutdown';
+
 export interface SpriteSet {
   id: string;
-  drawScene(ctx: CanvasRenderingContext2D, anim: Anim, t: number): void;
+  /** `subject`: what the animation is about (tool, file kind), to pick the right scene. */
+  drawScene(ctx: CanvasRenderingContext2D, scene: SceneName, t: number, subject?: Subject | null): void;
   drawSplash(ctx: CanvasRenderingContext2D, t: number): void;
 }
 
@@ -182,6 +186,8 @@ export interface Pose {
   /** The near flipper goes up behind the head (both arms up: hooray). */
   frontBehind?: boolean;
   headphones?: boolean;
+  /** Safety goggles, for soldering. */
+  goggles?: boolean;
   blush?: boolean;
   sweat?: boolean;
 }
@@ -312,6 +318,24 @@ export function bust(p: Pose): Layer {
   if (p.sweat) {
     L.set(18, 8, P.tear);
     L.rect(17, 9, 3, 2, P.tear);
+  }
+  if (p.goggles) {
+    // the strap round the melon, a big lens over the eye
+    for (let x = 9; x <= 30; x++) L.set(x, 14 + Math.round(((x - 20) / 12) ** 2 * 2), '#2b3a55');
+    const G = new Layer(BW, BH);
+    G.ellipse(ex, ey, 8.5, 8, '#3fb8d0');
+    G.ellipse(ex, ey, 6.6, 6.2, null);
+    G.outline(P.outline);
+    L.over(G);
+    for (let y = -5; y <= 5; y++)
+      for (let x = -6; x <= 6; x++) {
+        if ((x / 6.6) ** 2 + (y / 6.2) ** 2 > 1) continue;
+        const c = L.get(ex + x, ey + y);
+        // the glass tints what is under it
+        if (c === P.white) L.set(ex + x, ey + y, '#d8f6ff');
+        else if (c === P.body || c === P.light) L.set(ex + x, ey + y, '#ffb57a');
+      }
+    L.line([ex - 4, ey - 4], [ex - 2, ey - 5], '#ffffff');
   }
   cache.set(key, L);
   if (cache.size > 300) cache.delete(cache.keys().next().value!);
@@ -504,7 +528,7 @@ function sit(ctx: CanvasRenderingContext2D, x: number, pose: Pose, flip = false,
 
 // ---------------------------------------------------------------- props
 
-function crt(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, show: 'code' | 'dark' | 'check' | 'alert' | 'folder' | 'send'): void {
+function crt(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, show: 'code' | 'dark' | 'check' | 'alert' | 'folder' | 'send' | 'boot' | 'bt' | 'uart' | 'dash'): void {
   thing(ctx, x, y, 38, 34, (l) => {
     l.rect(1, 1, 35, 28, L_.beige);
     l.rect(1, 25, 35, 4, L_.beigeDark);
@@ -542,6 +566,53 @@ function crt(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, sho
     rect(ctx, L_.screen, sx + 7, sy + 7, 11, 6);
   } else if (show === 'send') {
     for (let i = 0; i < 3; i++) rect(ctx, L_.code3, sx + 2, sy + 2 + i * 4, 6 + ((tick(t, 200) + i) % 3) * 4, 2);
+  } else if (show === 'boot') {
+    // the little dolphin of the boot screen, and its loading bar
+    for (const [dx, dy, w] of [
+      [9, 3, 2],
+      [8, 4, 5],
+      [7, 5, 8],
+      [6, 6, 9],
+      [5, 7, 3],
+      [10, 7, 4],
+      [13, 8, 2],
+    ] as const)
+      rect(ctx, L_.code1, sx + dx, sy + dy, w, 1);
+    rect(ctx, L_.code1, sx + 1, sy + 11, 21, 1);
+    rect(ctx, L_.code1, sx + 1, sy + 13, 21, 1);
+    rect(ctx, L_.code1, sx + 2, sy + 12, Math.min(19, Math.round(((t % 2500) / 2500) * 19)), 1);
+  } else if (show === 'bt') {
+    // the Bluetooth rune, its waves going out
+    const bx = sx + 11;
+    const by = sy + 2;
+    rect(ctx, L_.code1, bx, by, 1, 13);
+    for (let i = 0; i < 4; i++) {
+      rect(ctx, L_.code1, bx + i, by + i, 1, 1);
+      rect(ctx, L_.code1, bx + 3 - i, by + 3 + i, 1, 1);
+      rect(ctx, L_.code1, bx + i, by + 9 + i, 1, 1);
+      rect(ctx, L_.code1, bx + 3 - i, by + 6 + i, 1, 1);
+    }
+    const wave = tick(t, 300) % 3;
+    for (let k = 0; k <= wave; k++) {
+      rect(ctx, L_.code1, bx - 4 - k * 2, by + 4 - k, 1, 5 + k * 2);
+      rect(ctx, L_.code1, bx + 6 + k * 2, by + 4 - k, 1, 5 + k * 2);
+    }
+  } else if (show === 'uart') {
+    // a terminal: prompt, sent line, answer, the cursor
+    const lines = [
+      [L_.code1, 4, 1],
+      [L_.code4, 3, 14],
+      [L_.code3, 3, 8],
+      [L_.code1, 4, 1],
+    ] as const;
+    const shown = 1 + (tick(t, 500) % 4);
+    lines.slice(0, shown).forEach(([c, a, b], i) => {
+      rect(ctx, c, sx, sy + i * 4, a, 2);
+      rect(ctx, c, sx + a + 1, sy + i * 4, b, 2);
+    });
+    if (tick(t, 300) % 2) rect(ctx, L_.white, sx + 7, sy + (shown - 1) * 4, 2, 2);
+  } else if (show === 'dash') {
+    rect(ctx, L_.white, sx + 8, sy + 8, 8, 1);
   }
   rect(ctx, PALETTE.green, x + 30, y + 26, 2, 1);
 }
@@ -676,17 +747,6 @@ function sceneCoding(ctx: CanvasRenderingContext2D, t: number): void {
   keyboard(ctx, 36, 77);
   cd(ctx, 6, 79);
   cd(ctx, 18, 80);
-}
-
-function sceneGreet(ctx: CanvasRenderingContext2D, t: number): void {
-  // After power-on: it turns to us and waves.
-  lab(ctx, t, { poster: 112 });
-  crt(ctx, 8, 46, t, 'code');
-  const wave = tick(t, 220) % 2;
-  sit(ctx, 52, { eye: 'happy', mouth: 'open', blush: true, back: wave ? [1, 12] : [3, 18], backElbow: [3, 38] }, false, t < 500 ? Math.sin((t / 500) * Math.PI) * 4 : 0);
-  deskTop(ctx);
-  keyboard(ctx, 36, 77);
-  sparkle(ctx, 128, 20 + (tick(t, 300) % 2), PALETTE.pink);
 }
 
 function sceneScan(ctx: CanvasRenderingContext2D, t: number): void {
@@ -867,30 +927,330 @@ function sceneAsleep(ctx: CanvasRenderingContext2D, t: number): void {
   zzz(ctx, 100, 36, t);
 }
 
-export function drawCompanionScene(ctx: CanvasRenderingContext2D, anim: Anim, t: number): void {
-  switch (anim) {
+
+// ----------------------------------------------------- props for the tools
+
+/** A small board with an antenna, held up: a BLE thing under study. */
+function bleBoard(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
+  thing(ctx, x, y, 10, 9, (l) => l.rect(1, 2, 8, 6, L_.pcb));
+  rect(ctx, L_.chip, x + 3, y + 4, 3, 2);
+  rect(ctx, L_.gold, x + 7, y, 1, 3);
+  const w = tick(t, 250) % 3;
+  for (let k = 0; k <= w; k++) {
+    rect(ctx, L_.code1, x + 10 + k * 2, y - 2 - k, 1, 3 + k * 2);
+  }
+}
+
+function reader(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, on: boolean): void {
+  thing(ctx, x, y, 30, 10, (l) => {
+    l.rect(1, 2, 28, 7, '#2c3038');
+    l.rect(3, 1, 24, 2, '#3a3f48');
+  });
+  // the antenna spiral, glowing when a card is near
+  const c = on ? L_.code1 : '#2f6e7a';
+  rect(ctx, c, x + 8, y + 3, 12, 1);
+  rect(ctx, c, x + 8, y + 3, 1, 4);
+  rect(ctx, c, x + 8, y + 6, 10, 1);
+  rect(ctx, c, x + 17, y + 4, 1, 3);
+  rect(ctx, c, x + 11, y + 4, 6, 1);
+  rect(ctx, on && tick(t, 200) % 2 ? '#5cff7a' : '#1e5a2a', x + 24, y + 5, 2, 2);
+}
+
+function rfidCard(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  thing(ctx, x, y, 16, 11, (l) => l.rect(1, 1, 14, 9, '#fbf8f2'));
+  // the lab's orange dolphin on the card
+  rect(ctx, PALETTE.body, x + 6, y + 3, 5, 2);
+  rect(ctx, PALETTE.body, x + 5, y + 5, 3, 2);
+  rect(ctx, PALETTE.body, x + 9, y + 2, 2, 1);
+}
+
+function oldTv(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
+  thing(ctx, x, y, 40, 32, (l) => {
+    l.rect(1, 1, 38, 27, '#6b6f78');
+    l.rect(1, 25, 38, 3, '#4f535b');
+    l.rect(8, 28, 4, 3, '#4f535b');
+    l.rect(28, 28, 4, 3, '#4f535b');
+  });
+  // color bars, a roll of interference now and then
+  const bars = ['#f2f0e9', '#f2d24a', '#4de2ff', '#79d98a', '#ff6fae', '#e85d4a', '#4a6ae8'];
+  const roll = tick(t, 2400) % 3 === 0 ? (t % 2400) / 40 : -10;
+  bars.forEach((c, i) => rect(ctx, c, x + 4 + i * 4, y + 4, 4, 19));
+  if (roll >= 0) rect(ctx, '#ffffff', x + 4, y + 4 + (Math.round(roll) % 19), 28, 1);
+  rect(ctx, '#2a2d33', x + 33, y + 6, 4, 4);
+  rect(ctx, '#2a2d33', x + 33, y + 13, 4, 4);
+}
+
+function remote(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  thing(ctx, x, y, 16, 7, (l) => l.rect(1, 1, 14, 5, '#33363d'));
+  rect(ctx, PALETTE.red, x + 13, y + 2, 2, 2);
+  for (let i = 0; i < 4; i++) rect(ctx, '#8a8f99', x + 3 + i * 2, y + 3, 1, 1);
+}
+
+function printer(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): number {
+  thing(ctx, x, y, 36, 20, (l) => {
+    l.rect(1, 4, 34, 15, L_.beige);
+    l.rect(4, 1, 28, 4, L_.beigeDark);
+    l.rect(1, 15, 34, 4, L_.beigeDark);
+  });
+  rect(ctx, PALETTE.green, x + 28, y + 8, 3, 2);
+  // the paper coming out, line by line
+  const out = (t / 40) % 30;
+  return out;
+}
+
+function printout(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  thing(ctx, x, y, w + 2, h + 2, (l) => l.rect(1, 1, w, h, '#fbf8f2'));
+  for (let i = 0; i < 4; i++) rect(ctx, '#3d4a66', x + 4 + i * 3, y + 10 - i * 2, 2, 3 + i * 2);
+  for (let i = 0; i < Math.floor((h - 14) / 3); i++) rect(ctx, '#9aa3b5', x + 3, y + 15 + i * 3, w - 6 - (i % 3) * 3, 1);
+  rect(ctx, '#3d6ae8', x + w - 8, y + h - 9, 5, 5);
+  rect(ctx, '#fbf8f2', x + w - 6, y + h - 9, 3, 2);
+}
+
+function floppyDisk(ctx: CanvasRenderingContext2D, x: number, y: number, c: string): void {
+  thing(ctx, x, y, 12, 12, (l) => {
+    l.rect(1, 1, 10, 10, c);
+    l.rect(3, 1, 6, 3, L_.metal);
+    l.rect(3, 6, 6, 5, '#fbf8f2');
+  });
+  rect(ctx, PALETTE.amber, x + 4, y + 8, 4, 1);
+}
+
+function floppyBox(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+  const cols = ['#e85d75', '#3d6ae8', '#f2d24a', '#79d98a', '#b48cff', '#4de2ff'];
+  cols.forEach((c, i) => rect(ctx, c, x + 3 + i * 4, y - 4 - (i % 2), 3, 7));
+  thing(ctx, x, y, 30, 14, (l) => l.rect(1, 1, 28, 12, '#d9b67a'));
+  rect(ctx, '#fbf8f2', x + 8, y + 5, 14, 4);
+  rect(ctx, PALETTE.amber, x + 10, y + 6, 10, 2);
+}
+
+function drive(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
+  thing(ctx, x, y, 36, 20, (l) => {
+    l.rect(1, 1, 34, 18, L_.beige);
+    l.rect(1, 15, 34, 4, L_.beigeDark);
+  });
+  rect(ctx, '#2a2d33', x + 6, y + 6, 18, 3);
+  rect(ctx, tick(t, 180) % 2 ? PALETTE.red : '#5a2020', x + 28, y + 6, 3, 2);
+}
+
+function solderingIron(ctx: CanvasRenderingContext2D, x: number, y: number, flip = false): void {
+  thing(
+    ctx,
+    x,
+    y,
+    18,
+    8,
+    (l) => {
+      l.capsule([1.5, 4], [9, 4], 2, '#c84a4a');
+      l.rect(10, 3, 5, 2, L_.metal);
+      l.set(15, 4, '#ffb057');
+      l.set(16, 4, '#ffb057');
+    },
+    flip,
+  );
+}
+
+function wires(ctx: CanvasRenderingContext2D, x0: number, x1: number, y: number, t: number): void {
+  const cols = ['#e85d4a', '#f2d24a', '#4de2ff', '#79d98a'];
+  cols.forEach((c, i) => {
+    const h = 10 + i * 3 + Math.round(Math.sin(t / 900 + i) * 0.5);
+    for (let k = 0; k <= 20; k++) {
+      const u = k / 20;
+      rect(ctx, c, x0 + i * 2 + (x1 - x0) * u, y - Math.sin(u * Math.PI) * h, 1, 1);
+    }
+  });
+}
+
+function smoke(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
+  for (let i = 0; i < 6; i++) {
+    const p = (((t / 1400 + i / 6) % 1) + 1) % 1;
+    rect(ctx, '#c9ced6', x + Math.round(Math.sin(p * 7 + i) * 2.5), y - p * 26, 1, 2);
+  }
+}
+
+// --------------------------------------------------------- tool scenes
+
+function sceneBoot(ctx: CanvasRenderingContext2D, t: number): void {
+  // Switched on: arms up, the computer boots with the dolphin.
+  lab(ctx, t, { lamp: 'right', poster: 32 });
+  crt(ctx, 86, 44, t, 'boot');
+  const up = tick(t, 320) % 2;
+  sit(ctx, 6, { eye: 'happy', mouth: 'open', blush: true, front: up ? [47, 3] : [48, 7], frontBehind: true, back: up ? [6, 3] : [5, 7] }, false, t < 500 ? Math.sin((t / 500) * Math.PI) * 4 : 0);
+  deskTop(ctx);
+  keyboard(ctx, 60, 77);
+  mug(ctx, 4, 70, t);
+  if (tick(t, 260) % 2) {
+    rect(ctx, PALETTE.pink, 60, 18, 1, 3);
+    rect(ctx, PALETTE.pink, 64, 22, 3, 1);
+    rect(ctx, PALETTE.pink, 56, 14, 2, 1);
+  }
+}
+
+function sceneBluetooth(ctx: CanvasRenderingContext2D, t: number): void {
+  // A BLE scan: headphones on, a small board held up to listen to, the screen shows the waves.
+  lab(ctx, t, { poster: 112 });
+  crt(ctx, 84, 42, t, 'bt');
+  const o = sit(ctx, 8, { eye: blinking(t) ? 'blink' : 'focus', look: [1, 0.8], mouth: 'smile', headphones: true, front: [52, 50], frontElbow: [48, 58], back: [44, 54], backElbow: [32, 60] }, false);
+  const h = at(o, [52, 50]);
+  bleBoard(ctx, h[0] - 4, h[1] - 9, t);
+  deskTop(ctx);
+  rect(ctx, '#c84a6a', 4, 79, 14, 4);
+  rect(ctx, L_.metal, 116, 81, 6, 2);
+}
+
+function sceneRfid(ctx: CanvasRenderingContext2D, t: number): void {
+  // Reading an RFID / NFC / iButton capture: a card held over the reader.
+  lab(ctx, t, { lamp: 'right', shelf: false });
+  rect(ctx, '#2b3159', 60, 4, 40, 32);
+  for (let j = 0; j < 5; j++) for (let i = 0; i < 6; i++) rect(ctx, '#1d2244', 63 + i * 6, 7 + j * 6, 1, 1);
+  rect(ctx, '#d84a6a', 68, 8, 2, 16);
+  rect(ctx, L_.metal, 74, 8, 2, 12);
+  rect(ctx, '#d84a6a', 84, 10, 6, 2);
+  plant(ctx, 4, 30, t);
+  const hover = Math.round(Math.sin(t / 500) * 2);
+  const o = sit(ctx, 10, { eye: 'focus', look: [1, 0.8], mouth: 'smile', front: [58, 50 + hover], frontElbow: [50, 58], back: [44, 58] }, false);
+  deskTop(ctx);
+  reader(ctx, 92, 72, t, true);
+  const h = at(o, [58, 50 + hover]);
+  rfidCard(ctx, h[0] - 2, h[1] - 8);
+}
+
+function sceneInfrared(ctx: CanvasRenderingContext2D, t: number): void {
+  // Reading an IR capture: it points the remote at the old TV.
+  lab(ctx, t, { poster: 50 });
+  oldTv(ctx, 92, 42, t);
+  const press = tick(t, 700) % 2;
+  const o = sit(ctx, 2, { eye: 'open', look: [1, 0.2], mouth: 'smile', front: [56, 46 - press], frontElbow: [50, 56], back: [40, 62] }, false);
+  deskTop(ctx);
+  const h = at(o, [56, 46 - press]);
+  remote(ctx, h[0] - 4, h[1] - 4);
+  if (press) {
+    for (let i = 0; i < 3; i++) rect(ctx, PALETTE.red, h[0] + 14 + i * 5, h[1] - 3 - i, 2, 1);
+    sparkle(ctx, h[0] + 12, h[1] - 2, '#ff8a80', 1);
+  }
+  thing(ctx, 76, 74, 14, 8, (l) => l.rect(1, 1, 12, 6, '#7d522c'));
+}
+
+function sceneUart(ctx: CanvasRenderingContext2D, t: number): void {
+  // GPIO / UART: wires from the board to the breakout, the terminal answers.
+  lab(ctx, t, { poster: 92 });
+  crt(ctx, 92, 42, t, 'uart');
+  sit(ctx, 6, { eye: blinking(t, 3900) ? 'blink' : 'focus', look: [1, 1], mouth: 'smile', front: [50, 60], frontElbow: [46, 56], back: [36, 62] }, false, -2);
+  deskTop(ctx);
+  pcb(ctx, 30, 76, 40);
+  wires(ctx, 52, 82, 77, t);
+  thing(ctx, 80, 74, 12, 8, (l) => l.rect(1, 1, 10, 6, '#3d4148'));
+  solderingIron(ctx, 10, 82);
+  thing(ctx, 108, 76, 20, 7, (l) => l.rect(1, 1, 18, 5, '#2a2d33'));
+}
+
+function sceneBackup(ctx: CanvasRenderingContext2D, t: number): void {
+  // Copying to the library: a floppy filed into the box, one after the other.
+  lab(ctx, t, { poster: 120 });
+  drive(ctx, 96, 60, t);
+  const cyc = t % 1800;
+  const down = Math.min(1, Math.max(0, (cyc - 900) / 600));
+  const o = sit(ctx, 6, { eye: 'open', look: [1, 0.6], mouth: 'smile', front: [56, 44 + down * 14], frontElbow: [50, 56], back: [44, 58] }, false);
+  deskTop(ctx);
+  floppyBox(ctx, 62, 70);
+  const h = at(o, [56, 44 + down * 14]);
+  const colors = ['#3d6ae8', '#e85d75', '#79d98a'];
+  if (cyc < 1500) floppyDisk(ctx, h[0] - 3, h[1] - 10, colors[tick(t, 1800) % 3]!);
+}
+
+function sceneRepair(ctx: CanvasRenderingContext2D, t: number): void {
+  // Writing to the device, or trying a fix: goggles on, soldering the board.
+  lab(ctx, t, { lamp: 'right', poster: 28 });
+  const touch = tick(t, 500) % 2;
+  const o = sit(ctx, 2, { eye: 'focus', look: [1, 1], mouth: 'closed', goggles: true, front: [52, 64 - touch], frontElbow: [48, 54], back: [36, 64] }, false, -2);
+  deskTop(ctx);
+  pcb(ctx, 30, 76, 54);
+  const h = at(o, [52, 64 - touch]);
+  solderingIron(ctx, h[0] - 4, h[1] - 6);
+  if (touch) smoke(ctx, h[0] + 12, h[1] - 4, t);
+  thing(ctx, 100, 70, 18, 12, (l) => {
+    l.rect(1, 8, 16, 3, '#2c3038');
+    l.capsule([4, 8], [14, 1], 1.4, L_.metal);
+  });
+  thing(ctx, 120, 74, 12, 8, (l) => {
+    l.ellipse(6, 4, 5, 3, '#cf4a4a');
+    l.ellipse(6, 4, 2, 1.2, L_.metal);
+  });
+}
+
+function sceneReport(ctx: CanvasRenderingContext2D, t: number): void {
+  // A report is out: the printout held up, the printer still going.
+  lab(ctx, t, { poster: 30 });
+  const out = printer(ctx, 96, 60, t);
+  for (let i = 0; i < 3; i++) rect(ctx, '#fbf8f2', 102, 60 - out / 3 + i, 22, 1);
+  sit(ctx, 2, { eye: 'happy', mouth: 'open', blush: true, front: [50, 44], frontElbow: [48, 58], back: [38, 50], backElbow: [28, 58] }, false);
+  printout(ctx, 44, 30, 22, 50);
+  deskTop(ctx);
+  thing(ctx, 4, 76, 22, 6, (l) => l.rect(1, 1, 20, 4, '#fbf8f2'));
+}
+
+function sceneShutdown(ctx: CanvasRenderingContext2D, t: number): void {
+  // Switching off: night outside, a wave to us, a flipper on the power button.
+  lab(ctx, t, { shelf: false, plants: false });
+  rect(ctx, '#3b2a2a', 4, 4, 44, 50);
+  rect(ctx, L_.night, 6, 6, 40, 46);
+  for (let i = 0; i < 5; i++) {
+    const h = 10 + Math.round(rnd(i + 20) * 18);
+    rect(ctx, '#0d1430', 7 + i * 8, 52 - h, 7, h);
+    for (let w = 0; w < 3; w++) if (rnd(i * 7 + w) > 0.4) rect(ctx, L_.cityLit, 8 + i * 8 + w * 2, 52 - h + 3 + w * 3, 1, 1);
+  }
+  rect(ctx, '#fff3b0', 36, 10, 4, 4);
+  rect(ctx, L_.night, 35, 9, 2, 2);
+  for (let i = 0; i < 6; i++) rect(ctx, '#ffffff', 8 + rnd(i + 40) * 36, 8 + rnd(i + 50) * 10, 1, 1);
+  plant(ctx, 50, 62, t);
+  crt(ctx, 96, 44, t, 'dash');
+  const wave = tick(t, 200) % 2;
+  sit(ctx, 40, { eye: 'happy', mouth: 'open', front: [58, 58], frontElbow: [52, 60], back: wave ? [1, 12] : [3, 18], backElbow: [3, 38] }, false);
+  deskTop(ctx);
+  mug(ctx, 16, 70, t, false);
+  rect(ctx, PALETTE.red, 99, 73, 3, 2);
+}
+
+/**
+ * The scene for an animation. What it is about picks among the scenes:
+ * an IR capture is read at the old TV, an NFC one at the card reader, a
+ * BLE scan with the little board; a copy to the library is filed in the
+ * floppy box; a report done is a printout.
+ */
+export function drawCompanionScene(ctx: CanvasRenderingContext2D, scene: SceneName, t: number, subject: Subject | null = null): void {
+  const tool = subject?.tool ?? '';
+  const topic = subject?.topic ?? '';
+  switch (scene) {
     case 'none':
       return rect(ctx, '#000', 0, 0, SCREEN_W, SCREEN_H);
+    case 'shutdown':
+      return sceneShutdown(ctx, t);
     case 'idle':
       return sceneCoding(ctx, t);
     case 'wait':
       return sceneAsleep(ctx, t);
     case 'greet':
-      return sceneGreet(ctx, t);
+      return sceneBoot(ctx, t);
     case 'search':
-      return sceneScan(ctx, t);
+      return tool.startsWith('ble.') ? sceneBluetooth(ctx, t) : sceneScan(ctx, t);
     case 'connect':
       return sceneConnect(ctx, t);
     case 'read':
+      if (topic === 'ir') return sceneInfrared(ctx, t);
+      if (topic === 'nfc' || topic === 'rfid' || topic === 'ibutton') return sceneRfid(ctx, t);
+      if (topic === 'subghz') return sceneScan(ctx, t);
+      if (tool === 'flipper.gpio') return sceneUart(ctx, t);
       return sceneAnalyze(ctx, t);
     case 'transfer':
+      if (tool === 'flipper.copy') return sceneBackup(ctx, t);
+      if (tool === 'flipper.write') return sceneRepair(ctx, t);
       return sceneTransfer(ctx, t);
     case 'success':
-      return sceneSuccess(ctx, t);
+      return tool === 'lab.report' ? sceneReport(ctx, t) : sceneSuccess(ctx, t);
     case 'warning':
       return sceneWarning(ctx, t);
     case 'error':
-      return sceneMad(ctx, t);
+      // cross first, then it tries a fix
+      return t < 3500 ? sceneMad(ctx, t) : sceneRepair(ctx, t - 3500);
     case 'disconnect':
       return sceneDisconnected(ctx, t);
   }

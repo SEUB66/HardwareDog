@@ -191,3 +191,10 @@ export function errorInfo(e: unknown): { message: string; code?: string } {
   }
   return { message: String(e) };
 }
+
+/** An instant operation (a report written, a file saved), said as one op from start to end. */
+export function instantOp(bus: LabBus, e: { source: LabSource; tool: string; message: string; kind: OpKind; origin: LabOrigin; params?: LabEvent['params'] }): void {
+  const op = newOp(e.tool);
+  bus.emit({ source: e.source, tool: e.tool, type: 'op.start', op, severity: 'INFO', message: e.message, origin: e.origin, params: { kind: e.kind } });
+  bus.emit({ source: e.source, tool: e.tool, type: 'op.end', op, severity: 'PASS', message: e.message, origin: e.origin, ...(e.params ? { params: e.params } : {}) });
+}

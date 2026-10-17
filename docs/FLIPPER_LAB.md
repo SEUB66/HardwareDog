@@ -199,6 +199,24 @@ ERROR       arms crossed, cross brows, the rain outside
 DISCONNECT  a cable end in each flipper, it looks from one to the other
 ```
 
+What the operation is about picks among more scenes (the companion's
+`subject`: the tool, and the kind of file the Flipper service names):
+
+```text
+BOOT        after power-on: arms up, the computer boots with its dolphin
+SHUTDOWN    the TV switching off: night outside, a wave, a flipper on the
+            power button
+BLUETOOTH   a BLE scan: headphones on, a small board held up, waves on screen
+RFID        reading .nfc, .rfid, .ibtn: a card over the reader
+INFRARED    reading .ir: the remote pointed at the old TV's color bars
+SCAN        reading .sub: the radio scanner's spectrum
+UART        GPIO reads: wires from the board, the terminal answers
+BACKUP      copying to the library: a floppy filed into the box
+REPAIR      writing to the Flipper, and an error's second phase: goggles
+            on, soldering
+REPORT      a report exported: the printout held up, the printer going
+```
+
 One profile (a wide melon sloping into a thick beak, a big eye, a cream
 throat, flippers it uses as hands) built from shapes plus an outline
 pass, so every pose stays in one style. Scenes are pure functions of
