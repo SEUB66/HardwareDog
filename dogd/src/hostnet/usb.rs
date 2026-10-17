@@ -29,6 +29,9 @@ pub struct UsbDevice {
     pub power: Option<&'static str>,
     /// What it may draw from the bus, as it declares it (bMaxPower), mA.
     pub max_ma: Option<u32>,
+    /// Every interface of its active configuration, by class (VIDEO, MSC,
+    /// CDC...), in interface order: what the device exposes, as declared.
+    pub interfaces: Vec<String>,
 }
 
 impl UsbDevice {
@@ -135,6 +138,20 @@ pub fn scan_sysfs(root: &Path) -> Vec<UsbDevice> {
             .and_then(|s| u8::from_str_radix(&s, 16).ok())
             .map(|a| if a & 0x40 != 0 { "SELF" } else { "BUS" });
         let max_ma = read("bMaxPower").and_then(|s| s.trim_end_matches("mA").trim().parse().ok());
+        // Interfaces: "1-2:1.0", "1-2:1.1"... each with its class.
+        let mut ifaces: Vec<(String, String)> = std::fs::read_dir(&path)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|i| {
+                let name = i.file_name().to_string_lossy().into_owned();
+                let rest = name.strip_prefix(&format!("{port}:"))?;
+                let code = std::fs::read_to_string(i.path().join("bInterfaceClass")).ok()?;
+                let code = u8::from_str_radix(code.trim(), 16).ok()?;
+                Some((rest.to_string(), class_name(code)))
+            })
+            .collect();
+        ifaces.sort();
         out.push(UsbDevice {
             port,
             vid,
@@ -146,6 +163,7 @@ pub fn scan_sysfs(root: &Path) -> Vec<UsbDevice> {
             cls: class_name(class),
             power,
             max_ma,
+            interfaces: ifaces.into_iter().map(|(_, c)| c).collect(),
         });
     }
     out.sort_by(|a, b| a.port.cmp(&b.port));
@@ -274,6 +292,7 @@ mod tests {
                 ("bmAttributes", "c0"),
                 ("bMaxPower", "500mA"),
                 ("1-4.1:1.0/bInterfaceClass", "ff"),
+                ("1-4.1:1.1/bInterfaceClass", "08"),
             ],
         );
         dev(
@@ -307,6 +326,10 @@ mod tests {
             (Some("FULL"), "HID", Some("BUS"), Some(98))
         );
         assert_eq!(mouse.name(), "Logitech USB Receiver");
+        assert_eq!(mouse.interfaces, ["HID"]);
+        // every interface, in order, by class: a vendor one and a storage one
+        assert_eq!(got[2].interfaces, ["VENDOR", "MSC"]);
+        assert!(got[1].interfaces.is_empty());
         let phone = &got[2];
         assert_eq!(
             (phone.speed, phone.cls.as_str(), phone.power),

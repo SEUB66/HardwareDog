@@ -13,6 +13,7 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
     "assets": "node scripts/build-brand-assets.mjs",
+    "companion": "node scripts/build-companion-scenes.mjs",
     "demo": "vite --open /diagnostic.html?demo",
     "cases": "UPDATE_CASES=1 vitest run test/cases.test.ts",
     "docs:sync": "node scripts/sync-raw-docs.mjs",

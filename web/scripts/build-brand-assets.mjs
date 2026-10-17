@@ -72,6 +72,8 @@ const TV_REGIONS = {
 };
 /** Flipper Lab banner: pixel-art lab, the dog and the dolphin, 1983 x 793. */
 const BANNER = join(SRC, 'hd-flipper-lab-banner.png');
+/** Camera Sniffer banner: pixel-art living room seen through a lens, the dog with a camera, 1983 x 793. */
+const CAMERA_BANNER = join(SRC, 'hd-camera-sniffer-banner.png');
 
 const outputs = [];
 
@@ -277,6 +279,11 @@ async function main() {
   // FLIPPER LAB BANNER: the full scene at 2x and 1x of its 800 px display width.
   for (const w of [1600, 800]) {
     await save(join(WEB, `hd-flipper-lab-banner-${w}.webp`), sharp(BANNER).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 82, smartSubsample: true, effort: 6 }));
+  }
+
+  // CAMERA SNIFFER BANNER: same sizes as the Flipper Lab banner.
+  for (const w of [1600, 800]) {
+    await save(join(WEB, `hd-camera-sniffer-banner-${w}.webp`), sharp(CAMERA_BANNER).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 82, smartSubsample: true, effort: 6 }));
   }
 
   const width = Math.max(...outputs.map(([f]) => f.length));

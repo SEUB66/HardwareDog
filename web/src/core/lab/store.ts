@@ -7,6 +7,8 @@
  *
  *   hwdog-lab / sessions   id -> { meta, text }   .hdlab files
  *   hwdog-lab / library    id -> LibraryItem      files copied from a Flipper
+ *   hwdog-lab / camera     id -> Inspection       Camera Sniffer inspections (rooms, objects, notes)
+ *   hwdog-lab / photos     id -> PhotoRecord      photos taken during an inspection, never sent anywhere
  */
 
 export interface KvBackend<T> {
@@ -35,12 +37,13 @@ export class MemoryKv<T> implements KvBackend<T> {
 }
 
 const DB = 'hwdog-lab';
-const STORES = ['sessions', 'library'] as const;
+const STORES = ['sessions', 'library', 'camera', 'photos'] as const;
 export type LabStoreName = (typeof STORES)[number];
 
 function openDb(factory: IDBFactory): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = factory.open(DB, 1);
+    // 2: Camera Sniffer's stores; an older database gets them on upgrade, its data untouched.
+    const req = factory.open(DB, 2);
     req.onupgradeneeded = () => {
       for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
     };

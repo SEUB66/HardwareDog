@@ -11,6 +11,7 @@ mod device;
 mod discovery;
 mod hostnet;
 mod identity;
+mod lan;
 mod protocol;
 mod sessions;
 mod storage;
@@ -167,6 +168,7 @@ async fn serve(mut cfg: Config) -> i32 {
 
     let state = api::AppState {
         ble: ble::BleScanner::new(),
+        lan: lan::LanScanner::new(),
         links: Arc::new(links),
         store,
         discovery,
