@@ -2,9 +2,12 @@
  * HARDWARE DOG / WHERE THE TV LIVES
  *
  *   DOCKED     a permanent place in Flipper Lab
- *   FLOATING   moved by its handle, it follows across every section;
- *              minimized to a small tab, docked back, kept on screen,
- *              its place remembered in this browser
+ *   FLOATING   it follows across every section; dragged by its body
+ *              (mouse, pen or finger: a tap on POWER or the dial stays a
+ *              tap), minimized to a small tab, docked back, kept on screen
+ *              and above the bottom menu, its place remembered in this
+ *              browser. On a phone it is a small TV that snaps to the
+ *              nearest side when let go.
  *   DETACHED   its own always-on-top window, where the browser offers one
  *              (Document Picture-in-Picture, Chromium desktop). Same page,
  *              same companion, same Flipper session: detaching never opens
@@ -38,6 +41,25 @@ interface Placement {
 const KEY = 'hwdog.tv';
 const MIN_W = 220;
 const MAX_W = 560;
+/** The TV picture's height for its width (1536 x 1024), and the toolbar under a floating one. */
+const TV_RATIO = 1024 / 1536;
+const BAR_H = 34;
+/** A phone: the floating TV is small, and snaps to a side. */
+const PHONE_W = 600;
+const MARGIN = 8;
+
+const narrow = (): boolean => typeof window !== 'undefined' && window.innerWidth < PHONE_W;
+
+/** Where the screen ends for a floating TV: above the bottom menu when there is one. */
+function bottomLimit(): number {
+  if (typeof window === 'undefined') return 0;
+  const nav = document.querySelector('nav.nav');
+  const r = nav?.getBoundingClientRect();
+  return r && r.height > 0 && r.top > window.innerHeight / 2 ? r.top : window.innerHeight;
+}
+
+/** Where the minimized tab sits: above the bottom menu. */
+export const tabBottom = (): number => (typeof window === 'undefined' ? 0 : window.innerHeight - bottomLimit()) + 12;
 
 type DocPip = { requestWindow(o: { width: number; height: number }): Promise<Window>; window: Window | null };
 const docPip = (): DocPip | null => (globalThis as unknown as { documentPictureInPicture?: DocPip }).documentPictureInPicture ?? null;
@@ -48,6 +70,8 @@ export const detachSupported = (): boolean => docPip() !== null;
 export class TvPlacement {
   state: Placement;
   pip: Window | null = null;
+  /** A drag in progress (not saved): no snapping animation while the finger moves. */
+  dragging = false;
   private listeners = new Set<() => void>();
   private rev = 0;
 
@@ -70,22 +94,38 @@ export class TvPlacement {
     this.rev++;
     for (const l of [...this.listeners]) l();
   }
-  /** Float in the bottom-right corner, out of the way of the menu and the content's start. */
+  /** The floating TV's width: the chosen one, smaller on a phone so it never covers the page. */
+  get floatWidth(): number {
+    if (!narrow()) return this.state.width;
+    return Math.round(Math.min(this.state.width, Math.max(150, Math.min(200, window.innerWidth * 0.46))));
+  }
+
+  get floatHeight(): number {
+    return this.floatWidth * TV_RATIO + BAR_H;
+  }
+
+  /** Float in the bottom-right corner, above the bottom menu, out of the way of the content's start. */
   float(): void {
-    const w = Math.min(this.state.width, typeof window === 'undefined' ? this.state.width : window.innerWidth - 16);
-    const x = typeof window === 'undefined' ? 0 : window.innerWidth - w - 16;
-    const y = typeof window === 'undefined' ? 0 : window.innerHeight - w * 0.68 - 90;
-    this.set({ mode: 'floating', minimized: false, x, y });
+    if (typeof window === 'undefined') return this.set({ mode: 'floating', minimized: false });
+    this.set({ mode: 'floating', minimized: false, width: narrow() ? Math.min(this.state.width, 170) : this.state.width });
+    this.set({ x: window.innerWidth - this.floatWidth - MARGIN * 2, y: bottomLimit() - this.floatHeight - MARGIN * 2 });
     this.clamp();
   }
 
-  /** Keep a floating TV inside the window, whatever its size became. */
+  /** Keep a floating TV inside the window and above the bottom menu, whatever its size became. */
   clamp(): void {
     if (typeof window === 'undefined') return;
-    const h = this.state.width * 0.68 + 40;
-    const x = Math.min(Math.max(0, this.state.x), Math.max(0, window.innerWidth - Math.min(this.state.width, window.innerWidth)));
-    const y = Math.min(Math.max(0, this.state.y), Math.max(0, window.innerHeight - Math.min(h, window.innerHeight)));
+    const w = Math.min(this.floatWidth, window.innerWidth);
+    const x = Math.min(Math.max(0, this.state.x), Math.max(0, window.innerWidth - w));
+    const y = Math.min(Math.max(0, this.state.y), Math.max(0, bottomLimit() - this.floatHeight));
     if (x !== this.state.x || y !== this.state.y) this.set({ x, y });
+  }
+
+  /** Let go on a phone: to the nearest side. */
+  snap(): void {
+    if (typeof window === 'undefined' || !narrow()) return;
+    const w = this.floatWidth;
+    this.set({ x: this.state.x + w / 2 < window.innerWidth / 2 ? MARGIN : window.innerWidth - w - MARGIN });
   }
 }
 
@@ -167,7 +207,7 @@ function Toolbar({ placement, props, onDrag }: { placement: TvPlacement; props: 
         </button>
       )}
       <button
-        class="btn"
+        class="btn tv-detach"
         disabled={!canDetach}
         onClick={() => void detach(props)}
         title={canDetach ? 'Its own always-on-top window (same session, no second connection)' : 'This browser offers no always-on-top window (Document Picture-in-Picture): use FLOAT'}
@@ -177,7 +217,7 @@ function Toolbar({ placement, props, onDrag }: { placement: TvPlacement; props: 
       <button class={`btn${s.sound ? ' active' : ''}`} aria-pressed={s.sound} onClick={() => placement.set({ sound: !s.sound })} title="TV sounds (off by default)">
         SOUND
       </button>
-      <button class={`btn${s.dev ? ' active' : ''}`} aria-pressed={s.dev} onClick={() => placement.set({ dev: !s.dev })} title="Developer: show the mapped zones">
+      <button class={`btn tv-zones${s.dev ? ' active' : ''}`} aria-pressed={s.dev} onClick={() => placement.set({ dev: !s.dev })} title="Developer: show the mapped zones">
         ZONES
       </button>
       {onDrag && s.mode === 'floating' && (
@@ -190,33 +230,68 @@ function Toolbar({ placement, props, onDrag }: { placement: TvPlacement; props: 
   );
 }
 
-/** Start dragging from the handle; a docked TV becomes a floating one where it stands. */
-function useDrag(placement: TvPlacement, box: () => HTMLElement | null) {
+/** What a press on the TV must leave alone: its buttons, the dial, the bubble's actions, the toolbar. */
+const PRESSABLE = 'button, input, select, a, label, [role="button"], .tv-zone:not(.tv-handle)';
+
+/**
+ * Move the TV with a mouse, a pen or a finger. The move starts after a few
+ * pixels, so a tap stays a tap. It follows the pointer on the window, not
+ * on the element: a docked TV becomes a floating one mid-drag (a new
+ * element), and the finger keeps it. `anywhere`: the whole TV is a handle
+ * (floating), else only the handle (docked, so the page still scrolls).
+ */
+function useDrag(placement: TvPlacement, box: () => HTMLElement | null, anywhere: boolean) {
   return (e: PointerEvent) => {
-    if (e.button !== 0) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    const onHandle = !!target.closest('.tv-handle');
+    if (!onHandle && (!anywhere || target.closest(PRESSABLE))) return;
     const el = box();
     if (!el) return;
-    e.preventDefault();
-    const r = el.getBoundingClientRect();
-    if (placement.state.mode === 'docked') placement.set({ mode: 'floating', x: r.left, y: r.top, width: Math.min(MAX_W, Math.max(MIN_W, r.width)), minimized: false });
-    const dx = e.clientX - r.left;
-    const dy = e.clientY - r.top;
-    const target = e.target as HTMLElement;
-    target.setPointerCapture?.(e.pointerId);
+    if (onHandle) e.preventDefault();
+    const win = el.ownerDocument.defaultView ?? window;
+    const start = el.getBoundingClientRect();
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let dx = sx - start.left;
+    let dy = sy - start.top;
+    let moving = false;
+    const begin = () => {
+      moving = true;
+      placement.dragging = true;
+      if (placement.state.mode === 'docked') {
+        // Picked up from its place: a floating TV of a floating size, under the finger.
+        placement.set({ mode: 'floating', minimized: false, width: Math.min(MAX_W, Math.max(MIN_W, start.width)) }, false);
+        const w = placement.floatWidth;
+        const k = w / start.width;
+        dx *= k;
+        dy *= k;
+      }
+    };
     const move = (m: PointerEvent) => {
+      if (m.pointerId !== e.pointerId) return;
+      if (!moving) {
+        if (Math.hypot(m.clientX - sx, m.clientY - sy) < 6) return;
+        begin();
+      }
+      m.preventDefault();
       placement.set({ x: m.clientX - dx, y: m.clientY - dy }, false);
       placement.clamp();
     };
-    const up = () => {
-      target.removeEventListener('pointermove', move);
-      target.removeEventListener('pointerup', up);
-      target.removeEventListener('pointercancel', up);
+    const up = (u: PointerEvent) => {
+      if (u.pointerId !== e.pointerId) return;
+      win.removeEventListener('pointermove', move);
+      win.removeEventListener('pointerup', up);
+      win.removeEventListener('pointercancel', up);
+      if (!moving) return;
+      placement.dragging = false;
+      if (u.pointerType !== 'mouse') placement.snap();
       placement.clamp();
       placement.set({});
     };
-    target.addEventListener('pointermove', move);
-    target.addEventListener('pointerup', up);
-    target.addEventListener('pointercancel', up);
+    win.addEventListener('pointermove', move, { passive: false });
+    win.addEventListener('pointerup', up);
+    win.addEventListener('pointercancel', up);
   };
 }
 
@@ -225,7 +300,7 @@ export function TvDocked(props: HostProps) {
   const { placement } = props;
   useRev(placement);
   const ref = useRef<HTMLDivElement>(null);
-  const drag = useDrag(placement, () => ref.current);
+  const drag = useDrag(placement, () => ref.current, false);
   const s = placement.state;
   if (placement.pip) return <TvAway placement={placement} />;
   if (s.mode !== 'docked')
@@ -262,7 +337,7 @@ export function TvFloating(props: HostProps) {
   useRev(placement);
   useRev(companion);
   const ref = useRef<HTMLDivElement>(null);
-  const drag = useDrag(placement, () => ref.current);
+  const drag = useDrag(placement, () => ref.current, true);
   const [, force] = useState(0);
   useEffect(() => {
     const onResize = () => {
@@ -277,15 +352,20 @@ export function TvFloating(props: HostProps) {
   if (s.mode !== 'floating' || placement.pip) return null;
   if (s.minimized)
     return (
-      <button class={`tv-tab hw-${companion.hardware}`} onClick={() => placement.set({ minimized: false })} title="Show the TV">
+      <button class={`tv-tab hw-${companion.hardware}`} style={{ bottom: `${tabBottom()}px` }} onClick={() => placement.set({ minimized: false })} title="Show the TV">
         <span class={`tv-tab-light power-${companion.power}`} aria-hidden="true" />
         TV · {companion.hardware}
         {companion.message ? ` · ${companion.message.severity}` : ''}
       </button>
     );
   return (
-    <div class="tv-floating" ref={ref} style={{ left: `${s.x}px`, top: `${s.y}px`, width: `${s.width}px` }}>
-      <RetroTv companion={companion} registry={props.registry} dev={s.dev} sound={s.sound} reducedMotion={props.reducedMotion} onHandleDown={drag} />
+    <div
+      class={`tv-floating${placement.dragging ? ' dragging' : ''}`}
+      ref={ref}
+      style={{ left: `${s.x}px`, top: `${s.y}px`, width: `${placement.floatWidth}px` }}
+      onPointerDown={(e) => drag(e as unknown as PointerEvent)}
+    >
+      <RetroTv companion={companion} registry={props.registry} dev={s.dev} sound={s.sound} reducedMotion={props.reducedMotion} />
       <Toolbar placement={placement} props={props} onDrag />
     </div>
   );
