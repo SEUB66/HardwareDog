@@ -130,6 +130,17 @@ describe('companion: follows real events', () => {
     expect(c.lastEvent?.message).toBe('adv 499');
   });
 
+  it('says what the animation is about: the tool and the kind of file', () => {
+    const { c, emit } = on();
+    emit({ type: 'op.start', op: 'r', tool: 'flipper.files', params: { kind: 'read', topic: 'ir' } });
+    expect(c.subject).toEqual({ tool: 'flipper.files', topic: 'ir' });
+    emit({ type: 'op.end', op: 'r', tool: 'flipper.files', severity: 'PASS' });
+    expect(c.anim).toBe('success');
+    expect(c.subject).toEqual({ tool: 'flipper.files', topic: 'ir' }); // the result is about what just ended
+    emit({ source: 'BLE', type: 'op.start', op: 's', tool: 'ble.scan', params: { kind: 'search' } });
+    expect(c.subject).toEqual({ tool: 'ble.scan', topic: null });
+  });
+
   it('the dial changes the view, nothing else', () => {
     const { c } = on();
     c.turnDial();

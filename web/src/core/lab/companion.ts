@@ -36,6 +36,12 @@ export type DialMode = (typeof DIAL_MODES)[number];
 /** The animation the screen should play now. `none`: the screen is dark. */
 export type Anim = 'none' | 'idle' | 'wait' | 'greet' | 'connect' | 'search' | 'read' | 'transfer' | 'success' | 'warning' | 'error' | 'disconnect';
 
+/** What an animation is about: the tool, and the kind of file when known. */
+export interface Subject {
+  tool: string;
+  topic: string | null;
+}
+
 export const HARDWARE_STATES: readonly HardwareState[] = ['UNKNOWN', 'ABSENT', 'CONNECTING', 'CONNECTED', 'DISCONNECTED'];
 
 /** Durations, ms. The power-on sequence is ~2 s; reduced motion cuts it to a fade. */
@@ -73,6 +79,8 @@ interface ActiveOp {
   kind: OpKind;
   source: LabSource;
   tool: string;
+  /** What it is about (a file kind: ir, subghz, nfc...), when the tool says. */
+  topic: string | null;
   message: string;
   progress: LabEvent['progress'] | null;
 }
@@ -269,14 +277,17 @@ export class Companion {
   private onOpStart(e: LabEvent): void {
     const kind = e.params?.['kind'];
     if (!isOpKind(kind)) return;
-    this.active.set(e.op!, { kind, source: e.source, tool: e.tool, message: e.message, progress: e.progress ?? null });
+    const topic = e.params?.['topic'];
+    this.active.set(e.op!, { kind, source: e.source, tool: e.tool, topic: typeof topic === 'string' ? topic : null, message: e.message, progress: e.progress ?? null });
     // A new operation clears an old result: the screen shows what is happening now.
     this.clearHold();
     this.recompute();
   }
 
   private onOpEnd(e: LabEvent): void {
-    if (!this.active.delete(e.op!)) return;
+    const ended = this.active.get(e.op!);
+    if (!ended || !this.active.delete(e.op!)) return;
+    this.lastResult = { tool: ended.tool, topic: ended.topic };
     this.clearHold();
     if (e.severity === 'FAIL') this.hold('ERROR', TIMING.error);
     else if (e.severity === 'WARN') this.hold('WARNING', TIMING.warning);
@@ -303,6 +314,20 @@ export class Companion {
     let best: ActiveOp | null = null;
     for (const op of this.active.values()) if (!best || OP_RANK[op.kind] > OP_RANK[best.kind]) best = op;
     this.op = best ? OP_STATE[best.kind] : 'IDLE';
+  }
+
+  /** The operation that ended last: what a result on screen is about. */
+  private lastResult: Subject | null = null;
+
+  /**
+   * What the animation is about: the tool and the kind of file of the
+   * operation shown (running, or just ended). The screen picks its scene
+   * from it (an IR file read is not shown like an NFC one); null: nothing.
+   */
+  get subject(): Subject | null {
+    if (this.op === 'SUCCESS' || this.op === 'ERROR' || this.op === 'WARNING') return this.lastResult;
+    const top = this.operations[0];
+    return top ? { tool: top.tool, topic: top.topic } : null;
   }
 
   /** The operations running now, most significant first. */

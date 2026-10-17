@@ -47,6 +47,7 @@ import { Usb } from './screens/Usb';
 import { hideTip, installTips } from './tips';
 import { explain } from '../core/glossary';
 import type { Lab } from '../core/lab/context';
+import { instantOp } from '../core/lab/events';
 import { BluetoothLab, type BleTool } from './lab/BluetoothLab';
 import { FlipperLab, type FlipperTool } from './lab/FlipperLab';
 import { TvFloating, TvPlacement, useTvPower } from './lab/TvHost';
@@ -293,6 +294,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     else if (format === 'pdf') download(`${name}.pdf`, 'application/pdf', reportToPdf(report));
     else download(`${name}.json`, 'application/json', JSON.stringify({ report, trace: system.trace.all() }, null, 2));
     system.mark(`report exported (${format})`);
+    instantOp(lab.bus, { source: 'LAB', tool: 'lab.report', message: `report exported (${format})`, kind: 'write', origin: system.origin === 'SIMULATED' ? 'SIMULATED' : 'PHYSICAL' });
   };
 
   const exportDescriptors = () => {

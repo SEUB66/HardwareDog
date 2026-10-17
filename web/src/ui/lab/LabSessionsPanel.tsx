@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'preact/hooks';
 import type { Lab } from '../../core/lab/context';
-import { LAB_SOURCES, type LabEvent, type LabSource } from '../../core/lab/events';
+import { LAB_SOURCES, instantOp, type LabEvent, type LabSource } from '../../core/lab/events';
 import { compare, labReport, near, parseHdlab, splitAt, toHdlab, type LabSessionData } from '../../core/lab/session';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
@@ -258,7 +258,13 @@ export function LabSessionsPanel({ lab, onReplayBle }: { lab: Lab; onReplayBle?:
             <b>{view.header.name}</b>
             {opened ? integrityTag(view.integrity) : <Tag status="LIVE" label="LIVE" />}
             {view.events.some((e) => e.origin === 'SIMULATED') && <Tag status="WARN" label="CONTAINS DEMO DATA" />}
-            <button class="btn" onClick={() => download(`${view.header.id}.txt`, 'text/plain', labReport(view))}>
+            <button
+              class="btn"
+              onClick={() => {
+                download(`${view.header.id}.txt`, 'text/plain', labReport(view));
+                instantOp(lab.bus, { source: 'LAB', tool: 'lab.report', message: `report of ${view.header.id}`, kind: 'write', origin: 'PHYSICAL' });
+              }}
+            >
               REPORT (TXT)
             </button>
             {opened && (

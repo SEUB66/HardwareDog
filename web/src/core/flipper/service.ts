@@ -21,6 +21,7 @@ import type { HardwareState } from '../lab/companion';
 import { errorInfo, newOp, type LabBus, type OpKind } from '../lab/events';
 import { FlipperClient, FlipperRpc, RpcError, checkFlipperPath, type ByteLink } from './client';
 import { DemoFlipper, type DemoOptions } from './demo';
+import { kindFromPath } from './formats';
 import { FlipperLibrary, type LibraryItem } from './library';
 import type { FlipperFile, GpioPin } from './rpc';
 import { FlipperSerialLink, pickFlipperPort } from './serial';
@@ -117,10 +118,18 @@ export class FlipperService {
   }
 
   /** Run one operation, said on the bus from start to end. */
-  private async op<T>(kind: OpKind, tool: string, message: string, run: (progress: (done: number, total: number | null, unit?: string) => void) => Promise<T>, endParams?: (r: T) => Record<string, string | number | boolean | null>): Promise<T> {
+  private async op<T>(
+    kind: OpKind,
+    tool: string,
+    message: string,
+    run: (progress: (done: number, total: number | null, unit?: string) => void) => Promise<T>,
+    endParams?: (r: T) => Record<string, string | number | boolean | null>,
+    /** What the operation is about (the kind of file), for whoever watches. */
+    topic?: string,
+  ): Promise<T> {
     const op = newOp(tool);
     const base = { source: 'FLIPPER' as const, tool, op, origin: this.origin, ...(this.view.label ? { device: this.view.label } : {}) };
-    this.bus.emit({ ...base, type: 'op.start', severity: 'INFO', message, params: { kind } });
+    this.bus.emit({ ...base, type: 'op.start', severity: 'INFO', message, params: topic ? { kind, topic } : { kind } });
     this.changed({ busy: message });
     let lastProgress = 0;
     try {
@@ -257,7 +266,7 @@ export class FlipperService {
   /** Read a file into memory (preview). Nothing is kept unless copied. */
   read(path: string, signal?: AbortSignal): Promise<Uint8Array> {
     const c = this.need();
-    return this.op('read', 'flipper.files', `read ${path}`, (progress) => c.read(path, { signal, onProgress: (d, t) => progress(d, t) }), (b) => ({ bytes: b.length }));
+    return this.op('read', 'flipper.files', `read ${path}`, (progress) => c.read(path, { signal, onProgress: (d, t) => progress(d, t) }), (b) => ({ bytes: b.length }), kindFromPath(path));
   }
 
   /** Copy a file to this computer's library, on request. */
@@ -273,6 +282,7 @@ export class FlipperService {
         return this.library.add({ path, device, origin: this.origin, data, at: this.bus.clock.now() });
       },
       (r) => ({ copied: r.added, name: r.item.name, sha256: r.item.sha256 }),
+      kindFromPath(path),
     );
   }
 

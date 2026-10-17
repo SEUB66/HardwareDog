@@ -94,8 +94,8 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
     }
     return;
   }
-  // SHUTTING_DOWN: squeeze to a line, then to a dot, then dark
-  sprites.drawScene(b, rest, now);
+  // SHUTTING_DOWN: it waves goodbye and presses the power button; squeeze to a line, a dot, dark
+  sprites.drawScene(b, 'shutdown', e + 600);
   const p = e / tr.ms;
   if (reduced) {
     ctx.globalAlpha = Math.max(0, 1 - p);
@@ -147,7 +147,7 @@ function TvCanvas({ companion, sprites, reduced }: { companion: Companion; sprit
       }
       if (companion.power !== 'ON') drawPower(ctx, buffer, companion, sprites, now, reduced);
       // Reduced motion: the same scene, held still on a representative moment.
-      else sprites.drawScene(ctx, companion.anim, reduced ? 1200 : now - companion.animSince);
+      else sprites.drawScene(ctx, companion.anim, reduced ? 1200 : now - companion.animSince, companion.subject);
     };
     const loop = (now: number) => {
       frame = 0;
