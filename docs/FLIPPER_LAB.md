@@ -152,7 +152,7 @@ assets`: no component change. A Hardware Dog TV with the dog is a new skin
 
 POWER plays about two seconds inside the screen: a dot, a horizontal line,
 the picture opening vertically, analog snow, the FLIPPER LAB splash, the
-dolphin coming in, a hop and a salute, then rest. Off: the picture squeezes
+companion's room coming in, a hop and a wave, then its life goes on. Off: the picture squeezes
 to a line, then a dot, then dark. The box never moves.
 
 POWER switches the TV only: it never touches the Flipper, never stops a
@@ -181,10 +181,30 @@ offers. The companion observes; it never runs a tool. Animations follow
 the events: an operation that fails stops its working animation at once, a
 link that drops ends every operation of that link on screen.
 
-The dolphin's animations: rest, greeting, connecting (carrying the USB
-plug), searching (magnifier), reading (bytes stacking up), transferring,
-success, warning, error, disconnected (the plug lies apart). They are pure
-functions of time (`sprites.ts`); replacing them is replacing a SpriteSet.
+The companion is a small cartoon dolphin, upright, with a big readable
+head, living in little full-color scenes; its gestures tell what the tool
+is doing (`sprites.ts`):
+
+```text
+IDLE        link up, nothing running: looks around, blinks, taps a foot,
+            waters its plant
+WAIT        nothing connected: sits on its cushion by the window and dozes
+GREET       after power-on: a hop and a wave
+SEARCH      analysing: types at its retro computer, eyes on the screen
+CONNECT     carries the USB plug to the device and pushes it in
+READ        examines a card under a magnifier that enlarges what it is over
+TRANSFER    carries floppies from the shelf to the computer
+SUCCESS     arms up, a jump, confetti
+WARNING     scratches its head, looking up
+ERROR       takes a wrench to the smoking device
+DISCONNECT  holds the loose plug and looks at it, sad
+```
+
+The character is built from simple shapes plus an outline pass (head,
+beak, eye expressions, arms with elbows, sitting, walking), so new poses
+stay in one style. Scenes are pure functions of time; replacing them is
+replacing a SpriteSet. Reduced motion holds each scene still on a
+representative moment.
 
 ### Messages
 
