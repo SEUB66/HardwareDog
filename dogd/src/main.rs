@@ -5,6 +5,7 @@
 //! The diagnosis stays in the one engine the interface runs.
 
 mod api;
+mod ble;
 mod config;
 mod device;
 mod discovery;
@@ -165,6 +166,7 @@ async fn serve(mut cfg: Config) -> i32 {
     println!();
 
     let state = api::AppState {
+        ble: ble::BleScanner::new(),
         links: Arc::new(links),
         store,
         discovery,

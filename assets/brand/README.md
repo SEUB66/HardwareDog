@@ -21,6 +21,9 @@ source/hd-social-banner.png         SOCIAL     full dog + HARDWARE DOG + tagline
 source/hd-lockup-horizontal.png     DERIVATIVE official head + HW DOG wordmark, transparent, 2172x724
 source/hd-icon-rounded-neon.png     DERIVATIVE official head in a neon rounded frame (avatar use only,
                                                not the app icon: glow frame breaks the icon rule)
+source/hd-tv-orange-frame.png       FLIPPER LAB orange portable TV, front view, alpha cut-out, 1536x1024
+                                               (overlay + mapping profile: docs/FLIPPER_LAB.md)
+source/hd-flipper-lab-banner.png    FLIPPER LAB pixel-art lab banner: the dog and the dolphin, 1983x793
 archive/hd-header-hud-glow.png      OBSOLETE   glowing HUD header badge, rejected: glow + framed banner
 archive/hd-header-hud-flat.png      OBSOLETE   HUD header badge, rejected: framed banner in the header
 archive/favicon-pixel-dog.svg       OBSOLETE   pixel dog drawn for 0.1.0, not the official dog
