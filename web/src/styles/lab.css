@@ -105,6 +105,12 @@
   flex-basis: 100%;
   margin: 0;
 }
+.flipper-lab .btn.usb-off {
+  opacity: 0.5;
+  border-style: dashed;
+  white-space: normal;
+  max-width: 100%;
+}
 .flipper-lab .btn.primary {
   background: var(--lab-orange);
   border-color: var(--lab-orange);
@@ -558,6 +564,13 @@
 }
 .tv-handle {
   cursor: grab;
+  touch-action: none;
+}
+/* The handle drawn is thin: the finger gets a taller target around it. */
+.tv-handle::before {
+  content: '';
+  position: absolute;
+  inset: -12px -4px -10px;
 }
 .tv-handle:active {
   cursor: grabbing;
@@ -711,14 +724,36 @@
   text-align: center;
 }
 
-/* floating, above every section */
+/* floating, above every section: the TV alone, no panel behind it */
 .tv-floating {
   position: fixed;
   z-index: 60;
-  padding: 6px 6px 4px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  border: 1px solid var(--border);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  touch-action: none;
+  transition:
+    left 0.18s ease-out,
+    top 0.18s ease-out;
+}
+.tv-floating.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-floating {
+    transition: none;
+  }
+}
+.tv-floating .tv {
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.55));
+}
+.tv-floating .tv-toolbar {
+  justify-content: center;
+  margin-top: 2px;
+}
+.tv-floating .tv-toolbar .btn {
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 .tv-tab {
   position: fixed;
@@ -790,10 +825,39 @@
   .lab-tool-purpose {
     display: none;
   }
-  .tv-floating {
-    max-width: calc(100vw - 16px);
+  /* docked on a phone: a TV, not a wall */
+  .tv-docked {
+    max-width: 320px;
+    margin-inline: auto;
+  }
+  .tv-docked .tv-toolbar {
+    justify-content: center;
+  }
+  /* a window of its own makes no sense on a phone (and none offers one) */
+  .tv-floating .tv-size,
+  .tv-toolbar .tv-zones,
+  .tv-toolbar .tv-detach {
+    display: none;
   }
   .lab .row-actions {
     white-space: normal;
+  }
+}
+
+/* Touch: bigger targets; no developer zones, no detach where the browser
+   cannot detach (no phone browser can). */
+@media (pointer: coarse) {
+  .tv-toolbar .btn {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+  .tv-floating .tv-toolbar .btn {
+    min-height: 32px;
+    padding: 4px 10px;
+  }
+  .tv-toolbar .tv-zones,
+  .tv-toolbar .tv-detach:disabled,
+  .tv-floating .tv-size {
+    display: none;
   }
 }

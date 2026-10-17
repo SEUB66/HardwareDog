@@ -253,15 +253,20 @@ starts anything on a device. Click, arrow keys or the mouse wheel turn it;
 the knob turns with the view.
 
 ```text
-DOCKED     its place in Flipper Lab
-FLOATING   drag it by the handle: it follows every section; minimize, dock
-           back, size; its place is remembered in this browser and kept
-           inside the window. POWER and the dial never start a drag
+DOCKED     its place in Flipper Lab (on a phone: 320 px at most, centered).
+           Pull it by the handle and it floats
+FLOATING   it follows every section; drag it by its body with a mouse, a
+           pen or a finger (the move starts after a few pixels: a tap on
+           POWER, the dial or a message stays a tap); minimize, dock back,
+           size; its place is remembered in this browser and kept inside
+           the window, above the bottom menu. On a phone it is a small TV
+           (about 46 % of the width, 200 px at most), alone on the page with
+           no panel behind it, that snaps to the nearest side when let go
 DETACHED   its own always-on-top window, where the browser offers Document
            Picture-in-Picture (Chromium 116+ desktop). Same page, same
            companion, same Flipper session: never a second connection.
            Elsewhere the button says it is not offered, and FLOATING is the
-           way
+           way. Not shown on a phone, nor ZONES (`?tvdev` still works)
 ```
 
 ---

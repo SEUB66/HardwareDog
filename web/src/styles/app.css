@@ -1321,4 +1321,33 @@ button.link {
   .trace td {
     padding: 1px 4px;
   }
+
+  /* A table cannot scroll itself: a wide one (a log, a scan) pushed the
+     whole work area sideways. As a block it scrolls in its own box. */
+  table.trace {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+}
+
+/* iOS Safari zooms into any field under 16px when it takes the focus, and
+   the page stays zoomed and side-scrolled after the keyboard closes. On a
+   touch screen the fields are 16px. */
+@media (pointer: coarse), (max-width: 760px) {
+  .input,
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/* In a row of actions, a field takes the room left and never pushes the row
+   wider than its box (an input's default width is about 20 characters). */
+.actions > .input {
+  flex: 1 1 12ch;
+  min-width: 0;
+  max-width: 100%;
 }
