@@ -578,14 +578,26 @@ export function FlipperLab({ lab, placement, reducedMotion, tool, onTool }: { la
         </div>
         <div class="actions">
           {v.link !== 'CONNECTED' ? (
-            <>
-              <button class="btn primary" disabled={busy || v.link === 'CONNECTING' || !serial} title={serial ? 'Pick the Flipper in the browser port chooser (USB)' : 'Web Serial is not available in this browser (Chromium-based browsers)'} onClick={() => void run(() => lab.flipper.connect('serial'))}>
-                CONNECT FLIPPER (USB)
-              </button>
-              <button class="btn" disabled={busy || v.link === 'CONNECTING'} title="A simulated Flipper: everything it shows is labeled DEMO" onClick={() => void run(() => lab.flipper.connect('demo'))}>
-                DEMO FLIPPER
-              </button>
-            </>
+            serial ? (
+              <>
+                <button class="btn primary" disabled={busy || v.link === 'CONNECTING'} title="Pick the Flipper in the browser port chooser (USB)" onClick={() => void run(() => lab.flipper.connect('serial'))}>
+                  CONNECT FLIPPER (USB)
+                </button>
+                <button class="btn" disabled={busy || v.link === 'CONNECTING'} title="A simulated Flipper: everything it shows is labeled DEMO" onClick={() => void run(() => lab.flipper.connect('demo'))}>
+                  DEMO FLIPPER
+                </button>
+              </>
+            ) : (
+              // No Web Serial here (a phone, Safari, Firefox): the demo is the way in, USB says where it works.
+              <>
+                <button class="btn primary" disabled={busy || v.link === 'CONNECTING'} title="A simulated Flipper: everything it shows is labeled DEMO" onClick={() => void run(() => lab.flipper.connect('demo'))}>
+                  DEMO FLIPPER
+                </button>
+                <button class="btn usb-off" disabled title="Web Serial is not available in this browser: Chrome, Edge or Opera on a computer">
+                  USB · COMPUTER ONLY
+                </button>
+              </>
+            )
           ) : (
             <>
               <button class="btn" disabled={busy} onClick={() => void run(() => lab.flipper.disconnect())}>

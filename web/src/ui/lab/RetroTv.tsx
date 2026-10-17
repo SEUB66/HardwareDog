@@ -23,7 +23,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { DIAL_MODES, type Companion, type DialMode } from '../../core/lab/companion';
 import type { LabEvent } from '../../core/lab/events';
 import type { CommandRegistry } from '../../core/lab/registry';
-import { SCREEN_H, SCREEN_W, DOLPHIN, type SpriteSet } from './sprites';
+import { SCREEN_H, SCREEN_W, DOLPHIN, preloadCompanion, type SpriteSet } from './sprites';
 import { ORANGE_TV, boxStyle, ellipseStyle, screenClip, screenPath, type TvSkin } from './tvSkin';
 import { tvSound } from './tvSound';
 import { useRev } from './useRev';
@@ -130,6 +130,7 @@ function TvCanvas({ companion, sprites, reduced }: { companion: Companion; sprit
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    preloadCompanion();
     const buffer = canvas.ownerDocument.createElement('canvas');
     buffer.width = SCREEN_W;
     buffer.height = SCREEN_H;

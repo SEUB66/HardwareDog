@@ -1,0 +1,459 @@
+{
+ "frame": {
+  "w": 136,
+  "h": 100
+ },
+ "frames": [
+  "base",
+  "breath",
+  "blink"
+ ],
+ "scenes": {
+  "coding": {
+   "at": [
+    [
+     0,
+     0
+    ],
+    [
+     136,
+     0
+    ],
+    [
+     272,
+     0
+    ]
+   ],
+   "art": {
+    "top": 14,
+    "height": 65
+   },
+   "eye": {
+    "x0": 98,
+    "y0": 43,
+    "x1": 108,
+    "y1": 55
+   },
+   "source": "hd-companion-sheet-1.png cell 0,0"
+  },
+  "mad": {
+   "at": [
+    [
+     408,
+     0
+    ],
+    [
+     544,
+     0
+    ],
+    [
+     680,
+     0
+    ]
+   ],
+   "art": {
+    "top": 14,
+    "height": 65
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-1.png cell 1,0"
+  },
+  "connect": {
+   "at": [
+    [
+     816,
+     0
+    ],
+    [
+     952,
+     0
+    ],
+    [
+     1088,
+     0
+    ]
+   ],
+   "art": {
+    "top": 14,
+    "height": 65
+   },
+   "eye": {
+    "x0": 36,
+    "y0": 31,
+    "x1": 48,
+    "y1": 43
+   },
+   "source": "hd-companion-sheet-1.png cell 2,0"
+  },
+  "scan": {
+   "at": [
+    [
+     0,
+     100
+    ],
+    [
+     136,
+     100
+    ],
+    [
+     272,
+     100
+    ]
+   ],
+   "art": {
+    "top": 16,
+    "height": 61
+   },
+   "eye": {
+    "x0": 85,
+    "y0": 39,
+    "x1": 97,
+    "y1": 52
+   },
+   "source": "hd-companion-sheet-1.png cell 0,1"
+  },
+  "analyze": {
+   "at": [
+    [
+     408,
+     100
+    ],
+    [
+     544,
+     100
+    ],
+    [
+     680,
+     100
+    ]
+   ],
+   "art": {
+    "top": 16,
+    "height": 61
+   },
+   "eye": {
+    "x0": 30,
+    "y0": 28,
+    "x1": 41,
+    "y1": 41
+   },
+   "source": "hd-companion-sheet-1.png cell 1,1"
+  },
+  "transfer": {
+   "at": [
+    [
+     816,
+     100
+    ],
+    [
+     952,
+     100
+    ],
+    [
+     1088,
+     100
+    ]
+   ],
+   "art": {
+    "top": 16,
+    "height": 61
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-1.png cell 2,1"
+  },
+  "success": {
+   "at": [
+    [
+     0,
+     200
+    ],
+    [
+     136,
+     200
+    ],
+    [
+     272,
+     200
+    ]
+   ],
+   "art": {
+    "top": 15,
+    "height": 64
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-1.png cell 0,2"
+  },
+  "disconnected": {
+   "at": [
+    [
+     408,
+     200
+    ],
+    [
+     544,
+     200
+    ],
+    [
+     680,
+     200
+    ]
+   ],
+   "art": {
+    "top": 15,
+    "height": 64
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-1.png cell 1,2"
+  },
+  "idle": {
+   "at": [
+    [
+     816,
+     200
+    ],
+    [
+     952,
+     200
+    ],
+    [
+     1088,
+     200
+    ]
+   ],
+   "art": {
+    "top": 15,
+    "height": 64
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-1.png cell 2,2"
+  },
+  "boot": {
+   "at": [
+    [
+     0,
+     300
+    ],
+    [
+     136,
+     300
+    ],
+    [
+     272,
+     300
+    ]
+   ],
+   "art": {
+    "top": 14,
+    "height": 65
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-2.png cell 0,0"
+  },
+  "bluetooth": {
+   "at": [
+    [
+     408,
+     300
+    ],
+    [
+     544,
+     300
+    ],
+    [
+     680,
+     300
+    ]
+   ],
+   "art": {
+    "top": 14,
+    "height": 65
+   },
+   "eye": {
+    "x0": 39,
+    "y0": 36,
+    "x1": 49,
+    "y1": 48
+   },
+   "source": "hd-companion-sheet-2.png cell 1,0"
+  },
+  "rfid": {
+   "at": [
+    [
+     816,
+     300
+    ],
+    [
+     952,
+     300
+    ],
+    [
+     1088,
+     300
+    ]
+   ],
+   "art": {
+    "top": 14,
+    "height": 65
+   },
+   "eye": {
+    "x0": 36,
+    "y0": 32,
+    "x1": 48,
+    "y1": 44
+   },
+   "source": "hd-companion-sheet-2.png cell 2,0"
+  },
+  "infrared": {
+   "at": [
+    [
+     0,
+     400
+    ],
+    [
+     136,
+     400
+    ],
+    [
+     272,
+     400
+    ]
+   ],
+   "art": {
+    "top": 16,
+    "height": 61
+   },
+   "eye": {
+    "x0": 31,
+    "y0": 36,
+    "x1": 42,
+    "y1": 48
+   },
+   "source": "hd-companion-sheet-2.png cell 0,1"
+  },
+  "uart": {
+   "at": [
+    [
+     408,
+     400
+    ],
+    [
+     544,
+     400
+    ],
+    [
+     680,
+     400
+    ]
+   ],
+   "art": {
+    "top": 16,
+    "height": 61
+   },
+   "eye": {
+    "x0": 31,
+    "y0": 33,
+    "x1": 42,
+    "y1": 45
+   },
+   "source": "hd-companion-sheet-2.png cell 1,1"
+  },
+  "backup": {
+   "at": [
+    [
+     816,
+     400
+    ],
+    [
+     952,
+     400
+    ],
+    [
+     1088,
+     400
+    ]
+   ],
+   "art": {
+    "top": 16,
+    "height": 61
+   },
+   "eye": {
+    "x0": 32,
+    "y0": 31,
+    "x1": 42,
+    "y1": 42
+   },
+   "source": "hd-companion-sheet-2.png cell 2,1"
+  },
+  "repair": {
+   "at": [
+    [
+     0,
+     500
+    ],
+    [
+     136,
+     500
+    ],
+    [
+     272,
+     500
+    ]
+   ],
+   "art": {
+    "top": 15,
+    "height": 64
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-2.png cell 0,2"
+  },
+  "report": {
+   "at": [
+    [
+     408,
+     500
+    ],
+    [
+     544,
+     500
+    ],
+    [
+     680,
+     500
+    ]
+   ],
+   "art": {
+    "top": 15,
+    "height": 64
+   },
+   "eye": {
+    "x0": 38,
+    "y0": 27,
+    "x1": 49,
+    "y1": 39
+   },
+   "source": "hd-companion-sheet-2.png cell 1,2"
+  },
+  "shutdown": {
+   "at": [
+    [
+     816,
+     500
+    ],
+    [
+     952,
+     500
+    ],
+    [
+     1088,
+     500
+    ]
+   ],
+   "art": {
+    "top": 15,
+    "height": 64
+   },
+   "eye": null,
+   "source": "hd-companion-sheet-2.png cell 2,2"
+  }
+ }
+}

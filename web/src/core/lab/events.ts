@@ -18,7 +18,7 @@
  * is never assumed to agree with ours.
  */
 
-export const LAB_SOURCES = ['FLIPPER', 'BLE', 'USER', 'LAB'] as const;
+export const LAB_SOURCES = ['FLIPPER', 'BLE', 'CAMERA', 'USER', 'LAB'] as const;
 export type LabSource = (typeof LAB_SOURCES)[number];
 
 export type LabSeverity = 'INFO' | 'PASS' | 'WARN' | 'FAIL';
