@@ -26,6 +26,8 @@ source/hd-icon-rounded-neon.png     DERIVATIVE official head in a neon rounded f
 source/hd-tv-orange-frame.png       FLIPPER LAB orange portable TV, front view, alpha cut-out, 1536x1024
                                                (overlay + mapping profile: docs/FLIPPER_LAB.md)
 source/hd-flipper-lab-banner.png    FLIPPER LAB pixel-art lab banner: the dog and the dolphin, 1983x793
+source/hd-camera-sniffer-banner.png CAMERA      Camera Sniffer banner (pixel art, owner-supplied), 1983x793;
+                                               web/hd-camera-sniffer-banner-800/1600.webp by `npm run assets`
 source/hd-companion-sheet-1.png     FLIPPER LAB owner's sketch sheet 1, 3x3 TV companion scenes, 1665x945:
                                                CODING MAD CONNECT / SCAN ANALYZE TRANSFER /
                                                SUCCESS DISCONNECTED IDLE

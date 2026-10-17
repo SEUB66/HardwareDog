@@ -17,6 +17,10 @@
 //!   GET  /v1/ble/status              the Bluetooth scanner: supported, adapter, state
 //!   PUT  /v1/ble/scan                "start" or "stop" discovery (listening only)
 //!   GET  /v1/ble/observations?since=N  advertisement reports after N, and how many were lost
+//!   GET  /v1/lan/interfaces          this computer's IPv4 networks, and which may be scanned
+//!   GET  /v1/lan/status              Camera Sniffer's network scan: state, step, progress
+//!   PUT  /v1/lan/scan                {"action":"start","iface":..,"methods":[..]} or {"action":"stop"}
+//!   GET  /v1/lan/observations?since=N  what devices said about themselves, after N
 //!
 //! Trust boundary: this machine. Requests must name a loopback host (no DNS
 //! rebinding), and a browser page must come from an allowed origin: a web
@@ -54,6 +58,8 @@ pub const CLOSE_TOO_SLOW: u16 = 4008;
 pub struct AppState {
     /// The Bluetooth Lab scanner: idle until the interface asks.
     pub ble: Arc<crate::ble::BleScanner>,
+    /// Camera Sniffer's local network discovery: idle until the interface asks.
+    pub lan: Arc<crate::lan::LanScanner>,
     /// D1, D2...: never empty (with no source, D1 is a link with no device).
     pub links: Arc<Vec<Arc<Link>>>,
     pub store: Arc<Store>,
@@ -82,6 +88,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/ble/status", get(ble_status))
         .route("/v1/ble/scan", axum::routing::put(ble_scan))
         .route("/v1/ble/observations", get(ble_observations))
+        .route("/v1/lan/interfaces", get(lan_interfaces))
+        .route("/v1/lan/status", get(lan_status))
+        .route("/v1/lan/scan", axum::routing::put(lan_scan))
+        .route("/v1/lan/observations", get(lan_observations))
         .route("/v1/hdp", get(hdp))
         .route("/v1/hdp/{dog}", get(hdp_of))
         .layer(middleware::from_fn_with_state(state.clone(), guard))
@@ -274,6 +284,62 @@ async fn ble_observations(
     let page = s.ble.since(q.since.unwrap_or(0));
     Json(json!({
         "now_mono_ms": s.ble.mono_ms(),
+        "next": page.next,
+        "lost": page.lost,
+        "observations": page.observations,
+    }))
+}
+
+async fn lan_interfaces(State(s): State<AppState>) -> Json<serde_json::Value> {
+    match s.lan.interfaces().await {
+        None => {
+            Json(json!({ "supported": false, "interfaces": [], "detail": s.lan.status().detail }))
+        }
+        Some(list) => Json(json!({
+            "supported": true,
+            "interfaces": list.into_iter().map(|(i, refused)| {
+                let mut v = serde_json::to_value(&i).unwrap();
+                v["network"] = json!(format!("{}/{}", i.network(), i.prefix));
+                v["refused"] = json!(refused);
+                v
+            }).collect::<Vec<_>>(),
+        })),
+    }
+}
+
+async fn lan_status(State(s): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::to_value(s.lan.status()).unwrap())
+}
+
+async fn lan_scan(State(s): State<AppState>, body: Bytes) -> Response {
+    let Ok(req) = serde_json::from_slice::<crate::lan::Request>(&body) else {
+        return (StatusCode::BAD_REQUEST, r#"body: {"action":"start","iface":"wlan0","methods":["neighbors","mdns","ssdp","wsd","services"]} or {"action":"stop"}"#).into_response();
+    };
+    match req.action.as_str() {
+        "start" => {
+            let Some(iface) = req.iface.as_deref() else {
+                return (StatusCode::BAD_REQUEST, "start: which interface (iface)").into_response();
+            };
+            let methods = req
+                .methods
+                .unwrap_or_else(|| crate::lan::METHODS.map(String::from).to_vec());
+            match s.lan.start(iface, &methods).await {
+                Ok(st) => Json(serde_json::to_value(st).unwrap()).into_response(),
+                Err(e) => (StatusCode::CONFLICT, e).into_response(),
+            }
+        }
+        "stop" => Json(serde_json::to_value(s.lan.stop()).unwrap()).into_response(),
+        _ => (StatusCode::BAD_REQUEST, "action: start or stop").into_response(),
+    }
+}
+
+async fn lan_observations(
+    State(s): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<BleSince>,
+) -> Json<serde_json::Value> {
+    let page = s.lan.since(q.since.unwrap_or(0));
+    Json(json!({
+        "now_mono_ms": s.lan.mono_ms(),
         "next": page.next,
         "lost": page.lost,
         "observations": page.observations,
@@ -536,6 +602,7 @@ mod http_tests {
         };
         router(AppState {
             ble: crate::ble::BleScanner::new(),
+            lan: crate::lan::LanScanner::new(),
             links: Arc::new(links),
             store,
             discovery: Arc::new(crate::discovery::Discovery::default()),
@@ -577,6 +644,92 @@ mod http_tests {
     }
 
     type HeaderMapLite = Vec<(String, String)>;
+
+    /// A local request with a body; the status and the body text.
+    async fn call_body(
+        app: Router,
+        method: &str,
+        path: &str,
+        origin: &str,
+        body: &str,
+    ) -> (StatusCode, String) {
+        let req = HttpRequest::builder()
+            .method(method)
+            .uri(path)
+            .header("host", "127.0.0.1:4782")
+            .header("origin", origin)
+            .extension(ConnectInfo(
+                "127.0.0.1:50000".parse::<std::net::SocketAddr>().unwrap(),
+            ))
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let status = res.status();
+        let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+            .await
+            .unwrap();
+        (status, String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    #[tokio::test]
+    async fn the_lan_scan_says_what_it_needs_and_refuses_what_it_must() {
+        let local = "http://localhost:5173";
+        let (s, body) = call_body(app(&[]), "PUT", "/v1/lan/scan", local, "go").await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+        assert!(body.contains("action"));
+        let (s, _) = call_body(
+            app(&[]),
+            "PUT",
+            "/v1/lan/scan",
+            local,
+            r#"{"action":"start"}"#,
+        )
+        .await;
+        assert_eq!(s, StatusCode::BAD_REQUEST);
+        // an interface this computer does not have (or a system dogd does not scan on)
+        let (s, body) = call_body(
+            app(&[]),
+            "PUT",
+            "/v1/lan/scan",
+            local,
+            r#"{"action":"start","iface":"nope0","methods":["mdns"]}"#,
+        )
+        .await;
+        assert_eq!(s, StatusCode::CONFLICT, "{body}");
+        let (s, _) = call_body(
+            app(&[]),
+            "PUT",
+            "/v1/lan/scan",
+            local,
+            r#"{"action":"start","iface":"nope0","methods":["portscan"]}"#,
+        )
+        .await;
+        assert_eq!(s, StatusCode::CONFLICT);
+        // stopping when nothing runs is harmless
+        let (s, body) = call_body(
+            app(&[]),
+            "PUT",
+            "/v1/lan/scan",
+            local,
+            r#"{"action":"stop"}"#,
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK);
+        assert!(body.contains("\"state\""));
+        let (s, body) = call_body(app(&[]), "GET", "/v1/lan/observations?since=0", local, "").await;
+        assert_eq!(s, StatusCode::OK);
+        assert!(body.contains("\"observations\":[]"));
+        // a page from elsewhere cannot start a scan of the network
+        let (s, _) = call_body(
+            app(&[]),
+            "PUT",
+            "/v1/lan/scan",
+            "https://evil.example",
+            r#"{"action":"start","iface":"eth0"}"#,
+        )
+        .await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
+    }
 
     #[tokio::test]
     async fn local_requests_are_served() {

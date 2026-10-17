@@ -3,11 +3,14 @@
  *
  * Everything the lab tools share, created once for the whole interface:
  * one bus, one companion, one command registry, one Flipper session, one
- * Bluetooth scanner, one lab session recorder. Screens, the floating TV
+ * Bluetooth scanner, one Camera Sniffer, one lab session recorder. Screens, the floating TV
  * and a detached window all receive this object; none creates its own.
  */
 
 import { BleService } from '../ble/service';
+import { demoLanApi } from '../camera/demo';
+import { Inspections, type Inspection, type PhotoRecord } from '../camera/inspection';
+import { CameraNet } from '../camera/net';
 import { FlipperLibrary, type LibraryItem } from '../flipper/library';
 import { FlipperService } from '../flipper/service';
 import { Companion } from './companion';
@@ -24,6 +27,8 @@ export interface Lab {
   flipper: FlipperService;
   ble: BleService;
   sessions: LabSessions;
+  /** Camera Sniffer: network discovery (through dogd) and the guided inspection. */
+  camera: { net: CameraNet; inspections: Inspections };
 }
 
 export async function createLab(app: string, reducedMotion: () => boolean): Promise<Lab> {
@@ -35,5 +40,7 @@ export async function createLab(app: string, reducedMotion: () => boolean): Prom
   const ble = new BleService(bus);
   const sessions = new LabSessions(bus, await openLabStore<StoredLabSession>('sessions'), app);
   void sessions.refresh().catch(() => {});
-  return { bus, companion, registry, flipper, ble, sessions };
+  const camera = { net: new CameraNet(bus, () => demoLanApi()), inspections: new Inspections(bus, await openLabStore<Inspection>('camera'), await openLabStore<PhotoRecord>('photos')) };
+  void camera.inspections.restore();
+  return { bus, companion, registry, flipper, ble, sessions, camera };
 }

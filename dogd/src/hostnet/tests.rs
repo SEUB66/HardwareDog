@@ -369,6 +369,7 @@ fn pad(port: &str, serial: Option<&str>) -> usb::UsbDevice {
         cls: "VENDOR".into(),
         power: Some("BUS"),
         max_ma: Some(500),
+        interfaces: vec![],
     }
 }
 
@@ -384,6 +385,7 @@ fn mouse() -> usb::UsbDevice {
         cls: "HID".into(),
         power: Some("BUS"),
         max_ma: Some(98),
+        interfaces: vec![],
     }
 }
 

@@ -17,6 +17,9 @@ tokio-serial = { version = "5", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # The LAN access token: 128 bits from the operating system.
 getrandom = "0.3"
+simple-dns = "0.12.0"
+roxmltree = "0.21.1"
+socket2 = "0.6"
 
 # Bluetooth LE discovery through BlueZ, over the system D-Bus, in pure
 # Rust (no libdbus): the Bluetooth Lab scanner. Linux only; elsewhere the

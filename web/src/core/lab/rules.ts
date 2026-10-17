@@ -40,7 +40,20 @@ const TEXT: Record<string, Text> = {
   'ble.denied': { en: 'Bluetooth permission was refused.', fr: 'Permission Bluetooth refusée.' },
   'ble.gattlost': { en: 'The BLE device disconnected. Nothing will be resent on its own.', fr: 'L’appareil BLE s’est déconnecté. Rien ne sera renvoyé tout seul.' },
   'op.failed': { en: 'Failed: {what}.', fr: 'Échec : {what}.' },
+  'cam.searching': { en: 'Searching the selected network.', fr: 'Recherche sur le réseau sélectionné.' },
+  'cam.video': { en: 'Video service to examine.', fr: 'Service vidéo à examiner.' },
+  'cam.unidentified': { en: 'This device is not identified yet.', fr: 'Cet appareil n’est pas encore identifié.' },
+  'cam.visual': { en: 'This check needs a visual inspection.', fr: 'Cette vérification nécessite une inspection visuelle.' },
+  'cam.done': { en: 'Inspection finished. Some devices can stay invisible to scans.', fr: 'Inspection terminée. Certains appareils peuvent rester invisibles aux scans.' },
+  'cam.netdone': { en: 'Network scan finished. Some devices can stay invisible to scans.', fr: 'Scan réseau terminé. Certains appareils peuvent rester invisibles aux scans.' },
+  'cam.dogd': { en: 'Network discovery needs dogd running on this computer.', fr: 'La découverte réseau nécessite dogd sur cet ordinateur.' },
 };
+
+/** Camera Sniffer messages: neutral words, never an alarm. A success means an operation finished, not that a place is safe. */
+export const CAMERA_MESSAGES = ['cam.searching', 'cam.video', 'cam.unidentified', 'cam.visual', 'cam.done', 'cam.netdone', 'cam.dogd'] as const;
+
+/** A message text in a language, for showing it outside the TV too. */
+export const messageText = (key: string, lang: Lang): string | null => TEXT[key]?.[lang] ?? null;
 
 const fill = (template: string, params: LabEvent['params']) => template.replace(/\{(\w+)\}/g, (_, k: string) => String(params?.[k] ?? ''));
 
@@ -67,6 +80,12 @@ const RPC_CODES: Record<string, string> = {
 };
 
 export function suggest(e: LabEvent, lang: Lang): Suggestion | null {
+  if (e.source === 'CAMERA') {
+    const key = e.params?.['say'];
+    if (typeof key === 'string' && TEXT[key]) return say(key, { ...e, severity: e.severity === 'FAIL' ? 'FAIL' : 'INFO' }, lang);
+    if (e.type === 'op.end' && e.severity === 'FAIL' && (e.code === 'DOGD_ABSENT' || e.code === 'DOGD_LOST')) return say('cam.dogd', e, lang, [details(lang)]);
+    if (e.type !== 'op.end' || e.severity !== 'FAIL') return null;
+  }
   if (e.type === 'link.state') {
     const state = e.params?.['state'];
     if (e.source === 'FLIPPER') {

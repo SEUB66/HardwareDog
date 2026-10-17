@@ -1,0 +1,711 @@
+{
+  "version": "2026-10-17.1",
+  "note": "Families of everyday objects in which cameras have been sold or documented. Alphabetical by id, never ranked by frequency: there are no reliable statistics on what is found in rentals. Vendor claims are vendor claims, not independently verified performance. Illustrations are generic drawings, never photos of a product.",
+  "rooms": [
+    "bedroom",
+    "bathroom",
+    "living",
+    "kitchen",
+    "office",
+    "entrance",
+    "vehicle"
+  ],
+  "families": [
+    {
+      "id": "air-freshener",
+      "name": "Air freshener",
+      "rooms": [
+        "bathroom",
+        "bedroom",
+        "living",
+        "entrance"
+      ],
+      "power": [
+        "battery",
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "reference",
+        "network"
+      ],
+      "observable": [
+        "A small round opening or a dark window on the face, that a spray nozzle or a light sensor does not explain",
+        "Placed or turned toward a bed, a shower or a toilet rather than toward the room",
+        "No refill slot, or a refill that cannot be removed",
+        "A model reference that does not match a known air-freshener brand"
+      ],
+      "lookalikes": [
+        "Automatic dispensers with a motion or light sensor window",
+        "Plug-in diffusers with a status LED"
+      ],
+      "checks": [
+        "Read the brand and reference on the back or the base and compare them with the maker's page",
+        "Look at the opening at an angle with a light: does it go through, or is it a printed dot?",
+        "Note where it points; ask the host what it is"
+      ],
+      "limits": "Battery models record to a card with no network: invisible to network and Bluetooth scans.",
+      "models": []
+    },
+    {
+      "id": "alarm-clock",
+      "name": "Alarm clock",
+      "rooms": [
+        "bedroom"
+      ],
+      "power": [
+        "mains",
+        "usb",
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "reference",
+        "network"
+      ],
+      "observable": [
+        "A pinhole or a small dark circle in the display window or the frame, apart from the digits",
+        "A display that is darker in one spot, as if something sits behind it",
+        "Turned toward the bed when the bedside table would be the natural place"
+      ],
+      "lookalikes": [
+        "Clocks with a light sensor for automatic brightness",
+        "Clocks with an IR receiver for a remote"
+      ],
+      "checks": [
+        "Compare the reference on the base with the maker's page and photos",
+        "Shine a light at an angle on the display: a lens behind tinted plastic can reflect as a small circle",
+        "Note the orientation"
+      ],
+      "limits": "A clock on mains power can record continuously to a card without any network.",
+      "models": []
+    },
+    {
+      "id": "clock-radio",
+      "name": "Clock radio",
+      "rooms": [
+        "bedroom",
+        "living"
+      ],
+      "power": [
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "reference",
+        "network"
+      ],
+      "observable": [
+        "A small opening in the speaker grille or the display window that the radio does not need",
+        "A grille that is more transparent in one spot",
+        "No working radio tuner, or a remote with buttons the clock does not use"
+      ],
+      "lookalikes": [
+        "Clock radios with a light sensor or an IR receiver",
+        "Speakers with a status LED behind the grille"
+      ],
+      "checks": [
+        "Compare the reference with the maker's page",
+        "Look through the grille at an angle with a light",
+        "Note the orientation"
+      ],
+      "limits": "Mains powered: can record all the time to a card, with no network at all.",
+      "models": []
+    },
+    {
+      "id": "coat-hook",
+      "name": "Coat hook",
+      "rooms": [
+        "bathroom",
+        "bedroom",
+        "entrance"
+      ],
+      "power": [
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "none",
+        "wifi"
+      ],
+      "methods": [
+        "visual",
+        "orientation"
+      ],
+      "observable": [
+        "A hook thicker than an ordinary one, with a flat front face",
+        "A small round opening on the face, at the height of a person",
+        "A hook placed on the inside of a bathroom or toilet door, facing the room"
+      ],
+      "lookalikes": [
+        "Ordinary hooks with a decorative screw cap",
+        "Adhesive hooks with a round logo"
+      ],
+      "checks": [
+        "Look at the face with a light at an angle",
+        "Compare with an ordinary hook of the same set, if there are several",
+        "Note the orientation and the height"
+      ],
+      "limits": "Usually battery and card: no network, nothing for a scan to see.",
+      "models": []
+    },
+    {
+      "id": "eyeglasses",
+      "name": "Eyeglasses",
+      "rooms": [
+        "office",
+        "living",
+        "vehicle"
+      ],
+      "power": [
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "none",
+        "ble",
+        "wifi"
+      ],
+      "methods": [
+        "visual",
+        "ble"
+      ],
+      "observable": [
+        "A small round opening at the bridge or at a hinge",
+        "Temples thicker than usual, a charging contact or port",
+        "Worn by someone, not left in a room: this family concerns a person, not a place"
+      ],
+      "lookalikes": [
+        "Ordinary frames with decorative rivets",
+        "Smart glasses sold openly with a camera and a recording light"
+      ],
+      "checks": [
+        "Look for a charging port or contacts on a temple",
+        "Look at the bridge and hinges with a light"
+      ],
+      "limits": "Smart glasses may advertise over Bluetooth, but an unidentified Bluetooth device is not a camera.",
+      "models": []
+    },
+    {
+      "id": "key-fob",
+      "name": "Key fob / remote",
+      "rooms": [
+        "living",
+        "entrance",
+        "vehicle",
+        "office"
+      ],
+      "power": [
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "usb"
+      ],
+      "observable": [
+        "A car-key or remote shape with no vehicle or device it belongs to",
+        "A small opening at one end, a USB port under a cap",
+        "Buttons that do nothing visible"
+      ],
+      "lookalikes": [
+        "Real car keys and garage remotes",
+        "USB flash drives shaped like keys"
+      ],
+      "checks": [
+        "Ask what it opens",
+        "If it has a USB port and you are allowed to, look at its interfaces with the USB tool on a computer you trust"
+      ],
+      "limits": "On USB it may show only a storage interface, or nothing until it is switched on.",
+      "models": []
+    },
+    {
+      "id": "miniature-module",
+      "name": "Miniature camera module",
+      "rooms": [
+        "bedroom",
+        "bathroom",
+        "living",
+        "kitchen",
+        "office",
+        "entrance",
+        "vehicle"
+      ],
+      "power": [
+        "battery",
+        "usb",
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "network",
+        "orientation"
+      ],
+      "observable": [
+        "A small bare board with a lens, often taped or hidden inside another object",
+        "A thin cable leading to a battery or a USB supply where no device needs one",
+        "A lens a few millimetres wide pointing through a hole in furniture, a vent or a ceiling tile"
+      ],
+      "lookalikes": [
+        "Smoke and motion sensor parts",
+        "Wi-Fi repeaters and smart-home hubs with a status LED"
+      ],
+      "checks": [
+        "Follow unexplained cables to where they lead (without opening mains devices)",
+        "Look at holes that point toward private spaces",
+        "Note what you see and where"
+      ],
+      "limits": "Bare modules are what every other family hides: Wi-Fi modules may appear on the network; card-only modules never do.",
+      "models": []
+    },
+    {
+      "id": "pen",
+      "name": "Pen",
+      "rooms": [
+        "office",
+        "living"
+      ],
+      "power": [
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "usb"
+      ],
+      "observable": [
+        "A small hole in the clip or above the clip",
+        "A pen heavier or thicker than usual that unscrews to a USB plug"
+      ],
+      "lookalikes": [
+        "Ordinary pens with a decorative clip ring",
+        "Stylus pens and USB-drive pens"
+      ],
+      "checks": [
+        "Look at the clip with a light",
+        "If it unscrews to USB and you are allowed to, look at its interfaces with the USB tool"
+      ],
+      "limits": "Card only, no network. On USB it often shows as storage only.",
+      "models": []
+    },
+    {
+      "id": "phone-jack",
+      "name": "Telephone wall jack",
+      "rooms": [
+        "bedroom",
+        "living",
+        "office"
+      ],
+      "power": [
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "network"
+      ],
+      "observable": [
+        "A jack in a place where no phone line makes sense, or a newer plate than the others",
+        "A small opening on the plate, besides the socket itself",
+        "A jack with no cable plugged in, placed facing a bed"
+      ],
+      "lookalikes": [
+        "Ordinary telephone and network wall plates",
+        "Plates with a screw cap or a label hole"
+      ],
+      "checks": [
+        "Compare with other plates in the building",
+        "Look at the plate with a light at an angle",
+        "Do not unscrew wall plates: ask the host"
+      ],
+      "limits": "Wired into the wall: may record to a card with no network presence.",
+      "models": []
+    },
+    {
+      "id": "photo-frame",
+      "name": "Picture frame",
+      "rooms": [
+        "bedroom",
+        "living",
+        "office",
+        "entrance"
+      ],
+      "power": [
+        "battery",
+        "mains",
+        "usb"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "network"
+      ],
+      "observable": [
+        "A small hole in the frame or the mat that the picture does not explain",
+        "A frame much thicker or heavier than its size needs",
+        "A cable or a charging port on a frame that is not a digital frame"
+      ],
+      "lookalikes": [
+        "Digital photo frames (with a screen, Wi-Fi and a power cable)",
+        "Frames with a hanging hole or a decorative stud"
+      ],
+      "checks": [
+        "Look at the frame and the mat with a light at an angle",
+        "Note the orientation",
+        "Compare with the other frames in the room"
+      ],
+      "limits": "Battery and card versions have no network.",
+      "models": []
+    },
+    {
+      "id": "power-bank",
+      "name": "Power bank",
+      "rooms": [
+        "bedroom",
+        "living",
+        "office",
+        "vehicle"
+      ],
+      "power": [
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "reference",
+        "usb",
+        "network"
+      ],
+      "observable": [
+        "A small opening on the face or an edge, apart from the ports and the charge LEDs",
+        "A power bank left in place, pointed at a bed, not charging anything",
+        "No brand or capacity marking, or markings that do not match a known product"
+      ],
+      "lookalikes": [
+        "Ordinary power banks with a flashlight LED",
+        "Power banks with a charge-level display"
+      ],
+      "checks": [
+        "Read the markings and compare them with the maker's page",
+        "Look at the face with a light at an angle",
+        "Note the orientation"
+      ],
+      "limits": "On USB it usually shows no data interface at all: an empty USB result excludes nothing.",
+      "models": []
+    },
+    {
+      "id": "power-strip",
+      "name": "Power strip",
+      "rooms": [
+        "bedroom",
+        "living",
+        "office",
+        "kitchen"
+      ],
+      "power": [
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "network"
+      ],
+      "observable": [
+        "A small opening at the end or near the switch, apart from the sockets and the LED",
+        "A strip placed facing a bed or a shower, with nothing plugged in"
+      ],
+      "lookalikes": [
+        "Strips with a lit switch or a surge-protection LED",
+        "Smart strips (Wi-Fi) sold openly"
+      ],
+      "checks": [
+        "Look at the end and the switch with a light",
+        "Note the orientation",
+        "Never open a mains device"
+      ],
+      "limits": "Mains powered: may record continuously to a card. Smart strips appear on the network for reasons that have nothing to do with a camera.",
+      "models": []
+    },
+    {
+      "id": "smoke-detector",
+      "name": "Smoke detector",
+      "rooms": [
+        "bedroom",
+        "living",
+        "kitchen",
+        "entrance",
+        "office"
+      ],
+      "power": [
+        "battery",
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "network"
+      ],
+      "observable": [
+        "A detector in an unusual place (in a bathroom, low on a wall) or more than one in a small room",
+        "A small dark circle on the face apart from the test button and the LED",
+        "A detector with no test button or no certification marks"
+      ],
+      "lookalikes": [
+        "Real smoke, heat or CO detectors (they have an LED and a test button)",
+        "Motion sensors of an alarm system"
+      ],
+      "checks": [
+        "Look at the face with a light from the side",
+        "Read the markings if you can see them from below",
+        "Do not remove or open safety detectors: ask the host"
+      ],
+      "limits": "A real detector must not be taken down to check it. Card-only models are invisible to scans.",
+      "models": []
+    },
+    {
+      "id": "tissue-box",
+      "name": "Tissue box",
+      "rooms": [
+        "bedroom",
+        "bathroom",
+        "living",
+        "vehicle"
+      ],
+      "power": [
+        "battery"
+      ],
+      "storage": "documented",
+      "comms": [
+        "none",
+        "wifi"
+      ],
+      "methods": [
+        "visual",
+        "orientation"
+      ],
+      "observable": [
+        "A small hole in the print of the box, often in a dark part of the pattern",
+        "A box that is heavy, rigid or that you cannot open at the bottom",
+        "A box that stays full"
+      ],
+      "lookalikes": [
+        "Ordinary tissue boxes (printed patterns can look like dots)"
+      ],
+      "checks": [
+        "Lift it: weight and rigidity",
+        "Look at dark parts of the print with a light",
+        "Note the orientation"
+      ],
+      "limits": "Battery and card: no network.",
+      "models": []
+    },
+    {
+      "id": "usb-charger",
+      "name": "USB charger",
+      "rooms": [
+        "bedroom",
+        "bathroom",
+        "living",
+        "office",
+        "kitchen",
+        "entrance"
+      ],
+      "power": [
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "reference",
+        "network",
+        "usb"
+      ],
+      "observable": [
+        "A small round opening or a dark window on a face, that a charge LED does not explain",
+        "A charger plugged in facing a bed or a shower with nothing connected to it",
+        "Heavier or deeper than a charger of that power",
+        "No brand, no certification marks, or a reference that searches to a camera"
+      ],
+      "lookalikes": [
+        "Ordinary chargers with a charge LED",
+        "Smart plugs and night lights"
+      ],
+      "checks": [
+        "Read the reference and marks on the side and compare them with the maker's page",
+        "Look at the face with a light at an angle: a lens reflects as a small round spot",
+        "Note the orientation; unplug it only if you are allowed to and it is not damaged"
+      ],
+      "limits": "A charger has no USB data interface: plugging it into a computer shows nothing, and that excludes nothing.",
+      "models": [
+        {
+          "vendor": "KJB / LawMate",
+          "model": "PV-CS10iA",
+          "kind": "retailer listing",
+          "title": "KJB PV-CS10IA 2 Megapixel Network USB Charging Station Hidden DVR Camera",
+          "source": "123securityproducts.com/security-cameras/2mp-security-cameras/pvcs10ia.html",
+          "retrieved": "2026-10-17",
+          "verified": false,
+          "status": "Found by web search; the page itself could not be read from here.",
+          "claims": [
+            "Described by the retailer as a network (Wi-Fi) USB charging station with a hidden camera and recorder (title)."
+          ],
+          "lens": "Not verified",
+          "photo": null
+        },
+        {
+          "vendor": "LawMate",
+          "model": "PV-CHG30i",
+          "kind": "retailer listings",
+          "title": "Lawmate PV-CHG30i Infrared WiFi Phone Charger Covert Hidden Security Camera",
+          "source": "newegg.com (listings found by web search; exact page not confirmed)",
+          "retrieved": "2026-10-17",
+          "verified": false,
+          "status": "Found by web search; the listings could not be opened from here.",
+          "claims": [
+            "Retailer copy: up to 1080p, infrared, Wi-Fi to a phone app, mains powered, 32 GB SD card included."
+          ],
+          "lens": "Not verified",
+          "photo": null
+        }
+      ]
+    },
+    {
+      "id": "wall-adapter",
+      "name": "Wall outlet / plug adapter",
+      "rooms": [
+        "bedroom",
+        "bathroom",
+        "living",
+        "office",
+        "kitchen"
+      ],
+      "power": [
+        "mains"
+      ],
+      "storage": "documented",
+      "comms": [
+        "wifi",
+        "none"
+      ],
+      "methods": [
+        "visual",
+        "orientation",
+        "network"
+      ],
+      "observable": [
+        "A travel adapter or socket plate with a small opening between or beside the sockets",
+        "A plate newer or deeper than the others in the room",
+        "An adapter left plugged in with nothing on it, facing a bed"
+      ],
+      "lookalikes": [
+        "Ordinary adapters, child-safety covers, USB wall sockets",
+        "Night lights and smart plugs"
+      ],
+      "checks": [
+        "Compare with the other sockets of the room",
+        "Look at the face with a light at an angle",
+        "Never unscrew a socket: ask the host"
+      ],
+      "limits": "Wired to the mains: may record continuously, with no network at all.",
+      "models": []
+    }
+  ],
+  "references": [
+    {
+      "title": "Sneaky Spy Devices and Defective Detectors: The Ecosystem of Intimate Partner Surveillance with Covert Devices",
+      "venue": "USENIX Security Symposium 2023",
+      "use": "Covert devices sold to consumers, and detectors that fail to find them: why a scan is never a guarantee."
+    },
+    {
+      "title": "Lumos: Identifying and Localizing Diverse Hidden IoT Devices in an Unfamiliar Environment",
+      "venue": "USENIX Security Symposium 2022",
+      "use": "Research on finding Wi-Fi devices by their traffic. Hardware Dog does not capture traffic: it asks devices what they announce."
+    },
+    {
+      "title": "Usability Determines Safety for At-Risk Users",
+      "venue": "SOUPS 2026",
+      "use": "Reference given for this module, not yet reviewed here."
+    },
+    {
+      "title": "LAPD: Hidden Spy Camera Detection using Smartphone Time-of-Flight Sensors",
+      "venue": "Research prototype (github.com/frizensami/lapd)",
+      "use": "Works only with specific phones that expose a ToF sensor. Not integrated: a browser cannot use it."
+    }
+  ],
+  "vendors": [
+    {
+      "name": "SpyCentre",
+      "note": "Listed for review. No product page was cited in this version."
+    },
+    {
+      "name": "LawMate",
+      "note": "Vendor and retailer descriptions are claims, not verified performance."
+    },
+    {
+      "name": "BrickHouse Security",
+      "note": "Listed for review. No product page was cited in this version."
+    },
+    {
+      "name": "SpyAssociates",
+      "note": "Listed for review. No product page was cited in this version."
+    }
+  ]
+}

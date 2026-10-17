@@ -187,6 +187,8 @@ export interface HostUsbDevice {
   cls: string;
   power: string | null;
   max_ma: number | null;
+  /** Every interface of its configuration by class (VIDEO, MSC, CDC...). Absent from an older dogd. */
+  interfaces?: string[];
 }
 
 /** The USB devices of dogd's computer. supported false: not read on that system. */
@@ -242,3 +244,71 @@ export async function dogdBleScan(on: boolean, base = DOGD_URL): Promise<DogdBle
 /** Reports after `since`, oldest first; `lost`: reports dogd had to drop (its buffer was full). */
 export const dogdBleObservations = (since: number, base = DOGD_URL): Promise<{ now_mono_ms: number; next: number; lost: number; observations: DogdBleObservation[] }> =>
   getJson(`${base}/v1/ble/observations?since=${since}`);
+
+// ------------------------------------------------------------------ LAN (Camera Sniffer)
+
+/** One IPv4 network of dogd's computer, and why a scan of it would be refused (null: allowed). */
+export interface DogdLanIface {
+  name: string;
+  address: string;
+  prefix: number;
+  network: string;
+  up: boolean;
+  private: boolean;
+  loopback: boolean;
+  refused: string | null;
+}
+
+export interface DogdLanStatus {
+  supported: boolean;
+  state: 'unsupported' | 'idle' | 'scanning' | 'done' | 'cancelled' | 'error';
+  detail: string;
+  scan: number;
+  iface: string | null;
+  methods: string[];
+  step: string | null;
+  done: number;
+  total: number | null;
+  started_wall_ms: number | null;
+  finished_wall_ms: number | null;
+  oui_source: string | null;
+}
+
+/** What a device said about itself, as dogd received it. */
+export interface DogdLanObservation {
+  seq: number;
+  scan: number;
+  mono_ms: number;
+  wall_ms: number;
+  kind: 'neighbor' | 'mdns' | 'ssdp' | 'upnp' | 'wsd' | 'service' | 'note';
+  method: string;
+  iface: string;
+  ip: string | null;
+  mac: string | null;
+  vendor: string | null;
+  vendor_source: string | null;
+  name: string | null;
+  service: string | null;
+  port: number | null;
+  fields: Record<string, string>;
+  raw: string | null;
+}
+
+export const dogdLanInterfaces = (base = DOGD_URL): Promise<{ supported: boolean; interfaces: DogdLanIface[]; detail?: string }> => getJson(`${base}/v1/lan/interfaces`);
+
+export const dogdLanStatus = (base = DOGD_URL): Promise<DogdLanStatus> => getJson<DogdLanStatus>(`${base}/v1/lan/status`);
+
+/** Start a scan of one interface with the chosen methods, or stop the running one. */
+export async function dogdLanScan(req: { action: 'start'; iface: string; methods: string[] } | { action: 'stop' }, base = DOGD_URL): Promise<DogdLanStatus> {
+  let res: Response;
+  try {
+    res = await fetch(`${base}/v1/lan/scan`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) });
+  } catch {
+    throw new Error('no dogd on this computer: dogd serve (Linux). docs/DOGD.md');
+  }
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as DogdLanStatus;
+}
+
+export const dogdLanObservations = (since: number, base = DOGD_URL): Promise<{ now_mono_ms: number; next: number; lost: number; observations: DogdLanObservation[] }> =>
+  getJson(`${base}/v1/lan/observations?since=${since}`);
