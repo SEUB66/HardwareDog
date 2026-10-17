@@ -6,7 +6,7 @@ import { SCENARIOS, SCENARIO_IDS, isScenarioId, type ScenarioId } from './scenar
 import type { ProbeTest } from './types';
 import { PROBE_TESTS } from './types';
 
-export const SCREENS = ['STATUS', 'TRACE', 'POWER', 'USB', 'SERIAL', 'BUS', 'NET', 'PROBE', 'REPORT', 'SETUP'] as const;
+export const SCREENS = ['STATUS', 'TRACE', 'POWER', 'USB', 'SERIAL', 'BUS', 'NET', 'FLIPPER', 'BLE', 'PROBE', 'REPORT', 'SETUP'] as const;
 export type Screen = (typeof SCREENS)[number] | 'HELP';
 
 /** TXT for any terminal, JSON for machines, HTML and PDF for a ticket. */

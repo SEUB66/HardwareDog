@@ -46,6 +46,10 @@ import { Trace } from './screens/Trace';
 import { Usb } from './screens/Usb';
 import { hideTip, installTips } from './tips';
 import { explain } from '../core/glossary';
+import type { Lab } from '../core/lab/context';
+import { BluetoothLab, type BleTool } from './lab/BluetoothLab';
+import { FlipperLab, type FlipperTool } from './lab/FlipperLab';
+import { TvFloating, TvPlacement, useTvPower } from './lab/TvHost';
 
 interface Session {
   system: System;
@@ -149,7 +153,7 @@ const isTyping = (el: EventTarget | null) =>
 /** hwdog-HD-20261001-011817.hdlog: the session id, down to the second. */
 const hdlogName = (h: SessionHeader) => `hwdog-${h.id}${String(new Date(h.startedAt).getSeconds()).padStart(2, '0')}.hdlog`;
 
-export function App({ archive }: { archive: SessionArchive }) {
+export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   const [session, setSession] = useState<Session>(() => {
     const demo = requestedDemo();
     return newSession(demo ? simulator(demo) : null, archive);
@@ -180,6 +184,47 @@ export function App({ archive }: { archive: SessionArchive }) {
   const { system } = session;
   useSystem(system);
   const now = useClock(system);
+
+  // The lab: one TV placement, remembered; the tool open in each lab section.
+  const placement = useMemo(() => new TvPlacement(), []);
+  useTvPower(lab.companion, placement);
+  const [flipperTool, setFlipperTool] = useState<FlipperTool>('FILES');
+  const [bleTool, setBleTool] = useState<BleTool>('SCAN');
+  const reducedMotion = system.settings.reducedMotion || (typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  // What the companion's messages can offer: commands, run once at a time by the registry.
+  useEffect(() => {
+    const off = [
+      lab.registry.register('flipper.connect', () => {
+        setScreen('FLIPPER');
+        return lab.flipper.connect(lab.flipper.lastMode).catch(() => {});
+      }),
+      lab.registry.register('lab.log', () => {
+        const ble = lab.bus.recent().at(-1)?.source === 'BLE';
+        if (ble) {
+          setScreen('BLE');
+          setBleTool('LOG');
+        } else {
+          setScreen('FLIPPER');
+          setFlipperTool('LOG');
+        }
+      }),
+      lab.registry.register('ble.start', () => {
+        setScreen('BLE');
+        setBleTool('SCAN');
+      }),
+    ];
+    return () => off.forEach((f) => f());
+  }, [lab]);
+
+  // A lab marker is also a mark on the live hardware timeline (same clock, one more place to read it).
+  useEffect(
+    () =>
+      lab.bus.subscribe((e) => {
+        if (e.type === 'marker' && session.transport && !system.replayOf) system.mark(`lab marker: ${e.message}`);
+      }),
+    [lab, session],
+  );
 
   const refreshSessions = () => void archive.list().then(setArchived, () => {});
   // The list shows the live session growing; metas are small.
@@ -605,10 +650,15 @@ export function App({ archive }: { archive: SessionArchive }) {
             }}
           />
         );
+      case 'FLIPPER':
+        return <FlipperLab lab={lab} placement={placement} reducedMotion={reducedMotion} tool={flipperTool} onTool={setFlipperTool} />;
+      case 'BLE':
+        return <BluetoothLab lab={lab} tool={bleTool} onTool={setBleTool} />;
       case 'HELP':
         return <Help />;
     }
   })();
+  const labScreen = screen === 'FLIPPER' || screen === 'BLE';
 
   return (
     <div class="shell">
@@ -726,7 +776,7 @@ export function App({ archive }: { archive: SessionArchive }) {
       </nav>
 
       <main class="work" id="workspace">
-        {session.transport === null && screen !== 'STATUS' && <ConnectStrip onChoose={() => navigate('STATUS')} onDemo={() => void switchTransport('SIMULATOR')} />}
+        {session.transport === null && screen !== 'STATUS' && !labScreen && <ConnectStrip onChoose={() => navigate('STATUS')} onDemo={() => void switchTransport('SIMULATOR')} />}
         {session.transport === null && screen === 'STATUS' && (
           <ConnectBanner
             onConsole={() => void openConsole()}
@@ -738,12 +788,12 @@ export function App({ archive }: { archive: SessionArchive }) {
             onTour={startTour}
           />
         )}
-        <SimBanner
+        {!labScreen && <SimBanner
           system={system}
           scenario={demoOf(session.transport)}
           onConnect={() => navigate('SETUP')}
           onStop={demoOf(session.transport) ? () => void start(null) : null}
-        />
+        />}
         {body}
       </main>
 
@@ -766,6 +816,9 @@ export function App({ archive }: { archive: SessionArchive }) {
           <kbd>CTRL+K</kbd>CMD
         </span>
       </footer>
+
+      {/* The floating TV follows every section; docked, it lives in Flipper Lab. */}
+      <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
 
       {touring && <Tour onEnd={() => setTouring(false)} />}
 

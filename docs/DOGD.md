@@ -188,6 +188,32 @@ HWDOG_USB_SYSFS points the USB reading at another tree that looks like
 
 ---
 
+## BLUETOOTH LE (THE BLUETOOTH LAB SCANNER)
+
+```text
+GET  /v1/ble/status                 supported, state, adapter, detail
+PUT  /v1/ble/scan                   body "start" or "stop"
+GET  /v1/ble/observations?since=N   reports after N, the next N, and how
+                                    many fell off before this read (lost)
+```
+
+Linux only: BlueZ over the system D-Bus, in pure Rust (zbus), no system
+library. dogd finds the first adapter, sets an LE discovery filter with
+duplicate reports, starts discovery when the interface asks, and stops it
+when asked or when dogd stops. Every Device1 property update carrying RSSI
+or advertisement data is one report: address, address type, advertised
+name, alias, RSSI, TX power, UUIDs, manufacturer and service data (hex).
+Reports wait in a ring of 4096; a reader that was too slow is told how
+many it missed. States: `unsupported` (not Linux), `no_adapter`,
+`permission`, `ready`, `scanning`, `error` (no system D-Bus, bluetoothd not
+running), with BlueZ's own error names in the detail.
+
+Discovery listens: dogd connects to no Bluetooth device and sends nothing
+to one. Nothing starts before the interface asks. What a report is, and is
+not: [`BLUETOOTH_LAB.md`](BLUETOOTH_LAB.md).
+
+---
+
 ## PROVENANCE
 
 A serial port is real hardware: `PHYSICAL`. dogd cannot tell a simulator on

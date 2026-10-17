@@ -195,3 +195,50 @@ export async function dogdUsb(base = DOGD_URL): Promise<{ supported: boolean; de
   if (!res.ok) throw new Error(`dogd usb: ${res.status}`);
   return (await res.json()) as { supported: boolean; devices: HostUsbDevice[] };
 }
+
+// ------------------------------------------------------------------ BLE
+
+/** dogd's Bluetooth scanner (Linux, BlueZ). supported false: not on this system. */
+export interface DogdBleStatus {
+  supported: boolean;
+  state: 'unsupported' | 'no_adapter' | 'permission' | 'ready' | 'scanning' | 'error';
+  adapter: string | null;
+  detail: string;
+}
+
+/** One advertisement report, as BlueZ gave it to dogd. Times are dogd's (same computer). */
+export interface DogdBleObservation {
+  seq: number;
+  mono_ms: number;
+  wall_ms: number;
+  adapter: string;
+  address: string;
+  address_type: 'public' | 'random' | null;
+  name: string | null;
+  alias: string | null;
+  rssi: number | null;
+  tx_power: number | null;
+  uuids: string[];
+  /** company id (decimal) -> hex bytes */
+  manufacturer: Record<string, string>;
+  /** service UUID -> hex bytes */
+  service_data: Record<string, string>;
+}
+
+export const dogdBleStatus = (base = DOGD_URL): Promise<DogdBleStatus> => getJson<DogdBleStatus>(`${base}/v1/ble/status`);
+
+/** Start or stop dogd's scan. Discovery on the adapter: nothing is sent to any device. */
+export async function dogdBleScan(on: boolean, base = DOGD_URL): Promise<DogdBleStatus> {
+  let res: Response;
+  try {
+    res = await fetch(`${base}/v1/ble/scan`, { method: 'PUT', headers: { 'content-type': 'text/plain' }, body: on ? 'start' : 'stop' });
+  } catch {
+    throw new Error('no dogd on this computer: dogd serve (Linux, BlueZ). docs/DOGD.md');
+  }
+  if (!res.ok) throw new Error(`dogd ble: ${res.status} ${await res.text()}`);
+  return (await res.json()) as DogdBleStatus;
+}
+
+/** Reports after `since`, oldest first; `lost`: reports dogd had to drop (its buffer was full). */
+export const dogdBleObservations = (since: number, base = DOGD_URL): Promise<{ now_mono_ms: number; next: number; lost: number; observations: DogdBleObservation[] }> =>
+  getJson(`${base}/v1/ble/observations?since=${since}`);
