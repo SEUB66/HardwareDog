@@ -152,7 +152,7 @@ assets`: no component change. A Hardware Dog TV with the dog is a new skin
 
 POWER plays about two seconds inside the screen: a dot, a horizontal line,
 the picture opening vertically, analog snow, the FLIPPER LAB splash, the
-companion's room coming in, a hop and a wave, then its life goes on. Off: the picture squeezes
+companion's scene coming in, then its life goes on. Off: the picture squeezes
 to a line, then a dot, then dark. The box never moves.
 
 POWER switches the TV only: it never touches the Flipper, never stops a
@@ -181,47 +181,58 @@ offers. The companion observes; it never runs a tool. Animations follow
 the events: an operation that fails stops its working animation at once, a
 link that drops ends every operation of that link on screen.
 
-The companion is a little cartoon dolphin seen from the chest up at its
-desk, in a cozy lab, in full color; its gestures tell what the tool is
-doing (`sprites.ts`, after the owner's sketch sheet):
+The companion's scenes are the owner's drawings: two sketch sheets of
+nine scenes each (`assets/brand/source/hd-companion-sheet-1.png` and
+`-2.png`), the same face everywhere, one decor per mood and per activity,
+the big monitors as drawn. `npm run companion` (in `web/`, script
+`web/scripts/build-companion-scenes.mjs`) cuts each cell, brings it to the
+screen's 136 x 100 pixel grid without redrawing anything (the wall
+continues above it and the desk front below it, in the drawing's own
+colors, to fill the 4:3 screen), and makes from each drawing:
 
 ```text
-IDLE        link up, nothing running: headphones on, it codes, nodding
-WAIT        nothing connected: asleep on the desk under the lamp (Z z)
-GREET       after power-on: it turns to us and waves
-SEARCH      analysing: a hand on the radio scanner's knob, the spectrum moving
-CONNECT     pushes the cable into the Flipper's port (the screen lights up)
-READ        leans over a board with a magnifier up to its eye
-TRANSFER    at the keyboard, blocks travel from one computer to the other
-SUCCESS     both arms up, eyes shut with joy, a check on the screen
-WARNING     the screen blinks "!", it scratches its head, worried
-ERROR       arms crossed, cross brows, the rain outside
-DISCONNECT  a cable end in each flipper, it looks from one to the other
+BASE     the scene as drawn
+BREATH   head and shoulders one pixel lower, the hands where they are
+BLINK    the eye closed (only where the drawing has an open eye: not
+         asleep, not eyes shut with joy, not the angry stare, not behind
+         the goggles)
 ```
 
-What the operation is about picks among more scenes (the companion's
-`subject`: the tool, and the kind of file the Flipper service names):
+into `assets/brand/web/hd-companion-scenes.webp` (near-lossless) and
+`hd-companion-scenes.json` (where each frame is, the art band, the eye).
+`sprites.ts` plays them: base and breath alternate on a slow cycle, a
+blink now and then, and what is around the companion moves on top of the
+drawing, at the drawing's own coordinates.
 
 ```text
-BOOT        after power-on: arms up, the computer boots with its dolphin
-SHUTDOWN    the TV switching off: night outside, a wave, a flipper on the
-            power button
-BLUETOOTH   a BLE scan: headphones on, a small board held up, waves on screen
-RFID        reading .nfc, .rfid, .ibtn: a card over the reader
-INFRARED    reading .ir: the remote pointed at the old TV's color bars
-SCAN        reading .sub: the radio scanner's spectrum
-UART        GPIO reads: wires from the board, the terminal answers
-BACKUP      copying to the library: a floppy filed into the box
-REPAIR      writing to the Flipper, and an error's second phase: goggles
-            on, soldering
-REPORT      a report exported: the printout held up, the printer going
+STATE       SCENE (sheet)   WHAT MOVES
+IDLE        CODING (1)      code typed line after line on the monitor
+WAIT        IDLE (1)        asleep on the desk, Zs floating up
+GREET       BOOT (2)        the loading bar under the dolphin fills
+SEARCH      SCAN (1)        the scanner's spectrum, the antenna LED
+            BLUETOOTH (2)   a BLE scan: radio waves from the little board
+CONNECT     CONNECT (1)     a spark at the plug, the Flipper's LED
+READ        ANALYZE (1)     a glint across the magnifier, an LED on the board
+            INFRARED (2)    .ir: the remote's IR flash, the TV's roll bar
+            RFID (2)        .nfc .rfid .ibtn: the reader's waves and LED
+            SCAN (1)        .sub: the spectrum
+            UART (2)        GPIO: the terminal cursor, TX/RX LEDs
+TRANSFER    TRANSFER (1)    blocks travel between the two computers
+            BACKUP (2)      a copy to the library: the floppy goes in, the
+                            drive LED
+SUCCESS     SUCCESS (1)     sparkles and confetti
+            REPORT (2)      a report exported: the printer LED
+WARNING     ANALYZE (1)     it examines
+ERROR       MAD (1)         cross, the rain outside, steam from the mug;
+            REPAIR (2)      after 3.5 s it tries a fix: smoke, the iron
+DISCONNECT  DISCONNECTED (1) the ? hops, sparks at the two cable ends
+power off   SHUTDOWN (2)    night outside, the stars
 ```
 
-One profile (a wide melon sloping into a thick beak, a big eye, a cream
-throat, flippers it uses as hands) built from shapes plus an outline
-pass, so every pose stays in one style. Scenes are pure functions of
-time; replacing them is replacing a SpriteSet. Reduced motion holds each
-scene still on a representative moment.
+Every frame is a pure function of time; replacing the scenes is
+replacing a SpriteSet (new sheets, new overlays). Reduced motion holds
+each scene still on a representative moment. While the frames load (the
+splash plays meanwhile), the screen stays quiet, never broken.
 
 ### Messages
 
