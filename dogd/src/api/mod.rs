@@ -14,6 +14,9 @@
 //!   PUT  /v1/sessions/{id}/hdlog     store a file the interface wrote
 //!   WS   /v1/hdp                     raw HDP of D1: device bytes out, command lines in
 //!   WS   /v1/hdp/{dog}               raw HDP of one link of a pack (D2...)
+//!   GET  /v1/ble/status              the Bluetooth scanner: supported, adapter, state
+//!   PUT  /v1/ble/scan                "start" or "stop" discovery (listening only)
+//!   GET  /v1/ble/observations?since=N  advertisement reports after N, and how many were lost
 //!
 //! Trust boundary: this machine. Requests must name a loopback host (no DNS
 //! rebinding), and a browser page must come from an allowed origin: a web
@@ -49,6 +52,8 @@ pub const CLOSE_TOO_SLOW: u16 = 4008;
 
 #[derive(Clone)]
 pub struct AppState {
+    /// The Bluetooth Lab scanner: idle until the interface asks.
+    pub ble: Arc<crate::ble::BleScanner>,
     /// D1, D2...: never empty (with no source, D1 is a link with no device).
     pub links: Arc<Vec<Arc<Link>>>,
     pub store: Arc<Store>,
@@ -74,6 +79,9 @@ pub fn router(state: AppState) -> Router {
                 .put(put_hdlog)
                 .layer(DefaultBodyLimit::max(MAX_BYTES)),
         )
+        .route("/v1/ble/status", get(ble_status))
+        .route("/v1/ble/scan", axum::routing::put(ble_scan))
+        .route("/v1/ble/observations", get(ble_observations))
         .route("/v1/hdp", get(hdp))
         .route("/v1/hdp/{dog}", get(hdp_of))
         .layer(middleware::from_fn_with_state(state.clone(), guard))
@@ -240,6 +248,36 @@ async fn usb_devices() -> Json<serde_json::Value> {
         .await
         .unwrap_or(None);
     Json(json!({ "supported": found.is_some(), "devices": found.unwrap_or_default() }))
+}
+
+async fn ble_status(State(s): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::to_value(s.ble.status().await).unwrap())
+}
+
+async fn ble_scan(State(s): State<AppState>, body: String) -> Response {
+    match body.trim() {
+        "start" => Json(serde_json::to_value(s.ble.start().await).unwrap()).into_response(),
+        "stop" => Json(serde_json::to_value(s.ble.stop().await).unwrap()).into_response(),
+        _ => (StatusCode::BAD_REQUEST, "body: start or stop").into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct BleSince {
+    since: Option<u64>,
+}
+
+async fn ble_observations(
+    State(s): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<BleSince>,
+) -> Json<serde_json::Value> {
+    let page = s.ble.since(q.since.unwrap_or(0));
+    Json(json!({
+        "now_mono_ms": s.ble.mono_ms(),
+        "next": page.next,
+        "lost": page.lost,
+        "observations": page.observations,
+    }))
 }
 
 async fn devices(State(s): State<AppState>) -> Json<serde_json::Value> {
@@ -497,6 +535,7 @@ mod http_tests {
                 .collect()
         };
         router(AppState {
+            ble: crate::ble::BleScanner::new(),
             links: Arc::new(links),
             store,
             discovery: Arc::new(crate::discovery::Discovery::default()),

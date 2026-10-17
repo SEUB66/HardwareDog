@@ -80,6 +80,16 @@ SHARING          a recording is anonymized before it leaves the bench for
 DEVICE           the firmware core rejects malformed commands and commands
                  for what the board does not observe; an action is never
                  taken without the operator asking (ACTIVE is said first)
+FLIPPER LAB      one RPC session for the whole interface; device paths
+                 checked before anything is sent (/ext, /int, /any; no ..,
+                 no control characters); reads always, writes only in WRITE
+                 MODE, never over an existing file without a confirmation;
+                 firmware update, reboot and reset are not even encoded;
+                 every frame and file parsed with limits (FLIPPER_LAB.md)
+BLUETOOTH LAB    dogd's BLE endpoints sit behind the same host, origin and
+                 token guard; discovery listens and connects to nothing;
+                 GATT writes are previewed, confirmed, sent once, never
+                 replayed after a reconnect (BLUETOOTH_LAB.md)
 BUILDS           the interface, the command line, dogd and the firmware image
                  are reproducible: built twice in CI, compared byte for byte
 ```
@@ -99,6 +109,9 @@ FIRMWARE         no secure boot, no flash encryption: someone with the board
                  holds no secret but its Wi-Fi password, if one is set
 WEB SERIAL       the browser asks the operator which port to open; the page
                  cannot open one by itself, but the operator can choose wrong
+LAB SESSIONS     an .hdlab seal proves the bytes, not who wrote them (same
+                 as .hdlog); lab sessions are not anonymized yet: BLE
+                 addresses and device names stay in the file
 FREE TEXT        anonymize cannot recognize a secret written in plain words
                  ("the code is 4471"): the console lines it changed are listed
                  for a person to read

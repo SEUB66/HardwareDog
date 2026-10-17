@@ -1,0 +1,199 @@
+import { describe, expect, it } from 'vitest';
+import { FlipperClient, FlipperRpc, RpcError, checkFlipperPath } from '../src/core/flipper/client';
+import { DEMO_FILES, DemoFlipper } from '../src/core/flipper/demo';
+import { FormatError, compareParsed, parseFlipperFile, timingStats } from '../src/core/flipper/formats';
+import { FlipperLibrary, safeFileName, searchLibrary } from '../src/core/flipper/library';
+import { DelimitedReader, ProtoWriter, delimited, readFields } from '../src/core/flipper/proto';
+import { decodeMain, encodeMain, type MainMessage } from '../src/core/flipper/rpc';
+import { FlipperService } from '../src/core/flipper/service';
+import { Companion } from '../src/core/lab/companion';
+import { LabBus, type LabEvent } from '../src/core/lab/events';
+import { MemoryKv } from '../src/core/lab/store';
+
+const connect = (demo = new DemoFlipper()) => ({ demo, client: new FlipperClient(new FlipperRpc(demo)) });
+
+describe('protobuf codec', () => {
+  it('round-trips varints, including 64-bit values', () => {
+    const w = new ProtoWriter().uint(1, 300).uint(2, 32_000_000_000n).string(3, 'é').bool(4, true);
+    const f = readFields(w.finish());
+    expect(f.map((x) => x.field)).toEqual([1, 2, 3, 4]);
+    expect(f[0]!.int).toBe(300n);
+    expect(f[1]!.int).toBe(32_000_000_000n);
+  });
+
+  it('refuses truncated and oversized input instead of waiting forever', () => {
+    expect(() => readFields(Uint8Array.from([0x0a, 0x05, 0x01]))).toThrow('length past end');
+    expect(() => readFields(Uint8Array.from([0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01]))).toThrow('varint too long');
+    const r = new DelimitedReader(() => {}, 100);
+    expect(() => r.push(Uint8Array.from([0xff, 0x01]))).toThrow('exceeds');
+  });
+
+  it('reassembles frames split anywhere', () => {
+    const msgs: Uint8Array[] = [];
+    const r = new DelimitedReader((m) => msgs.push(m));
+    const a = delimited(encodeMain({ commandId: 7, status: 0, hasNext: true, content: { kind: 'storage_list_request', path: '/ext' } }));
+    const b = delimited(encodeMain({ commandId: 8, status: 6, hasNext: false, content: { kind: 'empty' } }));
+    const all = new Uint8Array([...a, ...b]);
+    for (const byte of all) r.push(Uint8Array.of(byte));
+    expect(msgs.map((m) => decodeMain(m))).toEqual<MainMessage[]>([
+      { commandId: 7, status: 0, hasNext: true, content: { kind: 'storage_list_request', path: '/ext', includeMd5: false, filterMaxSize: 0 } },
+      { commandId: 8, status: 6, hasNext: false, content: { kind: 'empty' } },
+    ]);
+  });
+
+  it('encodes the PB.Main envelope with the field numbers of flipper.proto', () => {
+    // command_id=1 (field 1), system_ping_request (field 5) with data (field 1)
+    const bytes = encodeMain({ commandId: 1, status: 0, hasNext: false, content: { kind: 'ping_request', data: Uint8Array.of(0xaa) } });
+    expect([...bytes]).toEqual([0x08, 0x01, 0x2a, 0x03, 0x0a, 0x01, 0xaa]);
+  });
+});
+
+describe('Flipper RPC client (against the demo device)', () => {
+  it('pings, reads device info and lists a directory streamed in parts', async () => {
+    const { client } = connect();
+    expect(await client.ping()).toBeGreaterThanOrEqual(0);
+    const info = await client.deviceInfo();
+    expect(info.find(([k]) => k === 'hardware.name')?.[1]).toBe('DEMO');
+    const files = await client.list('/ext/infrared');
+    expect(files.map((f) => f.name).sort()).toEqual(['demo_tv.ir', 'demo_tv_v2.ir']);
+    const root = await client.list('/ext');
+    expect(root.length).toBeGreaterThan(3); // more than one reply part
+  });
+
+  it('reads a file larger than one frame, byte for byte', async () => {
+    const big = new Uint8Array(5000).map((_, i) => i & 0xff);
+    const { demo, client } = connect();
+    demo.fs.set('/ext/big.bin', { dir: false, data: big });
+    const seen: [number, number | null][] = [];
+    const data = await client.read('/ext/big.bin', { onProgress: (d, t) => seen.push([d, t]) });
+    expect(data).toEqual(big);
+    expect(seen.at(-1)).toEqual([5000, 5000]);
+  });
+
+  it('keeps the device error code exactly', async () => {
+    const { client } = connect(new DemoFlipper({ fail: (c) => (c.kind === 'storage_list_request' ? 4 : null) }));
+    await expect(client.list('/ext')).rejects.toMatchObject({ code: 'ERROR_BUSY' });
+    await expect(client.read('/ext/nope')).rejects.toMatchObject({ code: 'ERROR_STORAGE_NOT_EXIST' });
+  });
+
+  it('never overwrites without overwrite: true, and writes in parts', async () => {
+    const { demo, client } = connect();
+    const data = new Uint8Array(1300).fill(65);
+    await client.write('/ext/notes/new.txt', data);
+    expect(demo.fs.get('/ext/notes/new.txt')?.data).toEqual(data);
+    expect(demo.received.filter((m) => m.content.kind === 'storage_write_request')).toHaveLength(3);
+    await expect(client.write('/ext/notes/new.txt', Uint8Array.of(1))).rejects.toMatchObject({ code: 'HD_COLLISION' });
+    expect(demo.fs.get('/ext/notes/new.txt')?.data.length).toBe(1300);
+    await client.write('/ext/notes/new.txt', Uint8Array.of(1), { overwrite: true });
+    expect(demo.fs.get('/ext/notes/new.txt')?.data).toEqual(Uint8Array.of(1));
+    await expect(client.rename('/ext/notes/new.txt', '/ext/notes/readme.txt')).rejects.toMatchObject({ code: 'HD_COLLISION' });
+    await expect(client.remove('/ext')).rejects.toMatchObject({ code: 'HD_BAD_PATH' });
+  });
+
+  it('refuses dangerous paths before anything is sent', () => {
+    for (const p of ['', 'ext/x', '/ext/../int', '/ext//x', '/etc/passwd', '/ext/a\\b', '/ext/\u0000']) expect(() => checkFlipperPath(p)).toThrow(RpcError);
+    expect(checkFlipperPath('/ext/infrared/')).toBe('/ext/infrared');
+  });
+
+  it('times out, then drains the late reply instead of taking it for the next one', async () => {
+    const { client, demo } = connect(new DemoFlipper({ silent: 'power_info_request' }));
+    await expect(client.rpc.call({ kind: 'power_info_request' }, { timeoutMs: 20 })).rejects.toMatchObject({ code: 'TIMEOUT' });
+    expect(await client.ping()).toBeGreaterThanOrEqual(0);
+    expect(demo.received.length).toBe(2);
+  });
+
+  it('a cable pulled mid-transfer fails the operation with LINK_LOST', async () => {
+    const demo = new DemoFlipper({ dropAfterBytes: 900 });
+    demo.fs.set('/ext/big.bin', { dir: false, data: new Uint8Array(4000) });
+    const { client } = connect(demo);
+    await expect(client.read('/ext/big.bin')).rejects.toMatchObject({ code: 'LINK_LOST' });
+    await expect(client.ping()).rejects.toMatchObject({ code: 'LINK_LOST' });
+  });
+});
+
+describe('Flipper file formats', () => {
+  it('reads every demo file with its kind', () => {
+    const kinds = Object.entries(DEMO_FILES).filter(([p]) => !p.endsWith('.txt')).map(([, t]) => parseFlipperFile(t).kind);
+    expect(kinds).toEqual(['ir', 'ir', 'subghz', 'subghz', 'nfc', 'rfid', 'ibutton']);
+  });
+
+  it('keeps decoded parameters apart from recorded timings', () => {
+    const ir = parseFlipperFile(DEMO_FILES['/ext/infrared/demo_tv.ir']!).ir!;
+    expect(ir[0]).toMatchObject({ type: 'parsed', protocol: 'NECext', address: [0xee, 0x87, 0, 0] });
+    expect(ir[0]).not.toHaveProperty('timings');
+    expect(ir[1]).toMatchObject({ type: 'raw', frequency: 38000 });
+    const raw = parseFlipperFile(DEMO_FILES['/ext/subghz/demo_raw.sub']!).subghz!;
+    expect(raw.timings).toHaveLength(32);
+    expect(timingStats(raw.timings!)?.count).toBe(32);
+    const nfc = parseFlipperFile(DEMO_FILES['/ext/nfc/demo_tag.nfc']!).nfc!;
+    expect(nfc.memory.get(5)).toEqual([null, null, null, null]);
+  });
+
+  it('compares two captures of the same kind, and refuses two kinds', () => {
+    const a = parseFlipperFile(DEMO_FILES['/ext/infrared/demo_tv.ir']!);
+    const b = parseFlipperFile(DEMO_FILES['/ext/infrared/demo_tv_v2.ir']!);
+    const c = compareParsed(a, b);
+    expect(c.diffs.map((d) => d.where)).toEqual(['signal Power command', 'signal Vol_up timings']);
+    expect(compareParsed(a, parseFlipperFile(DEMO_FILES['/ext/lfrfid/demo_badge.rfid']!)).comparable).toBe(false);
+  });
+
+  it('refuses malformed and binary files with the line', () => {
+    expect(() => parseFlipperFile('hello')).toThrow(FormatError);
+    expect(() => parseFlipperFile(Uint8Array.of(0, 1, 2, 0xff))).toThrow('UTF-8');
+    expect(() => parseFlipperFile('Filetype: IR signals file\nVersion: 1\nname: x\ntype: raw\nfrequency: 38000\nduty_cycle: 0.33\ndata: 1 -2\n')).toThrow('line 7');
+    expect(() => parseFlipperFile('Filetype: Flipper RFID key\nVersion: 1\nKey type: EM4100\nData: 01 ZZ\n')).toThrow('line 4');
+  });
+});
+
+describe('Flipper service and the companion', () => {
+  const rig = () => {
+    const bus = new LabBus();
+    const events: LabEvent[] = [];
+    bus.subscribe((e) => events.push(e));
+    const service = new FlipperService(bus, new FlipperLibrary(new MemoryKv()));
+    return { bus, events, service };
+  };
+
+  it('connects once even when asked twice, then browses and copies on request', async () => {
+    const { service, events } = rig();
+    await Promise.all([service.connect('demo'), service.connect('demo')]);
+    expect(service.view.link).toBe('CONNECTED');
+    expect(events.filter((e) => e.type === 'link.state' && e.params?.['state'] === 'CONNECTING')).toHaveLength(1);
+    expect(service.view.entries?.length).toBeGreaterThan(0);
+    const first = await service.copyToLibrary('/ext/infrared/demo_tv.ir');
+    const again = await service.copyToLibrary('/ext/infrared/demo_tv.ir');
+    expect(first.added).toBe(true);
+    expect(again.added).toBe(false);
+    expect(first.item.origin).toBe('SIMULATED');
+    expect(first.item.tags).toEqual(['demo']);
+    expect(events.every((e) => e.origin === 'SIMULATED')).toBe(true);
+  });
+
+  it('a lost link is said with its reason, and the companion stops the work animation', async () => {
+    const { service, bus } = rig();
+    const companion = new Companion(bus);
+    await service.connect('demo', { latencyMs: 1 });
+    service.demo!.fs.set('/ext/big.bin', { dir: false, data: new Uint8Array(20_000) });
+    const reading = service.read('/ext/big.bin');
+    await new Promise((r) => setTimeout(r, 12));
+    service.demo!.unplug();
+    await expect(reading).rejects.toMatchObject({ code: 'LINK_LOST' });
+    expect(service.view.link).toBe('DISCONNECTED');
+    expect(service.view.reason).toBe('lost');
+    expect(companion.operations).toHaveLength(0);
+    expect(companion.hardware).toBe('DISCONNECTED');
+    companion.dispose();
+  });
+
+  it('library search is stable and filters by tag and kind', async () => {
+    const lib = new FlipperLibrary(new MemoryKv());
+    const a = (await lib.add({ path: '/ext/infrared/a.ir', device: 'X', origin: 'PHYSICAL', data: Uint8Array.of(1), at: 1 })).item;
+    await lib.add({ path: '/ext/subghz/b.sub', device: 'X', origin: 'PHYSICAL', data: Uint8Array.of(2), at: 1 });
+    await lib.annotate(a.id, { tags: ['Living Room', 'tv'], notes: 'remote' });
+    const items = await lib.list();
+    expect(searchLibrary(items, 'tag:living-room').map((i) => i.name)).toEqual(['a.ir']);
+    expect(searchLibrary(items, 'kind:subghz').map((i) => i.name)).toEqual(['b.sub']);
+    expect(searchLibrary(items, '', 'newest').map((i) => i.id)).toEqual(searchLibrary(items, '', 'newest').map((i) => i.id));
+    expect(safeFileName('../../etc/passwd')).not.toMatch(/^\.|\//);
+  });
+});
