@@ -134,7 +134,9 @@ it. No redirect loop is possible from the repository: it declares none.
 ```text
 PASS     manifest: identity kept (start_url, id), icons with real sizes, types and purposes
 PASS     maskable icons in the safe zone under round and rounded-square masks, no built-in corner
-PASS     apple-touch-icon 180 opaque; favicons 16 / 32 / ICO 16-32-48, legible at 16 px (checked by eye)
+PASS     browser icons float (transparent ground, outline kept): favicons 16 / 32 / ICO 16-32-48
+         legible at 16 px on light and dark tabs (checked by eye), "any" icons 192 / 512;
+         apple-touch-icon 180 opaque (iOS fills transparency with black)
 PASS     share image 1200 x 630, readable at preview sizes (500 and 300 px wide, checked by eye)
 PASS     metadata present in the raw HTML of the three pages (tests and the built files)
 PASS     a reader without JavaScript gets the H1 and what each tool does and its limits

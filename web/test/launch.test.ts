@@ -84,6 +84,19 @@ describe('the installed app (manifest)', () => {
     }
   });
 
+  it('browser icons float: the head on a transparent ground (favicons and the "any" icons)', async () => {
+    for (const f of ['favicon-16.png', 'favicon-32.png', 'icon-192.png', 'icon-512.png']) {
+      const { data, info } = await sharp(`${pub}${f}`).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const a = (x: number, y: number) => data[(y * info.width + x) * 4 + 3]!;
+      let clear = 0;
+      for (let y = 0; y < info.height; y++) for (let x = 0; x < info.width; x++) if (a(x, y) === 0) clear++;
+      // a real transparent ground around the head; the favicons' face crop fills most of its square, its corners stay clear
+      expect(clear / (info.width * info.height), f).toBeGreaterThan(f.startsWith('favicon') ? 0.04 : 0.3);
+      expect(a(0, info.height - 1), f).toBe(0);
+      expect(a(Math.floor(info.width / 2), Math.floor(info.height / 2)), f).toBe(255); // the head itself is opaque
+    }
+  });
+
   it('apple touch icon: 180 x 180, opaque (iOS rounds it itself)', async () => {
     const m = await sharp(`${pub}apple-touch-icon.png`).metadata();
     expect([m.width, m.height, m.hasAlpha]).toEqual([180, 180, false]);
