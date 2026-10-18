@@ -42,7 +42,7 @@ describe('one companion, two profiles', () => {
     c.setFocus({ section: 'BLE', source: 'BLE' });
     time.advance(TIMING.minScene);
     expect(c.anim).toBe('wait');
-    expect(c.stage).toEqual({ section: 'BLE', calm: true });
+    expect(c.stage).toEqual({ section: 'BLE', calm: true, code: null });
   });
 
   it('POWER during a scan switches the TV only', () => {
@@ -144,6 +144,14 @@ describe('operations: waiting, cancelled, unavailable, late answers', () => {
     emit({ type: 'op.end', op: 'new', tool: 'device.usb', severity: 'FAIL', code: 'TIMEOUT', message: 'again' });
     expect(c.op).toBe('SUCCESS');
     expect(c.message).toBeNull();
+  });
+
+  it('the code of the error on screen reaches the scene: no answer is not drawn like a refusal', () => {
+    const { c, emit } = rig();
+    emit({ type: 'op.start', op: 't', tool: 'device.dogd', params: { kind: 'connect' } });
+    emit({ type: 'op.end', op: 't', tool: 'device.dogd', severity: 'FAIL', code: 'DOGD_UNREACHABLE', message: 'refused' });
+    expect(c.anim).toBe('error');
+    expect(c.stage.code).toBe('DOGD_UNREACHABLE');
   });
 
   it('a success plays once, then the scene at rest; no timer decides a success', () => {

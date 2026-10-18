@@ -2,18 +2,20 @@
 /**
  * HARDWARE DOG / THE DOG'S SCENES
  *
- * Hardware Dog's companion is the robot dog of the owner's sheet
- * (assets/brand/source/hd-companion-dog-sheet.png, "HARDWARE DOG -
- * COMPANION TV"): the big scene in the TV and the twelve numbered scenes
- * under it. Each is cut and brought to the TV screen's pixel grid
- * (136 x 100), nothing redrawn: the same dog, the same workshop. Run with
- * `npm run companion` (it builds the Flipper Lab scenes too).
+ * Hardware Dog's companion is the robot dog of the owner's two sheets:
+ * "HW DOG / COMPANION STATES" (assets/brand/source/hd-companion-dog-
+ * states.png, ten states drawn to be read at a glance: the reference
+ * where it has the state) and "HARDWARE DOG - COMPANION TV"
+ * (hd-companion-dog-sheet.png: the workshop in the TV, and the scenes the
+ * states sheet does not draw). Each is cut and brought to the TV screen's
+ * pixel grid (136 x 100), nothing redrawn. Run with `npm run companion`
+ * (it builds the Flipper Lab scenes too).
  *
- * The twelve scenes are wide (about 2.6:1); the screen is 4:3. One window
- * of the same size is cut from every scene (so the dog has the same size
- * in all of them), placed on the dog and what it works on; the room
- * continues above it (the wall, darker upward) and the floor below it
- * (the drawing's own floor, mirrored, in shadow).
+ * The scenes are wide (2 to 2.6:1); the screen is 4:3. One window of the
+ * same size per sheet is cut from every scene (so the dog keeps its
+ * size), placed on the dog and what it works on; the room continues above
+ * it (its own wall, darker upward) and the floor below it (its own floor,
+ * its grid continued, in shadow).
  *
  * For each scene, four frames from the drawing itself:
  *   BASE      the scene as drawn
@@ -38,35 +40,51 @@ import sharp from 'sharp';
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../..');
 const SHEET = join(repo, 'assets/brand/source/hd-companion-dog-sheet.png');
+/** The owner's second sheet, "HW DOG / COMPANION STATES": ten states, drawn to be read at a glance. */
+const STATES = join(repo, 'assets/brand/source/hd-companion-dog-states.png');
 const WEB = join(repo, 'assets/brand/web');
 
 export const FW = 136;
 export const FH = 100;
 
-/** The numbered scenes: their row's picture band, in sheet pixels (inside the rounded frame). */
+/** The first sheet's numbered scenes: their row's picture band, in sheet pixels (inside the rounded frame). */
 const ROW_Y = [492, 668, 845];
 const CELL_H = 120;
 /** One window size for every numbered scene: the dog keeps its size. */
 const CELL_W = 240;
 
+/** The states sheet: each picture's top (inside its frame), and one window size for all of them. */
+const STATE_Y = [126, 441, 758, 1073, 1382];
+const STATE_W = 330;
+const STATE_H = 170;
+const state = (row, x) => ({ file: STATES, box: { x, y: STATE_Y[row], w: STATE_W, h: STATE_H } });
+
 /**
- * Each scene, where its window starts (sheet x), and whether its eyes may
- * blink. The hero is the big scene in the TV, cut to its own window.
+ * Each scene, where it is cut, and whether its eyes may blink. The states
+ * sheet is the reference where it has the state (more readable at the
+ * widget's size); the first sheet gives the workshop (the hero) and the
+ * states the second one does not draw.
  */
 const SCENES = [
+  // first sheet: the workshop at rest, and what the states sheet has no picture for
   { id: 'hero', box: { x: 122, y: 104, w: 430, h: 272 } },
-  { id: 'idle', row: 0, x: 95, blink: false },
   { id: 'usb', row: 0, x: 466 },
-  { id: 'serial', row: 0, x: 850 },
-  { id: 'bluetooth', row: 0, x: 1212 },
-  { id: 'network', row: 1, x: 100 },
-  { id: 'camera', row: 1, x: 470 },
   { id: 'analyze', row: 1, x: 848 },
   { id: 'success', row: 1, x: 1205, blink: false },
   { id: 'error', row: 2, x: 95 },
-  { id: 'disconnected', row: 2, x: 472 },
   { id: 'replay', row: 2, x: 850 },
   { id: 'export', row: 2, x: 1205 },
+  // the states sheet
+  { id: 'serial', ...state(0, 118) },
+  { id: 'bluetooth', ...state(0, 520) },
+  { id: 'network', ...state(1, 45) },
+  { id: 'camera', ...state(1, 540) },
+  { id: 'power', ...state(2, 110) },
+  { id: 'saved', ...state(2, 560), blink: false },
+  { id: 'disconnected', ...state(3, 80) },
+  { id: 'permission', ...state(3, 540) },
+  { id: 'timeout', ...state(4, 95) },
+  { id: 'rest', ...state(4, 545), blink: false },
 ];
 
 // ---------------------------------------------------------------- colors
@@ -138,7 +156,7 @@ const median = (cols) => {
 async function scene(s) {
   const box = s.box ?? { x: s.x, y: ROW_Y[s.row], w: CELL_W, h: CELL_H };
   const artH = Math.round((FW * box.h) / box.w);
-  const { data } = await sharp(SHEET)
+  const { data } = await sharp(s.file ?? SHEET)
     .extract({ left: box.x, top: box.y, width: box.w, height: box.h })
     .resize(FW, artH, { kernel: 'mitchell' })
     .ensureAlpha()
@@ -407,7 +425,12 @@ async function main() {
   const sheetW = FW * COLS;
   const sheetH = FH * Math.ceil((SCENES.length * N) / COLS);
   const atlas = new Img(sheetW, sheetH);
-  const meta = { frame: { w: FW, h: FH }, frames: ['base', 'breath', 'blink', 'ear'], source: 'assets/brand/source/hd-companion-dog-sheet.png', scenes: {} };
+  const meta = {
+    frame: { w: FW, h: FH },
+    frames: ['base', 'breath', 'blink', 'ear'],
+    sources: ['assets/brand/source/hd-companion-dog-sheet.png', 'assets/brand/source/hd-companion-dog-states.png'],
+    scenes: {},
+  };
   for (const [n, s] of SCENES.entries()) {
     const { img, top, artH, box } = await scene(s);
     const mask = dogMask(img, top, artH);
@@ -445,6 +468,7 @@ async function main() {
       dog,
       eyes: eyes.map(({ x0, y0, x1, y1 }) => ({ x0, y0, x1, y1 })),
       ear,
+      sheet: s.file ? 'states' : 'first',
       window: box,
     };
   }
