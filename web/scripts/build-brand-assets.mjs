@@ -93,6 +93,16 @@ const TVS = [
     },
   },
 ];
+/**
+ * LAUNCH (hardwaredog.org): the owner's rounded app icon, the pixel head
+ * (square, on its own dark ground) and the launch banner (Camera Sniffer,
+ * Bluetooth Lab, Flipper Lab, USB / Network / Serial), all as uploaded.
+ */
+const ROUNDED_ICON = join(SRC, 'hd-app-icon-rounded.png');
+const PIXEL_HEAD = join(SRC, 'hd-icon-pixel-head.png');
+const LAUNCH_BANNER = join(SRC, 'hd-og-launch-banner.png');
+/** The face of the pixel head (ears to the top of the collar), for the favicons. */
+const FAVICON_BOX = { left: 150, top: 180, width: 860, height: 860 };
 /** Flipper Lab banner: pixel-art lab, the dog and the dolphin, 1983 x 793. */
 const BANNER = join(SRC, 'hd-flipper-lab-banner.png');
 /** Camera Sniffer banner: pixel-art living room seen through a lens, the dog with a camera, 1983 x 793. */
@@ -259,10 +269,12 @@ async function main() {
   const markArt = await square(head, MARK_BOX, [USB_REGION]);
   const headArt = await square(head, HEAD_BOX, [USB_REGION, COLLAR_REGION]);
 
-  // FAVICON: the head alone, transparent: just the dog in the tab.
+  // FAVICON: the pixel head's face (ears, eyes, nose, the top of the collar),
+  // on its own dark ground: checked at 16 px, where the rounded icon's frame
+  // and the collar's tag turn to noise. A touch more contrast keeps the eye.
   const favicons = [];
   for (const size of [16, 32, 48]) {
-    const data = await sharp(headArt).resize(size, size, { kernel: 'lanczos3' }).png({ compressionLevel: 9 }).toBuffer();
+    const data = await sharp(PIXEL_HEAD).extract(FAVICON_BOX).resize(size, size, { kernel: 'lanczos3' }).linear(1.2, -20).png({ compressionLevel: 9 }).toBuffer();
     favicons.push({ size, data });
     if (size !== 48) await save(join(PUBLIC, `favicon-${size}.png`), sharp(data));
   }
@@ -270,12 +282,36 @@ async function main() {
   await writeFile(join(PUBLIC, 'favicon.ico'), ico(favicons));
   outputs.push([relative(repo, join(PUBLIC, 'favicon.ico')), (await stat(join(PUBLIC, 'favicon.ico'))).size]);
 
-  // APP ICON: head + collar + USB, no text, no frame.
-  await save(join(PUBLIC, 'apple-touch-icon.png'), onBackground(iconArt, 180, 0.06).png({ compressionLevel: 9 }));
-  await save(join(PUBLIC, 'icon-192.png'), onBackground(iconArt, 192, 0.06).png({ compressionLevel: 9 }));
-  await save(join(PUBLIC, 'icon-512.png'), onBackground(iconArt, 512, 0.06).png({ compressionLevel: 9 }));
-  // Maskable: art inside the 80 % safe zone.
-  await save(join(PUBLIC, 'icon-maskable-512.png'), onBackground(iconArt, 512, 0.14).png({ compressionLevel: 9 }));
+  // PWA "any": the rounded app icon as drawn (its own frame, transparent corners).
+  const rounded = await cleanAlpha(ROUNDED_ICON);
+  for (const size of [192, 512]) await save(join(PUBLIC, `icon-${size}.png`), sharp(rounded).resize(size, size, { kernel: 'lanczos3' }).png({ compressionLevel: 9 }));
+  // MASKABLE: the pixel head on its own dark ground, full bleed, no rounded
+  // corner (the system applies its mask); scaled so every drawn pixel lies
+  // inside the safe zone, the centered circle of 40 % radius.
+  const pixel = await sharp(PIXEL_HEAD).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const ground = [pixel.data[0], pixel.data[1], pixel.data[2]];
+  let reach = 0;
+  const { width: pw, height: ph } = pixel.info;
+  for (let y = 0; y < ph; y++)
+    for (let x = 0; x < pw; x++) {
+      const i = (y * pw + x) * 3;
+      if (Math.abs(pixel.data[i] - ground[0]) + Math.abs(pixel.data[i + 1] - ground[1]) + Math.abs(pixel.data[i + 2] - ground[2]) > 40) reach = Math.max(reach, Math.hypot(x - pw / 2, y - ph / 2));
+    }
+  const groundBg = { r: ground[0], g: ground[1], b: ground[2], alpha: 1 };
+  for (const size of [192, 512]) {
+    const inner = Math.floor((size * 0.4 * pw) / reach) - 2; // the art's full side, so its farthest pixel lands at 40 % - 1 px
+    const pad = (size - inner) / 2;
+    await save(
+      join(PUBLIC, `icon-maskable-${size}.png`),
+      sharp(PIXEL_HEAD)
+        .removeAlpha()
+        .resize(inner, inner, { kernel: 'lanczos3' })
+        .extend({ top: Math.floor(pad), bottom: Math.ceil(pad), left: Math.floor(pad), right: Math.ceil(pad), background: groundBg })
+        .png({ compressionLevel: 9 }),
+    );
+  }
+  // APPLE TOUCH: opaque (iOS shows transparency as black and rounds the corners itself): the pixel head, a small margin.
+  await save(join(PUBLIC, 'apple-touch-icon.png'), sharp(PIXEL_HEAD).removeAlpha().resize(164, 164, { kernel: 'lanczos3' }).extend({ top: 8, bottom: 8, left: 8, right: 8, background: groundBg }).png({ compressionLevel: 9 }));
   await save(join(WEB, 'hd-app-icon-512.webp'), sharp(iconArt).resize(512, 512).webp({ nearLossless: true, quality: 80 }));
 
   // HEADER MARK: transparent head + collar at exact display sizes (1x, 2x, 3x of 22 px).
@@ -305,6 +341,13 @@ async function main() {
   const banner = sharp(join(SRC, 'hd-social-banner.png')).resize(1200, 630, { fit: 'cover', kernel: 'lanczos3' });
   await save(join(SOCIAL, 'hd-og-1200x630.jpg'), banner.clone().jpeg({ quality: 90, mozjpeg: true }));
   await save(join(SOCIAL, 'hd-og-1200x630.webp'), banner.clone().webp({ quality: 90 }));
+  // LAUNCH SHARE IMAGE: the launch banner (1733 x 907, 1.911:1) to 1200 x 630
+  // (1.905:1): scaled to the height, 1 px trimmed on each side, nothing
+  // stretched. Served at a stable public path for og:image and twitter:image.
+  await save(
+    join(PUBLIC, 'og', 'hardware-dog-1200x630.jpg'),
+    sharp(LAUNCH_BANNER).resize(1200, 630, { fit: 'cover', position: 'centre', kernel: 'lanczos3' }).jpeg({ quality: 88, mozjpeg: true, chromaSubsampling: '4:4:4' }),
+  );
 
   // THE TVS: each overlay at 2x and 1x of its 560 px display width, and its profile.
   // The screen opening and everything outside the body are transparent.
