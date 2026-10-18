@@ -9,7 +9,7 @@
  * invents a field, or keeps scanning after stop().
  */
 
-import { dogdBleObservations, dogdBleScan, type DogdBleObservation } from '../dogd';
+import { dogdBleObservations, dogdBleScan, dogdBleStatus, type DogdBleObservation } from '../dogd';
 import type { LabClock } from '../lab/events';
 import { shortUuid, type BleObservation, type BleSourceKind } from './model';
 import { BleError, bluetoothApi, fromAdvertisement, type BtAdvertisingEvent, type BtScan } from './webbt';
@@ -34,6 +34,8 @@ export class WebBluetoothScan implements BleSource {
   readonly origin = 'PHYSICAL' as const;
   private scan: BtScan | null = null;
   private onAdv: ((e: Event) => void) | null = null;
+  /** Bumped by every start and stop: a start that resolves after a stop gives up. */
+  private gen = 0;
 
   constructor(private readonly clock: LabClock) {}
 
@@ -41,13 +43,21 @@ export class WebBluetoothScan implements BleSource {
     const api = bluetoothApi();
     if (!api) throw new BleError('BLE_UNSUPPORTED', 'this browser has no Web Bluetooth');
     if (!api.requestLEScan) throw new BleError('BLE_UNSUPPORTED', 'requestLEScan is not enabled in this browser (experimental flag)');
+    const gen = ++this.gen;
     // Must be called from the click: the permission prompt needs the gesture.
-    this.scan = await api.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
+    const scan = await api.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
+    if (gen !== this.gen) {
+      // STOP was pressed while the prompt was open.
+      scan.stop();
+      return;
+    }
+    this.scan = scan;
     this.onAdv = (e) => sink.observe(fromAdvertisement(e as BtAdvertisingEvent, this.clock.now(), this.clock.mono()));
     api.addEventListener('advertisementreceived', this.onAdv);
   }
 
   async stop(): Promise<void> {
+    this.gen++;
     const api = bluetoothApi();
     if (api && this.onAdv) api.removeEventListener('advertisementreceived', this.onAdv);
     this.onAdv = null;
@@ -91,11 +101,23 @@ export class DogdBleScan implements BleSource {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private since = 0;
   private running = false;
+  /** Bumped by every start and stop: a start that resolves after a stop gives up. */
+  private gen = 0;
+  /** What the last button asked for: true after start(), false after stop(). */
+  private wanted = false;
 
   constructor(private readonly clock: LabClock) {}
 
   async start(sink: BleSink): Promise<void> {
+    const gen = ++this.gen;
+    this.wanted = true;
     const s = await dogdBleScan(true);
+    // STOP was pressed while dogd was starting discovery: its stop may have
+    // reached dogd first, so say it again rather than leave BlueZ scanning.
+    if (gen !== this.gen) {
+      if (s.state === 'scanning' && !this.wanted) await dogdBleScan(false).catch(() => {});
+      return;
+    }
     if (!s.supported) throw new BleError('BLE_UNSUPPORTED', s.detail || 'dogd has no Bluetooth scanner on this system');
     if (s.state === 'no_adapter') throw new BleError('BLE_NO_ADAPTER', s.detail || 'no Bluetooth adapter');
     if (s.state === 'permission') throw new BleError('NotAllowedError', s.detail || 'BlueZ refused discovery');
@@ -103,27 +125,42 @@ export class DogdBleScan implements BleSource {
     this.running = true;
     // Only what arrives from now on: older reports belong to another session.
     const first = await dogdBleObservations(Number.MAX_SAFE_INTEGER).catch(() => null);
+    if (gen !== this.gen) return;
     this.since = first?.next ?? 0;
+    let polls = 0;
     const poll = async () => {
-      if (!this.running) return;
+      if (!this.running || gen !== this.gen) return;
       try {
+        // Every 2 s: is dogd still discovering? (adapter powered off, unplugged, bluetoothd gone)
+        if (++polls % 5 === 0) {
+          const st = await dogdBleStatus();
+          if (gen !== this.gen) return;
+          if (st.state !== 'scanning') {
+            this.running = false;
+            sink.failed(st.state === 'no_adapter' ? 'BLE_NO_ADAPTER' : 'BLE_ERROR', `dogd: ${st.detail || st.state}`);
+            return;
+          }
+        }
         const r = await dogdBleObservations(this.since);
+        if (gen !== this.gen) return;
         this.since = r.next;
         if (r.lost) sink.lost(r.lost);
         for (const o of r.observations) sink.observe(fromDogd(o, r.now_mono_ms, this.clock));
       } catch (e) {
-        if (this.running) {
+        if (this.running && gen === this.gen) {
           this.running = false;
           sink.failed('TEMPORARY_ERROR', `dogd: ${e instanceof Error ? e.message : String(e)}`);
           return;
         }
       }
-      if (this.running) this.timer = setTimeout(() => void poll(), 400);
+      if (this.running && gen === this.gen) this.timer = setTimeout(() => void poll(), 400);
     };
     void poll();
   }
 
   async stop(): Promise<void> {
+    this.gen++;
+    this.wanted = false;
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;

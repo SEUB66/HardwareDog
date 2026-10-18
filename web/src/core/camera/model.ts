@@ -48,6 +48,8 @@ export interface NetDevice {
   methods: string[];
   evidence: Evidence[];
   origin: Origin;
+  /** Repeated or minor answers not kept once the evidence list was full. */
+  dropped?: number;
 }
 
 /** What a person said about a device. Never changes the observations. */
@@ -91,6 +93,9 @@ export interface Classification {
 
 const MAX_EVIDENCE = 60;
 
+/** Answers the classification reads to set a state (not only a hint). */
+const decisive = (e: Evidence) => e.kind === 'wsd' || e.kind === 'upnp' || (e.kind === 'service' && !!e.fields['rtsp_status']) || (e.kind === 'mdns' && !!e.service && e.service !== '_services._dns-sd._udp.local');
+
 function summary(o: DogdLanObservation): string {
   const f = o.fields;
   switch (o.kind) {
@@ -128,8 +133,8 @@ export class NetModel {
   }
 
   /** Add one observation; returns the device it changed, or null (a note, a duplicate). */
-  add(o: DogdLanObservation, origin: Origin, labSeq?: number): NetDevice | null {
-    const id = `${o.scan}:${o.seq}`;
+  add(o: DogdLanObservation, origin: Origin, labSeq?: number, run = 0): NetDevice | null {
+    const id = `${run}:${o.scan}:${o.seq}`;
     if (this.seen.has(id)) return null;
     this.seen.add(id);
     const ev: Evidence = { id, kind: o.kind, method: o.method, at: o.wall_ms, summary: summary(o), service: o.service, port: o.port, name: o.name, fields: { ...o.fields }, raw: o.raw };
@@ -156,7 +161,9 @@ export class NetModel {
       same.at = Math.max(same.at, ev.at);
       return d;
     }
-    if (d.evidence.length < MAX_EVIDENCE) d.evidence.push(ev);
+    // Past the limit, only answers that can change the state are still kept; the rest is counted.
+    if (d.evidence.length < MAX_EVIDENCE || (decisive(ev) && d.evidence.length < MAX_EVIDENCE * 2)) d.evidence.push(ev);
+    else d.dropped = (d.dropped ?? 0) + 1;
     return d;
   }
 }
@@ -225,6 +232,8 @@ export function classify(d: NetDevice, note: DeviceNote = emptyNote()): Classifi
     if (has(n.value, 'cam', 'ipc', 'nvr', 'dvr', 'video')) reasons.push({ text: `Announces the name "${n.value}" (${n.via}). A name is chosen by whoever set the device up: it identifies nothing.`, evidence: d.evidence.find((e) => e.name === n.value)?.id ?? null, role: 'HINT' });
   }
   if (d.vendor) reasons.push({ text: `MAC prefix registered to ${d.vendor.name}: the origin of its network chip, not what the device is.`, evidence: d.evidence.find((e) => e.kind === 'neighbor')?.id ?? null, role: 'HINT' });
+  const macs = [...new Set(d.evidence.filter((e) => e.kind === 'neighbor').map((e) => e.summary.match(/as (\S+)$/)?.[1]).filter(Boolean))];
+  if (macs.length > 1) reasons.push({ text: `Several MACs were seen at this address (${macs.join(', ')}): two devices one after the other (addresses are reassigned), or a phone changing its random MAC. The rows are one address, not one device.`, evidence: d.evidence.find((e) => e.kind === 'neighbor')?.id ?? null, role: 'HINT' });
   if (d.macLocal) reasons.push({ text: 'Its MAC is locally administered (often random, as phones do on Wi-Fi): no manufacturer can be read from it.', evidence: d.evidence.find((e) => e.kind === 'neighbor')?.id ?? null, role: 'HINT' });
 
   const readable = d.evidence.some((e) => !(e.kind === 'upnp' && e.fields['note']));

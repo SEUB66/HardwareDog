@@ -279,13 +279,26 @@ dogd API: refusals, origin guard      router tests (cargo test api)
 interface listing                     REAL: dogd on the build machine listed its
                                       interface via /proc/net/route and REFUSED
                                       it (192.0.2.0/24 is not a private network)
-a scan of a real network              NOT RUN: no private network was available
-                                      in the build environment
-a real camera, NVR or ONVIF device    NOT TESTED: no hardware
+a full scan over a real Linux network REAL SOCKETS, SIMULATED DEVICE: a private
+  stack (veth, network namespace)       network (veth pair into a network
+                                      namespace) with a pretend camera answering
+                                      mDNS, SSDP + UPnP description, ONVIF
+                                      WS-Discovery, RTSP OPTIONS and HTTP, plus 30
+                                      silent hosts. dogd found it by all five
+                                      methods (186 checks, 13 s), the interface
+                                      showed it MODEL IDENTIFIED with its reasons,
+                                      the masked export leaked none of its
+                                      identifiers, a stop aborted every
+                                      connection in flight, and two starts at
+                                      once ran one scan
+a real camera, NVR or ONVIF device    NOT TESTED: no hardware. The pretend camera
+                                      follows the protocols; a real one may answer
+                                      differently
 USB interface listing                 unit tests on a sysfs tree
 web: classification, service, demo,   vitest (web/test/camera.test.ts), and the
   report, masking, inspection, clues  interface driven in Chromium (desktop and
-                                      iPhone viewports) on the DEMO network
+                                      iPhone viewports) on the DEMO network and
+                                      on dogd with the pretend camera
 camera / torch / zoom                 NOT TESTED on a phone: the code offers them
                                       only when the browser reports them
 ```
