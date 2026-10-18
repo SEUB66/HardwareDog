@@ -119,12 +119,19 @@ MEDIA SERVICE OBSERVED            RTSP answered OPTIONS; _rtsp._tcp announced;
                                   UPnP MediaServer / MediaRenderer; casting
 CLUES COMPATIBLE WITH VIDEO       ONVIF NetworkVideoTransmitter; a UPnP camera
   EQUIPMENT                       device type
-MODEL IDENTIFIED                  the above, and the device reports its model
-                                  (ONVIF hardware scope, UPnP description)
+MODEL REPORTED BY THE DEVICE      the above, and the device reports its model
+  (state MODEL_IDENTIFIED)        (ONVIF hardware scope, UPnP description)
 CAMERA CONFIRMED BY A DOCUMENTED  only when a person writes what they saw,
   VERIFICATION                    where and how
 UNDETERMINED                      seen only through answers that could not be read
 ```
+
+**A model reported on the network is not a confirmed hidden camera.** It
+says what the device announces about itself: not that it is hidden, where
+it is, or what it films. It may be a declared camera, a recorder, a doorbell.
+Every device detail and the report say, for each device, what was observed
+and what is not established; only a person's documented verification moves
+a device to CONFIRMED, and the report shows it as the person's.
 
 Hints, which decide nothing: a manufacturer (an origin, not an
 identification), a name ("cam" in a name identifies nothing), an open
@@ -279,14 +286,16 @@ dogd API: refusals, origin guard      router tests (cargo test api)
 interface listing                     REAL: dogd on the build machine listed its
                                       interface via /proc/net/route and REFUSED
                                       it (192.0.2.0/24 is not a private network)
-a full scan over a real Linux network REAL SOCKETS, SIMULATED DEVICE: a private
-  stack (veth, network namespace)       network (veth pair into a network
-                                      namespace) with a pretend camera answering
+a full scan over a real Linux network INTEGRATION TEST, NOT A HARDWARE
+  stack (veth, network namespace)     VALIDATION: real sockets, real dogd,
+                                      SIMULATED devices. A private network (veth
+                                      pair into a network namespace) with a
+                                      pretend camera answering
                                       mDNS, SSDP + UPnP description, ONVIF
                                       WS-Discovery, RTSP OPTIONS and HTTP, plus 30
                                       silent hosts. dogd found it by all five
                                       methods (186 checks, 13 s), the interface
-                                      showed it MODEL IDENTIFIED with its reasons,
+                                      showed it MODEL REPORTED with its reasons,
                                       the masked export leaked none of its
                                       identifiers, a stop aborted every
                                       connection in flight, and two starts at
@@ -296,9 +305,13 @@ a real camera, NVR or ONVIF device    NOT TESTED: no hardware. The pretend camer
                                       differently
 USB interface listing                 unit tests on a sysfs tree
 web: classification, service, demo,   vitest (web/test/camera.test.ts), and the
-  report, masking, inspection, clues  interface driven in Chromium (desktop and
-                                      iPhone viewports) on the DEMO network and
-                                      on dogd with the pretend camera
+  report, masking, inspection, clues  interface driven in Chromium (desktop, and
+                                      Chromium EMULATING iPhone viewports: not
+                                      Safari, not a physical phone) on the DEMO
+                                      network and on dogd with the pretend camera
+the real-hardware campaign            TO RUN: HARDWARE_TEST_CAMPAIGN.md. It will
+                                      validate the devices and setups it covers,
+                                      not every model
 camera / torch / zoom                 NOT TESTED on a phone: the code offers them
                                       only when the browser reports them
 ```

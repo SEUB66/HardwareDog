@@ -16,7 +16,7 @@ import banner800 from '../../../../assets/brand/web/hd-camera-sniffer-banner-800
 import banner1600 from '../../../../assets/brand/web/hd-camera-sniffer-banner-1600.webp';
 import { CATALOG } from '../../core/camera/catalog';
 import { BLE_SIGNATURES_VERSION, bleClues, bleLabel, USB_EMPTY_NOTE, USB_FUNCTION_LABEL, usbClues, type UsbClue } from '../../core/camera/clues';
-import { classify, namesOf, STATE_LABEL, STATE_ORDER, type NetDevice, type NetState } from '../../core/camera/model';
+import { classify, namesOf, NOT_ESTABLISHED, STATE_LABEL, STATE_ORDER, type NetDevice, type NetState } from '../../core/camera/model';
 import { DOGD_HOWTO, LAN_METHODS, METHOD_LABEL, type LanMethod } from '../../core/camera/net';
 import { useSettled } from '../lab/useSettled';
 import { LIMITS } from '../../core/camera/report';
@@ -406,6 +406,9 @@ function DeviceDetail({ lab, d }: { lab: Lab; d: NetDevice }) {
       <p class="dim">
         First seen {new Date(d.firstSeen).toLocaleString()} · last seen {new Date(d.lastSeen).toLocaleString()} · methods: {d.methods.join(', ')}
         {d.vendor && ` · MAC prefix owner from ${d.vendor.source ?? 'an OUI file'}`}
+      </p>
+      <p class={`note ${c.state === 'CONFIRMED' ? 'dim' : 'warn'}`}>
+        <b>Not established:</b> {NOT_ESTABLISHED[c.state]}
       </p>
       <h3 class="camera-h3">WHY</h3>
       <ul class="camera-reasons">
