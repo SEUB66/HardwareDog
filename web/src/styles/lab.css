@@ -869,6 +869,167 @@
 
 /* ---------------------------------------------------------- camera sniffer */
 
+/* the owner's posters: one at a time, full screen on click */
+.poster-slider {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.poster-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  touch-action: pan-y;
+}
+.poster-open {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: zoom-in;
+  width: min(520px, 100%);
+}
+.poster-open img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.poster-open:hover,
+.poster-open:focus-visible {
+  border-color: var(--cyan);
+}
+.poster-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 44px;
+  height: 64px;
+  margin-top: -32px;
+  border: 1px solid var(--border);
+  background: rgba(11, 13, 15, 0.82);
+  color: var(--cyan);
+  font: 600 34px/1 var(--mono);
+  cursor: pointer;
+}
+.poster-arrow:hover,
+.poster-arrow:focus-visible {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+.poster-arrow.prev {
+  left: 0;
+}
+.poster-arrow.next {
+  right: 0;
+}
+.poster-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: min(520px, 100%);
+}
+.poster-caption {
+  margin: 0;
+  font: var(--fs-meta) var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  text-align: center;
+}
+.poster-dots {
+  display: flex;
+  gap: 6px;
+}
+.poster-dots button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.poster-dots button::before {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  margin: auto;
+  border: 1px solid var(--text-dim);
+}
+.poster-dots button.on::before {
+  background: var(--pink);
+  border-color: var(--pink);
+}
+.poster-full {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: #000;
+  outline: none;
+  touch-action: pan-y pinch-zoom;
+}
+.poster-full-scroll {
+  position: absolute;
+  inset: 0;
+  bottom: calc(48px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.poster-full-scroll img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.poster-full.zoom .poster-full-scroll {
+  display: block;
+}
+.poster-full.zoom .poster-full-scroll img {
+  max-width: none;
+  max-height: none;
+  /* a phone's width is too small for the print: at least 1000 px, scrolled both ways */
+  width: max(100%, 1000px);
+  cursor: zoom-out;
+}
+.poster-full .poster-arrow {
+  margin-top: -56px;
+}
+.poster-full .poster-arrow.prev {
+  left: max(8px, env(safe-area-inset-left));
+}
+.poster-full .poster-arrow.next {
+  right: max(8px, env(safe-area-inset-right));
+}
+.poster-full-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 6px max(12px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+.poster-full-bar .poster-caption {
+  flex: 1;
+  text-align: left;
+}
+@media (max-width: 700px) {
+  .poster-arrow {
+    width: 36px;
+    height: 52px;
+    margin-top: -26px;
+    font-size: 28px;
+  }
+}
+
 .camera-banner img {
   object-position: 50% 50%;
 }
