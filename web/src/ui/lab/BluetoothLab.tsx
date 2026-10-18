@@ -31,6 +31,7 @@ import { LabLog } from './LabLog';
 import { LabSessionsPanel } from './LabSessionsPanel';
 import { SessionStrip } from './FlipperLab';
 import { useRev } from './useRev';
+import { useSettled } from './useSettled';
 
 export const BLE_TOOLS = ['SCAN', 'INSPECT', 'GATT', 'LOG', 'SESSIONS'] as const;
 export type BleTool = (typeof BLE_TOOLS)[number];
@@ -157,7 +158,10 @@ function Scan({ lab, selected, onSelect, focus, onFocus }: { lab: Lab; selected:
   if (!ble.paused) frozen.current = null;
   else frozen.current ??= live.map((d) => ({ ...d, rssiHistory: [...d.rssiHistory] }));
   const rows = frozen.current ?? live;
+  const { mark, settled } = useSettled();
   const start = (kind: 'WEB BLUETOOTH' | 'DOGD' | 'DEMO') => {
+    if (!settled()) return;
+    mark();
     setError(null);
     ble.start(kind).catch((e: unknown) => {
       const { message, code } = errorInfo(e);
@@ -175,10 +179,10 @@ function Scan({ lab, selected, onSelect, focus, onFocus }: { lab: Lab; selected:
           {ble.scanning ? (
             <>
               <Tag status="LIVE" label={`SCANNING · ${ble.sourceKind}`} />
-              <button class={`btn${ble.paused ? ' active' : ''}`} aria-pressed={ble.paused} onClick={() => ble.setPaused(!ble.paused)} title="Freeze the screen; the capture continues">
+              <button class={`btn${ble.paused ? ' active' : ''}`} aria-pressed={ble.paused} onClick={() => settled() && ble.setPaused(!ble.paused)} title="Freeze the screen; the capture continues">
                 {ble.paused ? 'RESUME VIEW' : 'PAUSE VIEW'}
               </button>
-              <button class="btn primary" onClick={() => void ble.stop()}>
+              <button class="btn primary" onClick={() => settled() && (mark(), void ble.stop())}>
                 STOP SCAN
               </button>
             </>
@@ -292,7 +296,8 @@ function Scan({ lab, selected, onSelect, focus, onFocus }: { lab: Lab; selected:
       </Panel>
       {picked.length > 0 && (
         <Panel title="RSSI HISTORY" info="Received signal strength of the selected ids, in dBm, as reported. RSSI varies with antennas, obstacles and orientation: it is not a distance.">
-          <RssiChart devices={picked} now={now} />
+          {/* A replay's times are the recording page's clock: its chart ends at its last report. */}
+          <RssiChart devices={picked} now={ble.state === 'REPLAY' ? Math.max(0, ...picked.flatMap((d) => d.rssiHistory.map((p) => p.mono))) : now} />
         </Panel>
       )}
     </>
@@ -462,7 +467,7 @@ function CharRow({ lab, c }: { lab: Lab; c: GattCharView }) {
         <div class="small">
           descriptors:{' '}
           {c.descriptors.map((d) => (
-            <button key={d.uuid} class="link" onClick={() => run(() => g.readDescriptor(c, d.uuid))} title="Read this descriptor">
+            <button key={d.key} class="link" onClick={() => run(() => g.readDescriptor(c, d))} title="Read this descriptor">
               {d.uuid} {names.descriptor(d.uuid) ?? ''} {d.value ? `= ${toHex(d.value)}` : ''} {d.error ? `(${d.error})` : ''}
             </button>
           ))}
@@ -532,13 +537,13 @@ function Gatt({ lab }: { lab: Lab }) {
       {err && <p class="note warn">{err}</p>}
       {g?.state === 'DISCONNECTED' && <p class="note warn">Disconnected. Nothing is resent on its own: CONNECT again, then act again if you mean to.</p>}
       {g?.services.map((s) => (
-        <div class="gatt-service" key={s.uuid}>
+        <div class="gatt-service" key={s.key}>
           <div class="gatt-service-head">
             SERVICE <b class="mono">{s.uuid}</b> {names.service(s.uuid) ?? ''}
             {s.error && <span class="amber"> · {s.error}</span>}
           </div>
           {s.chars.map((c) => (
-            <CharRow key={c.uuid} lab={lab} c={c} />
+            <CharRow key={c.key} lab={lab} c={c} />
           ))}
         </div>
       ))}

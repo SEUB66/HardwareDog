@@ -184,8 +184,9 @@ function ItemCard({ lab, room, item, onSheet }: { lab: Lab; room: RoomVisit; ite
           Status
           <select class="input" value={item.status} onChange={(e) => (save(), insp.update(item.id, { status: (e.target as HTMLSelectElement).value as Item['status'] }))}>
             {ITEM_STATUSES.map((s) => (
-              <option key={s} value={s}>
+              <option key={s} value={s} disabled={s === 'CONFIRMED_DOCUMENTED' && !obs.trim()}>
                 {STATUS_LABEL[s]}
+                {s === 'CONFIRMED_DOCUMENTED' && !obs.trim() ? ' (write what you saw first)' : ''}
               </option>
             ))}
           </select>
@@ -317,7 +318,12 @@ function CameraCapture({ onShot }: { onShot: (b: Blob, w: number, h: number) => 
     };
   }, []);
   const caps = capsOf(track);
-  const setConstraint = (c: Record<string, unknown>) => void track?.applyConstraints({ advanced: [c as MediaTrackConstraintSet] }).catch(() => setError('The camera refused this setting.'));
+  // A refused setting is said under the preview; the camera keeps running.
+  const [refused, setRefused] = useState<string | null>(null);
+  const setConstraint = (c: Record<string, unknown>, undo: () => void) => {
+    setRefused(null);
+    void track?.applyConstraints({ advanced: [c as MediaTrackConstraintSet] }).catch(() => (undo(), setRefused('The camera refused this setting.')));
+  };
   const shoot = () => {
     const v = video.current;
     if (!v || !v.videoWidth) return;
@@ -339,17 +345,24 @@ function CameraCapture({ onShot }: { onShot: (b: Blob, w: number, h: number) => 
               TAKE PHOTO
             </button>
             {caps.torch && (
-              <button class={`btn${torch ? ' active' : ''}`} aria-pressed={torch} onClick={() => (setConstraint({ torch: !torch }), setTorch(!torch))}>
+              <button class={`btn${torch ? ' active' : ''}`} aria-pressed={torch} onClick={() => (setConstraint({ torch: !torch }, () => setTorch(torch)), setTorch(!torch))}>
                 TORCH
               </button>
             )}
             {caps.zoom && zoom !== null && (
               <label class="camera-field inline">
                 ZOOM
-                <input type="range" min={caps.zoom.min} max={caps.zoom.max} step={caps.zoom.step || 0.1} value={zoom} onInput={(e) => (setZoom(Number((e.target as HTMLInputElement).value)), setConstraint({ zoom: Number((e.target as HTMLInputElement).value) }))} />
+                <input type="range" min={caps.zoom.min} max={caps.zoom.max} step={caps.zoom.step || 0.1} value={zoom} onInput={(e) => {
+                    const was = zoom;
+                    const z = Number((e.target as HTMLInputElement).value);
+                    setZoom(z);
+                    setConstraint({ zoom: z }, () => setZoom(was));
+                  }}
+                />
               </label>
             )}
           </div>
+          {refused && <p class="note warn">{refused}</p>}
           {!caps.torch && <p class="dim small">No torch control offered by this camera.</p>}
         </>
       )}
@@ -365,13 +378,15 @@ function Photo({ lab, id }: { lab: Lab; id: string }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     let u: string | null = null;
+    let alive = true;
     void insp.photos.get(id).then((r) => {
-      if (!r) return;
+      if (!r || !alive) return;
       setRec(r);
       u = URL.createObjectURL(r.data);
       setUrl(u);
     });
     return () => {
+      alive = false;
       if (u) URL.revokeObjectURL(u);
     };
   }, [id]);

@@ -291,12 +291,15 @@ pub async fn run(
         .and_then(|b| b.path("/"));
     let added = match om {
         Ok(b) => match b.build().await {
-            Ok(om) => om.receive_interfaces_added().await.map(|s| (om.clone(), s)),
+            Ok(om) => match om.receive_interfaces_added().await {
+                Ok(a) => om.receive_interfaces_removed().await.map(|r| (a, r)),
+                Err(e) => Err(e),
+            },
             Err(e) => Err(e),
         },
         Err(e) => Err(e),
     };
-    let (mut changes, (_om, mut added)) = match (changes, added) {
+    let (mut changes, (mut added, mut removed)) = match (changes, added) {
         (Ok(c), Ok(a)) => (c, a),
         (Err(e), _) | (_, Err(e)) => {
             let _ = ready.send(explain(&e));
@@ -337,9 +340,21 @@ pub async fn run(
             }
         }
     }
+    // How the scan ended when it was not asked to (adapter off or gone).
+    let mut ended: Option<Status> = None;
     loop {
         tokio::select! {
             _ = &mut stop => break,
+            Some(sig) = removed.next() => {
+                let Ok(args) = sig.args() else { continue };
+                let p = args.object_path().to_string();
+                if p == path.as_str() && args.interfaces().iter().any(|i| i.as_str() == "org.bluez.Adapter1") {
+                    ended = Some(Status::new("no_adapter", Some(name.clone()), format!("adapter {name} disappeared (unplugged, or bluetoothd stopped): discovery ended")));
+                    break;
+                }
+                // BlueZ forgets a device it has not heard for a while: so does this scan.
+                if p.starts_with(&prefix) { known.remove(&p); }
+            }
             Some(sig) = added.next() => {
                 let Ok(args) = sig.args() else { continue };
                 let p = args.object_path().to_string();
@@ -353,15 +368,30 @@ pub async fn run(
             Some(msg) = changes.next() => {
                 let Ok(msg) = msg else { continue };
                 let Some(p) = msg.header().path().map(|p| p.to_string()) else { continue };
-                if !p.starts_with(&prefix) { continue; }
                 let body = msg.body();
                 let Ok((iface, props, _)) = body.deserialize::<(String, HashMap<String, OwnedValue>, Vec<String>)>() else { continue };
-                if iface != "org.bluez.Device1" { continue; }
+                if p == path.as_str() && iface == "org.bluez.Adapter1" {
+                    let off = |k: &str| props.get(k).and_then(|v| bool::try_from(v).ok()) == Some(false);
+                    if off("Powered") {
+                        ended = Some(Status::new("error", Some(name.clone()), format!("adapter {name} was powered off: discovery ended")));
+                        break;
+                    }
+                    if off("Discovering") {
+                        ended = Some(Status::new("error", Some(name.clone()), format!("discovery on {name} was stopped by the system (another program, or bluetoothd)")));
+                        break;
+                    }
+                    continue;
+                }
+                if !p.starts_with(&prefix) || iface != "org.bluez.Device1" { continue; }
                 let k = known.entry(p).or_insert_with(|| { let mut k = Known::default(); k.obs.adapter = name.clone(); k });
                 if apply(k, &borrowed(&props), false) { scanner.push(k.obs.clone()); }
             }
             else => break,
         }
+    }
+    if let Some(s) = ended {
+        scanner.set_status(s);
+        return;
     }
     let _ = proxy.call_method("StopDiscovery", &()).await;
     scanner.set_status(Status::new(

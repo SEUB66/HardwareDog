@@ -186,6 +186,11 @@ export class Inspections {
     const found = this.find(itemId);
     if (!found) return;
     const before = found.item.status;
+    // "Confirmed (documented)" needs the documentation: what was seen, written down.
+    if (patch.status === 'CONFIRMED_DOCUMENTED' && !(patch.observations ?? found.item.observations).trim()) {
+      const { status: _refused, ...rest } = patch;
+      patch = rest;
+    }
     Object.assign(found.item, patch, { updated: Date.now() });
     if (patch.status && patch.status !== before) {
       const op = newOp('camera.object');

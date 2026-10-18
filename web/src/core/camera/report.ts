@@ -20,7 +20,7 @@ import type { Lang } from '../lab/rules';
 import { family } from './catalog';
 import { bleLabel, type BleClue, type UsbClue } from './clues';
 import { ITEM_STATUSES, priorityWhy, STATUS_LABEL, type Inspection } from './inspection';
-import { classify, namesOf, STATE_LABEL, STATE_ORDER, type DeviceNote, type NetDevice, type NetState } from './model';
+import { classify, namesOf, NOT_ESTABLISHED, STATE_LABEL, STATE_ORDER, type DeviceNote, type NetDevice, type NetState } from './model';
 
 export interface ReportInput {
   inspection: Inspection;
@@ -45,6 +45,12 @@ export const CONCLUSION: Record<'none' | 'some', Record<Lang, string>> = {
   some: { en: 'Clues to examine were found with the methods used (see FACTS and TO VERIFY).', fr: 'Des indices à examiner ont été relevés avec les méthodes utilisées (voir FAITS et À VÉRIFIER).' },
 };
 
+/** No clue yet, but devices or objects are still unidentified: the strongest conclusion would say too much. */
+export const conclusionOpen = (n: number, lang: Lang): string =>
+  lang === 'fr'
+    ? `Aucun indice identifié pour l’instant avec les méthodes utilisées ; ${n} élément(s) restent à vérifier (voir À VÉRIFIER).`
+    : `No clue identified so far with the methods used; ${n} item(s) remain to verify (see TO VERIFY).`;
+
 export const LIMITS = [
   'A camera that records to a memory card, without a network, or that is switched off, can escape every scan.',
   'Network discovery only sees what devices announce on the chosen network: another network (guest Wi-Fi isolation, a mobile connection) is invisible. No answer excludes nothing.',
@@ -68,13 +74,22 @@ class Masker {
     if (!m.has(value)) m.set(value, `${kind}-${m.size + 1}`);
     return m.get(value)!;
   }
-  /** Identifiers inside free text (an evidence summary): known values replaced. */
+  /** Identifiers inside free text (a summary, a note someone typed): known values replaced. */
   scrub(text: string): string {
-    if (!this.on) return text;
+    if (!this.on || !text) return text;
+    // longest first: "Camera Bedroom" is replaced whole before "Camera" could cut it
+    const known = [...this.maps.values()].flatMap((m) => [...m]).sort((a, b) => b[0].length - a[0].length);
     let t = text;
-    for (const [, m] of this.maps) for (const [v, a] of m) t = t.split(v).join(a);
-    // anything that still looks like an IPv4 address or a MAC
-    return t.replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, '[address]').replace(/\b[0-9a-f]{2}(:[0-9a-f]{2}){5}\b/gi, '[mac]');
+    for (const [v, a] of known) t = t.split(v).join(a);
+    for (const [v, a] of known) if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(v)) t = t.replace(new RegExp(v.split(':').join('[-:.]?'), 'gi'), a);
+    // anything that still looks like an identifier
+    return t
+      .replace(/\b(urn:)?(uuid:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[uuid]')
+      .replace(/\buuid:[^\s,;)"]+/gi, 'uuid:[id]')
+      .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, '[address]')
+      .replace(/\b[0-9a-f]{2}([:-])[0-9a-f]{2}(\1[0-9a-f]{2}){4}\b/gi, '[mac]')
+      .replace(/\b[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}\b/gi, '[mac]')
+      .replace(/\b[0-9a-f]{12}\b/gi, '[mac]');
   }
 }
 
@@ -88,15 +103,20 @@ export interface Report {
 
 export function buildReport(input: ReportInput, options: ReportOptions): Report {
   const m = new Masker(options.maskNetwork);
-  const personal = (s: string) => (options.hidePersonal && s ? '(hidden)' : s);
+  // What a person typed can hold an address or a name too: scrubbed like the rest.
+  const personal = (s: string) => (options.hidePersonal && s ? '(hidden)' : m.scrub(s));
   const L: string[] = [];
   const insp = input.inspection;
-  const simulated = input.network.origin === 'SIMULATED' || input.ble.origin === 'SIMULATED';
+  const simulated = input.network.origin === 'SIMULATED' || input.ble.origin === 'SIMULATED' || input.devices.some((d) => d.origin === 'SIMULATED');
 
   // pre-register identifiers so the summaries can be scrubbed
   for (const d of input.devices) {
     m.alias('host', d.ip);
     if (d.mac) m.alias('mac', d.mac);
+    for (const e of d.evidence) {
+      const mac = e.kind === 'neighbor' ? e.summary.match(/as (\S+)$/)?.[1] : undefined;
+      if (mac) m.alias('mac', mac);
+    }
     for (const n of namesOf(d)) m.alias('name', n.value);
   }
 
@@ -106,7 +126,9 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   const clueItems = items.filter(({ item }) => item.status === 'NEEDS_CHECK' || item.status === 'CONFIRMED_DOCUMENTED');
   const usbVideo = input.usb.clues.filter((u) => u.video);
   const clues = clueDevices.length + clueItems.length + usbVideo.length;
-  const conclusion = CONCLUSION[clues ? 'some' : 'none'][input.lang];
+  const todoItems = items.filter(({ item }) => item.status === 'TO_EXAMINE' || item.status === 'NEEDS_CHECK' || item.status === 'NOT_VERIFIED');
+  const todoDevices = devices.filter(({ d, c }) => ['VIDEO_COMPATIBLE', 'MODEL_IDENTIFIED', 'MEDIA_SERVICE', 'UNDETERMINED'].includes(c.state) && !input.notes.get(d.key)?.known);
+  const conclusion = clues ? CONCLUSION.some[input.lang] : todoItems.length + todoDevices.length ? conclusionOpen(todoItems.length + todoDevices.length, input.lang) : CONCLUSION.none[input.lang];
 
   L.push('# HARDWARE DOG · CAMERA SNIFFER · REPORT', '');
   L.push(`Generated: ${new Date(input.generated).toISOString()}`);
@@ -130,9 +152,15 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
 
   L.push('## FACTS (observed by the tools)', '');
   if (!devices.length && !input.ble.clues.length && !input.usb.clues.length) L.push('- Nothing was observed by the tools.');
-  for (const { d } of devices) {
+  for (const { d, c } of devices) {
     L.push(`- ${m.alias('host', d.ip)}${d.mac ? ` · ${m.alias('mac', d.mac)}` : ''}${d.vendor ? ` · MAC prefix registered to ${d.vendor.name}` : ''}${d.origin === 'SIMULATED' ? ' · SIMULATED' : ''}`);
-    for (const e of d.evidence.slice(0, 12)) L.push(`  - ${m.scrub(e.summary)} (${e.method})${ref(e.labSeq)}`);
+    // every answer an interpretation cites, then the others up to 12; the rest is counted, not hidden
+    const cited = new Set(c.reasons.map((r) => r.evidence));
+    const shown = d.evidence.filter((e) => cited.has(e.id));
+    for (const e of d.evidence) if (shown.length < 12 && !cited.has(e.id)) shown.push(e);
+    for (const e of d.evidence.filter((x) => shown.includes(x))) L.push(`  - ${m.scrub(e.summary)} (${e.method})${ref(e.labSeq)}`);
+    const more = d.evidence.length - shown.length + (d.dropped ?? 0);
+    if (more > 0) L.push(`  - ${more} more answer(s) of the same kinds, not listed (all on the lab timeline)`);
   }
   const trackers = input.ble.clues.filter((c) => c.signature);
   for (const c of trackers) L.push(`- Bluetooth ${m.alias('ble', c.id)}: ${bleLabel(c)} (${c.signature!.source})`);
@@ -142,6 +170,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   L.push('');
 
   L.push('## INTERPRETATIONS (how the classification reads the facts)', '');
+  L.push('A state is what the answers support. None of them, alone, confirms a hidden camera: a model reported on the network is what a device says about itself.', '');
   if (!devices.length) L.push('- No network device to interpret.');
   for (const { d, c } of devices) {
     L.push(`- ${m.alias('host', d.ip)}: ${STATE_LABEL[c.state]}${c.model ? ` · model: ${m.scrub(c.model)}` : ''}`);
@@ -149,6 +178,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
       const ev = d.evidence.find((e) => e.id === r.evidence);
       L.push(`  - ${r.role === 'HINT' ? 'hint: ' : ''}${m.scrub(r.text)}${ref(ev?.labSeq)}`);
     }
+    L.push(`  - not established: ${NOT_ESTABLISHED[c.state]}`);
   }
   for (const u of usbVideo) L.push(`- USB ${u.id}: ${u.reading}`);
   L.push('');
@@ -176,7 +206,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
     const f = family(item.familyId);
     L.push(`- ${personal(item.label)}${f ? ` (${f.name})` : ''} · ${room.label ? personal(room.label) : room.kind}${item.where ? ` · ${personal(item.where)}` : ''}: ${STATUS_LABEL[item.status]}`);
     if (item.observations) L.push(`  - seen: ${personal(item.observations)}`);
-    if (item.checksDone.length) L.push(`  - checks done: ${item.checksDone.join('; ')}`);
+    if (item.checksDone.length) L.push(`  - checks done: ${m.scrub(item.checksDone.join('; '))}`);
     if (item.photos.length) L.push(`  - ${item.photos.length} photo(s) kept in the browser (not in this file)`);
     declared++;
   }
@@ -184,20 +214,13 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   L.push('');
 
   L.push('## TO VERIFY', '');
-  let todo = 0;
-  for (const { room, item } of items) {
-    if (item.status === 'TO_EXAMINE' || item.status === 'NEEDS_CHECK' || item.status === 'NOT_VERIFIED') {
-      const why = priorityWhy(room, item);
-      L.push(`- ${personal(item.label)} · ${room.label ? personal(room.label) : room.kind}: ${STATUS_LABEL[item.status]}${item.nextCheck ? ` · next: ${personal(item.nextCheck)}` : ''}${why.length ? ` · organisation priority: ${why.join(', ')}` : ''}`);
-      todo++;
-    }
+  const todo = todoItems.length + todoDevices.length;
+  for (const { room, item } of todoItems) {
+    const why = priorityWhy(room, item);
+    L.push(`- ${personal(item.label)} · ${room.label ? personal(room.label) : room.kind}: ${STATUS_LABEL[item.status]}${item.nextCheck ? ` · next: ${personal(item.nextCheck)}` : ''}${why.length ? ` · organisation priority: ${why.join(', ')}` : ''}`);
   }
-  for (const { d, c } of devices) {
-    const n = input.notes.get(d.key);
-    if (['VIDEO_COMPATIBLE', 'MODEL_IDENTIFIED', 'MEDIA_SERVICE', 'UNDETERMINED'].includes(c.state) && !n?.known) {
-      L.push(`- ${m.alias('host', d.ip)} (${STATE_LABEL[c.state]}): identify it (ask the owner, find it physically); a visual inspection decides, not the scan.`);
-      todo++;
-    }
+  for (const { d, c } of todoDevices) {
+    L.push(`- ${m.alias('host', d.ip)} (${STATE_LABEL[c.state]}): identify it (ask the owner, find it physically); a visual inspection decides, not the scan.`);
   }
   if (!input.network.ran) L.push('- The network was not scanned.');
   if (!input.ble.ran) L.push('- Bluetooth was not scanned.');

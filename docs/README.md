@@ -28,6 +28,7 @@ LIBRARY        LIBRARY.md              the incident library: contribute a case
 FLIPPER        FLIPPER_LAB.md          Flipper Lab, the companion TV, lab sessions
 BLUETOOTH      BLUETOOTH_LAB.md        our own BLE scanner, inspector, GATT
 CAMERA         CAMERA_SNIFFER.md       clues of cameras, objects, guided inspection
+HW TESTS       HARDWARE_TEST_CAMPAIGN.md  BLE and Camera Sniffer on real hardware
 ```
 
 ## BUILD ON IT
@@ -54,7 +55,7 @@ Links: [VISION](VISION.md) · [LAWS](LAWS.md) ·
 [CONSOLE](CONSOLE.md) · [INSTALL](INSTALL.md) · [FIRMWARE](FIRMWARE.md) · [DOGD](DOGD.md) · [PACK](PACK.md) ·
 [DIAGNOSTICS](DIAGNOSTICS.md) · [FAULT LAB](FAULT_LAB.md) ·
 [IDENTITY](IDENTITY.md) · [LIBRARY](LIBRARY.md) ·
-[FLIPPER LAB](FLIPPER_LAB.md) · [BLUETOOTH LAB](BLUETOOTH_LAB.md) · [CAMERA SNIFFER](CAMERA_SNIFFER.md) · [PROTOCOL](PROTOCOL.md) ·
+[FLIPPER LAB](FLIPPER_LAB.md) · [BLUETOOTH LAB](BLUETOOTH_LAB.md) · [CAMERA SNIFFER](CAMERA_SNIFFER.md) · [HARDWARE TESTS](HARDWARE_TEST_CAMPAIGN.md) · [PROTOCOL](PROTOCOL.md) ·
 [ARCHITECTURE](ARCHITECTURE.md) · [SECURITY](SECURITY.md) ·
 [DESIGN SPEC](DESIGN_SPEC.md) · [BRAND](BRAND.md) ·
 [POSITIONING](MARKET_POSITIONING.md) · [LICENSE](../LICENSE) ·
