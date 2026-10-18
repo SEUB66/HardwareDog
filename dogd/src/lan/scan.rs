@@ -371,12 +371,13 @@ async fn ssdp(me: &LanScanner, iface: &Iface, hosts: &mut BTreeSet<Ipv4Addr>) ->
         me.push(o);
         n += 1;
     }
-    // The descriptions, four at a time.
+    // The descriptions, four at a time. A JoinSet: when the scan is stopped
+    // (its task aborted), dropping the set aborts every fetch still running.
     let sem = Arc::new(tokio::sync::Semaphore::new(4));
-    let mut tasks = Vec::new();
+    let mut tasks = tokio::task::JoinSet::new();
     for loc in locations {
         let sem = sem.clone();
-        tasks.push(tokio::spawn(async move {
+        tasks.spawn(async move {
             let _permit = sem.acquire().await.ok()?;
             let (host, port, path) = parse::split_http_url(&loc)?;
             let body = http_get(host, port, &path).await?;
@@ -386,10 +387,10 @@ async fn ssdp(me: &LanScanner, iface: &Iface, hosts: &mut BTreeSet<Ipv4Addr>) ->
                 parse::parse_upnp_description(&body),
                 parse::clip(&body),
             ))
-        }));
+        });
     }
-    for t in tasks {
-        if let Ok(Some((host, loc, desc, raw))) = t.await {
+    while let Some(t) = tasks.join_next().await {
+        if let Ok(Some((host, loc, desc, raw))) = t {
             let mut o = obs("upnp", "ssdp", iface);
             o.ip = Some(host.to_string());
             o.fields.insert("location".into(), loc);
@@ -482,12 +483,16 @@ async fn wsd(me: &LanScanner, iface: &Iface, hosts: &mut BTreeSet<Ipv4Addr>) -> 
             return 0;
         }
     };
-    let id = format!(
-        "{:08x}-hwdg-4000-8000-{:012x}",
-        crate::ble::wall_ms() as u32,
-        me.mono_ms()
-    );
-    for types in ["dn:NetworkVideoTransmitter", "tds:Device"] {
+    // One MessageID per probe: devices drop a message whose id they already saw.
+    for (i, types) in ["dn:NetworkVideoTransmitter", "tds:Device"]
+        .iter()
+        .enumerate()
+    {
+        let id = format!(
+            "{:08x}-4864-4000-800{i}-{:012x}",
+            crate::ble::wall_ms() as u32,
+            me.mono_ms()
+        );
         let _ = sock
             .send_to(parse::wsd_probe(&id, types).as_bytes(), WSD)
             .await;
@@ -566,13 +571,14 @@ async fn services(me: &Arc<LanScanner>, iface: &Iface, hosts: &BTreeSet<Ipv4Addr
         return 0;
     }
     let sem = Arc::new(tokio::sync::Semaphore::new(CONCURRENCY));
-    let mut tasks = Vec::new();
+    // A JoinSet, so that a stop (the scan's task aborted) aborts every check still running.
+    let mut tasks = tokio::task::JoinSet::new();
     for host in targets {
         for (port, proto) in SERVICE_PORTS {
             let sem = sem.clone();
             let me = me.clone();
             let iface = iface.clone();
-            tasks.push(tokio::spawn(async move {
+            tasks.spawn(async move {
                 let _permit = sem.acquire().await.ok()?;
                 let res = check(host, port, proto).await;
                 me.update(|s| s.done += 1);
@@ -595,12 +601,12 @@ async fn services(me: &Arc<LanScanner>, iface: &Iface, hosts: &BTreeSet<Ipv4Addr
                 o.raw = raw;
                 me.push(o);
                 Some(())
-            }));
+            });
         }
     }
     let mut open = 0;
-    for t in tasks {
-        if let Ok(Some(())) = t.await {
+    while let Some(t) = tasks.join_next().await {
+        if let Ok(Some(())) = t {
             open += 1;
         }
     }

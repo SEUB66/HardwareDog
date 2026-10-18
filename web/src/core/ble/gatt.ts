@@ -17,18 +17,29 @@
  */
 
 import { errorInfo, newOp, toBase64, type LabBus } from '../lab/events';
-import { BleError, bluetoothApi, bytesOf, type BtCharacteristic, type BtDevice, type BtServer } from './webbt';
+import { BleError, bluetoothApi, bytesOf, type BtCharacteristic, type BtDescriptor, type BtDevice, type BtServer } from './webbt';
 import { shortUuid } from './model';
 
+export interface GattDescriptorView {
+  /** Unique within its characteristic: a UUID can appear more than once. */
+  key: string;
+  uuid: string;
+  value: Uint8Array | null;
+  error: string | null;
+  desc: BtDescriptor | null;
+}
 export interface GattCharView {
+  /** Unique within the session: GATT allows several instances of one UUID. */
+  key: string;
   uuid: string;
   props: string[];
-  descriptors: { uuid: string; value: Uint8Array | null; error: string | null }[];
+  descriptors: GattDescriptorView[];
   value: Uint8Array | null;
   notifying: boolean;
   char: BtCharacteristic;
 }
 export interface GattServiceView {
+  key: string;
   uuid: string;
   chars: GattCharView[];
   error: string | null;
@@ -52,6 +63,7 @@ export class GattSession {
   history: GattEntry[] = [];
   private server: BtServer | null = null;
   private closing = false;
+  private disposed = false;
   private listeners = new Set<() => void>();
   private rev = 0;
   private readonly onDisconnect = () => this.dropped();
@@ -126,6 +138,13 @@ export class GattSession {
       this.changed();
       throw e;
     }
+    // Closed (or replaced by another pick) while connecting: let the link go.
+    if (this.closing || this.disposed) {
+      this.server.disconnect();
+      // (a disconnect() during the await may already have marked it)
+      if ((this.state as GattSession['state']) !== 'DISCONNECTED') this.dropped();
+      return;
+    }
     this.state = 'CONNECTED';
     this.log({ kind: 'link', uuid: null, bytes: null, text: 'connected' });
     this.emit('link.state', undefined, 'PASS', `${this.label} connected (GATT)`, { params: { state: 'CONNECTED' } });
@@ -133,6 +152,9 @@ export class GattSession {
   }
 
   private dropped(): void {
+    // Never connected in this session (the same device was picked again and
+    // the earlier session let it go): nothing of ours was lost.
+    if (this.state === 'PICKED') return;
     const wasConnected = this.state === 'CONNECTED';
     this.state = 'DISCONNECTED';
     for (const s of this.services) for (const c of s.chars) c.notifying = false;
@@ -143,11 +165,13 @@ export class GattSession {
 
   async disconnect(): Promise<void> {
     this.closing = true;
-    this.server?.disconnect();
+    // While CONNECTING there is no server yet: the device's own handle still cancels it.
+    (this.server ?? this.device.gatt)?.disconnect();
     if (this.state !== 'DISCONNECTED') this.dropped();
   }
 
   dispose(): void {
+    this.disposed = true;
     void this.disconnect();
     this.device.removeEventListener('gattserverdisconnected', this.onDisconnect);
     this.listeners.clear();
@@ -163,15 +187,15 @@ export class GattSession {
     const server = this.need();
     await this.run('search', 'GATT discover services', async () => {
       const out: GattServiceView[] = [];
-      for (const s of await server.getPrimaryServices()) {
-        const view: GattServiceView = { uuid: shortUuid(s.uuid), chars: [], error: null };
+      for (const [si, s] of (await server.getPrimaryServices()).entries()) {
+        const view: GattServiceView = { key: `s${si}`, uuid: shortUuid(s.uuid), chars: [], error: null };
         try {
-          for (const c of await s.getCharacteristics()) {
-            const cv: GattCharView = { uuid: shortUuid(c.uuid), props: PROPS.filter((p) => c.properties[p]), descriptors: [], value: null, notifying: false, char: c };
+          for (const [ci, c] of (await s.getCharacteristics()).entries()) {
+            const cv: GattCharView = { key: `s${si}c${ci}`, uuid: shortUuid(c.uuid), props: PROPS.filter((p) => c.properties[p]), descriptors: [], value: null, notifying: false, char: c };
             try {
-              for (const d of await c.getDescriptors()) cv.descriptors.push({ uuid: shortUuid(d.uuid), value: null, error: null });
+              for (const [di, d] of (await c.getDescriptors()).entries()) cv.descriptors.push({ key: `d${di}`, uuid: shortUuid(d.uuid), value: null, error: null, desc: d });
             } catch (e) {
-              cv.descriptors.push({ uuid: '--', value: null, error: errorInfo(e).message });
+              cv.descriptors.push({ key: 'err', uuid: '--', value: null, error: errorInfo(e).message, desc: null });
             }
             view.chars.push(cv);
           }
@@ -194,11 +218,11 @@ export class GattSession {
     return bytes;
   }
 
-  async readDescriptor(c: GattCharView, uuid: string): Promise<void> {
+  async readDescriptor(c: GattCharView, view: GattDescriptorView): Promise<void> {
     this.need();
-    const d = (await c.char.getDescriptors()).find((x) => shortUuid(x.uuid) === uuid);
-    const view = c.descriptors.find((x) => x.uuid === uuid);
-    if (!d || !view) return;
+    const d = view.desc;
+    const uuid = view.uuid;
+    if (!d) return;
     try {
       view.value = await this.run('read', `GATT read descriptor ${uuid}`, async () => bytesOf(await d.readValue()));
       view.error = null;
@@ -233,7 +257,10 @@ export class GattSession {
   async notify(c: GattCharView, on: boolean): Promise<void> {
     this.need();
     const kind = c.props.includes('notify') ? 'notify' : 'indicate';
+    const held = c as GattCharView & { handler?: (e: Event) => void };
     if (on) {
+      // A second START before the first one answered: one handler is enough.
+      if (held.handler) return;
       const handler = (e: Event) => {
         const v = (e.target as BtCharacteristic).value;
         if (!v) return;
@@ -242,18 +269,20 @@ export class GattSession {
         this.log({ kind, uuid: c.uuid, bytes, text: kind === 'notify' ? 'notification' : 'indication' });
         this.emit('observe', undefined, 'INFO', `${kind} ${c.uuid}: ${bytes.length} byte(s)`, { raw: toBase64(bytes), params: { uuid: c.uuid, op: kind } });
       };
-      (c as GattCharView & { handler?: (e: Event) => void }).handler = handler;
+      held.handler = handler;
       c.char.addEventListener('characteristicvaluechanged', handler);
       try {
         await this.run('read', `GATT start ${kind} ${c.uuid}`, () => c.char.startNotifications());
       } catch (e) {
         c.char.removeEventListener('characteristicvaluechanged', handler);
+        held.handler = undefined;
         throw e;
       }
       c.notifying = true;
     } else {
-      const h = (c as GattCharView & { handler?: (e: Event) => void }).handler;
+      const h = held.handler;
       if (h) c.char.removeEventListener('characteristicvaluechanged', h);
+      held.handler = undefined;
       await this.run('read', `GATT stop ${kind} ${c.uuid}`, () => c.char.stopNotifications()).catch(() => {});
       c.notifying = false;
     }

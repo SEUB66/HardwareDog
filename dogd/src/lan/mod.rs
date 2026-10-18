@@ -193,6 +193,9 @@ pub struct LanScanner {
     status: Mutex<Status>,
     epoch: Instant,
     job: Mutex<Option<tokio::task::JoinHandle<()>>>,
+    /// Held from a start's first check to its job being stored: two starts
+    /// at once cannot both pass "nothing is running".
+    starting: tokio::sync::Mutex<()>,
     oui: OnceLock<Oui>,
 }
 
@@ -211,6 +214,7 @@ impl LanScanner {
             status: Mutex::new(initial),
             epoch: Instant::now(),
             job: Mutex::new(None),
+            starting: tokio::sync::Mutex::new(()),
             oui: OnceLock::new(),
         })
     }
@@ -304,6 +308,9 @@ impl LanScanner {
         if !cfg!(target_os = "linux") {
             return Err(self.status().detail);
         }
+        let Ok(_starting) = self.starting.try_lock() else {
+            return Err("a scan is already starting: stop it first".into());
+        };
         if self.scanning() {
             return Err("a scan is already running: stop it first".into());
         }
@@ -361,7 +368,8 @@ impl LanScanner {
         Ok(self.status())
     }
 
-    /// Stop the scan now. What it observed stays readable.
+    /// Stop the scan now. What it observed stays readable. Aborting the job
+    /// drops its task sets, which aborts every connection still in flight.
     pub fn stop(&self) -> Status {
         if let Some(job) = self.job.lock().unwrap().take() {
             if !job.is_finished() {

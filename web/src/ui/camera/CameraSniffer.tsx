@@ -18,6 +18,7 @@ import { CATALOG } from '../../core/camera/catalog';
 import { BLE_SIGNATURES_VERSION, bleClues, bleLabel, USB_EMPTY_NOTE, USB_FUNCTION_LABEL, usbClues, type UsbClue } from '../../core/camera/clues';
 import { classify, namesOf, STATE_LABEL, STATE_ORDER, type NetDevice, type NetState } from '../../core/camera/model';
 import { DOGD_HOWTO, LAN_METHODS, METHOD_LABEL, type LanMethod } from '../../core/camera/net';
+import { useSettled } from '../lab/useSettled';
 import { LIMITS } from '../../core/camera/report';
 import { dogdUsb } from '../../core/dogd';
 import { loadNumbers } from '../../core/ble/decode';
@@ -255,6 +256,7 @@ function Network({ lab }: { lab: Lab }) {
   const net = lab.camera.net;
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const netSettled = useSettled();
   const run = (fn: () => Promise<void>) => void fn().catch((e) => setError(errorInfo(e).message));
   const rows = useMemo(
     () =>
@@ -270,13 +272,13 @@ function Network({ lab }: { lab: Lab }) {
     <>
       <Panel title="NETWORK DISCOVERY" info="dogd asks the chosen network what devices announce (neighbor table, mDNS, SSDP, ONVIF WS-Discovery), then checks a short list of ports on the hosts that showed themselves. No port scan, no password, no video stream opened. Service discovery is not traffic capture.">
         <div class="actions">
-          <button class={`btn${net.source === 'DOGD' ? ' active' : ''}`} aria-pressed={net.source === 'DOGD'} disabled={net.scanning} onClick={() => run(() => net.refresh('DOGD'))}>
+          <button class={`btn${net.source === 'DOGD' ? ' active' : ''}`} aria-pressed={net.source === 'DOGD'} disabled={net.busy} onClick={() => run(() => net.refresh('DOGD'))}>
             DOGD (THIS COMPUTER)
           </button>
-          <button class={`btn${net.source === 'DEMO' ? ' active' : ''}`} aria-pressed={net.source === 'DEMO'} disabled={net.scanning} onClick={() => run(() => net.refresh('DEMO'))}>
+          <button class={`btn${net.source === 'DEMO' ? ' active' : ''}`} aria-pressed={net.source === 'DEMO'} disabled={net.busy} onClick={() => run(() => net.refresh('DEMO'))}>
             DEMO NETWORK (SIMULATED)
           </button>
-          <button class="btn" disabled={net.scanning} onClick={() => run(() => net.refresh())}>
+          <button class="btn" disabled={net.busy} onClick={() => run(() => net.refresh())}>
             RELOAD NETWORKS
           </button>
         </div>
@@ -286,7 +288,7 @@ function Network({ lab }: { lab: Lab }) {
           <div class="camera-ifaces" role="radiogroup" aria-label="Network to scan">
             {net.interfaces.map((i) => (
               <label key={i.name} class={`camera-iface${i.refused ? ' refused' : ''}`}>
-                <input type="radio" name="iface" disabled={!!i.refused || net.scanning} checked={net.iface === i.name} onChange={() => net.choose(i.name)} />
+                <input type="radio" name="iface" disabled={!!i.refused || net.busy} checked={net.iface === i.name} onChange={() => net.choose(i.name)} />
                 <span>
                   <b>{i.name}</b> {i.network}
                   {i.refused && <span class="dim"> · refused: {i.refused}</span>}
@@ -295,7 +297,7 @@ function Network({ lab }: { lab: Lab }) {
             ))}
           </div>
         )}
-        <fieldset class="camera-methods" disabled={net.scanning}>
+        <fieldset class="camera-methods" disabled={net.busy}>
           <legend>Methods</legend>
           {LAN_METHODS.map((m) => (
             <label key={m} class="check">
@@ -305,15 +307,15 @@ function Network({ lab }: { lab: Lab }) {
         </fieldset>
         <div class="actions">
           {net.scanning ? (
-            <button class="btn" onClick={() => run(() => net.stop())}>
+            <button class="btn" onClick={() => netSettled.settled() && (netSettled.mark(), run(() => net.stop()))}>
               STOP
             </button>
           ) : (
-            <button class="btn primary" disabled={!net.iface || !net.methods.length} onClick={() => run(() => net.start())}>
+            <button class="btn primary" disabled={net.starting || !net.iface || !net.methods.length} onClick={() => netSettled.settled() && (netSettled.mark(), run(() => net.start()))}>
               SCAN THE SELECTED NETWORK
             </button>
           )}
-          {!net.scanning && rows.length > 0 && (
+          {!net.busy && rows.length > 0 && (
             <button class="btn" onClick={() => net.clear()}>
               CLEAR RESULTS
             </button>
@@ -382,7 +384,7 @@ function Network({ lab }: { lab: Lab }) {
           </ul>
         )}
       </Panel>
-      {focused && <DeviceDetail lab={lab} d={focused} />}
+      {focused && <DeviceDetail key={focused.key} lab={lab} d={focused} />}
     </>
   );
 }
@@ -494,13 +496,14 @@ function BleUsb({ lab, usb, onUsb }: { lab: Lab; usb: UsbReading | null; onUsb: 
       setBusy(false);
     }
   };
-  const start = (kind: 'WEB BLUETOOTH' | 'DOGD' | 'DEMO') => void lab.ble.start(kind).catch((e) => setError(errorInfo(e).message));
+  const { mark, settled } = useSettled();
+  const start = (kind: 'WEB BLUETOOTH' | 'DOGD' | 'DEMO') => settled() && (mark(), void lab.ble.start(kind).catch((e) => setError(errorInfo(e).message)));
   return (
     <>
       <Panel title="BLUETOOTH CLUES" info="Bluetooth Lab's observations, read for this inspection. An unidentified Bluetooth device is not a camera, and a location tracker is not a camera. The only signatures name trackers, from documented sources.">
         <div class="actions">
           {lab.ble.scanning ? (
-            <button class="btn" onClick={() => void lab.ble.stop()}>
+            <button class="btn" onClick={() => settled() && (mark(), void lab.ble.stop())}>
               STOP BLUETOOTH SCAN
             </button>
           ) : (
