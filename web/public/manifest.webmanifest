@@ -1,15 +1,19 @@
 {
+  "id": "./diagnostic.html",
   "name": "Hardware Dog",
   "short_name": "HW DOG",
-  "description": "Local hardware diagnostic system. Sniff the problem.",
+  "description": "Local-first hardware diagnostics: Camera Sniffer, Bluetooth Lab, Flipper Lab, USB, network and serial. No account. No subscription.",
   "start_url": "./diagnostic.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0B0D0F",
-  "theme_color": "#0B0D0F",
+  "orientation": "any",
+  "background_color": "#101112",
+  "theme_color": "#101112",
+  "categories": ["utilities", "developer"],
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

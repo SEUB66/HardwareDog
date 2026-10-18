@@ -167,3 +167,6 @@ main,.hero>div,.creator-grid>*,.technical>*{min-width:0}
 .raw-sheet summary::-webkit-details-marker{display:none}.raw-sheet summary span{color:var(--pink)}
 .raw-sheet[open] summary{margin-bottom:24px}.raw-documents pre{max-height:65vh}.raw-documents[open] summary span{transform:rotate(45deg)}
 @media(max-width:760px){.raw-sheet{padding:18px 14px}.raw-sheet pre{font-size:11px}.technical-heading :is(h1,h2){font-size:38px}.raw-sheet summary{font-size:12px}}
+/* The tools: four cards, two by two (one under the other on a phone); Camera Sniffer first, highlighted. */
+.tools-grid{grid-template-columns:repeat(2,1fr)}.tools-grid .featured{grid-column:auto;grid-row:auto}.tools-grid .featured h3{font-size:40px}
+@media(max-width:760px){.tools-grid{grid-template-columns:1fr}}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The public, canonical pages of hardwaredog.org. No lastmod: no reliable
+     per-page modification date is kept, and a build date would be false. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://hardwaredog.org/</loc>
+  </url>
+  <url>
+    <loc>https://hardwaredog.org/diagnostic.html</loc>
+  </url>
+  <url>
+    <loc>https://hardwaredog.org/engineering.html</loc>
+  </url>
+</urlset>
