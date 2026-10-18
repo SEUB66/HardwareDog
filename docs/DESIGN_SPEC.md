@@ -117,10 +117,14 @@ HOME         header, the brand banners, one line (YOUR HARDWARE. YOUR
              network said apart, never one "OFFLINE". A session running:
              STATUS shows it, no banner pushes it down
 BANNERS      one carousel (web/src/ui/brand): the whole picture in its
-             2.5:1 box, an HTML caption under it, 8 s a slide only while
-             nothing holds it, still with reduced motion, paused by any
-             hand until play; Camera Sniffer has its own, still during
-             a scan or an inspection
+             2.5:1 box, an HTML caption under it. It turns by itself,
+             8 s a slide; a slide chosen by hand gets its full 8 s, then
+             it carries on; a pointer over it does not hold it, keyboard
+             focus, a hidden tab or the carousel off screen do; only
+             pause stops it; still with reduced motion. On a phone one
+             slim row: caption, 32 px controls, 24 px dots, and a swipe.
+             Camera Sniffer has its own, still during a scan or an
+             inspection
 CONTRAST     WCAG AA checked: text 4.5:1 or more, control edges 3:1
 ```
 

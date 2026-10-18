@@ -18,7 +18,13 @@
  * is never assumed to agree with ours.
  */
 
-export const LAB_SOURCES = ['FLIPPER', 'BLE', 'CAMERA', 'USER', 'LAB'] as const;
+/**
+ * Where an event comes from. DEVICE is the Hardware Dog session itself
+ * (the board on the probe, its serial console, dogd's sources): the app
+ * says on the bus what its own link and operations do, so the companion
+ * follows them like any lab tool's.
+ */
+export const LAB_SOURCES = ['FLIPPER', 'BLE', 'CAMERA', 'USER', 'LAB', 'DEVICE'] as const;
 export type LabSource = (typeof LAB_SOURCES)[number];
 
 export type LabSeverity = 'INFO' | 'PASS' | 'WARN' | 'FAIL';
@@ -56,9 +62,14 @@ export interface Decoded {
 /**
  * Event types:
  *   link.state   a tool's link: params.state = HardwareState
- *   op.start     an operation begins: op, params.kind = OpKind
- *   op.progress  progress: done / total (null total = indeterminate)
- *   op.end       an operation ends: severity PASS / WARN / FAIL, code if any
+ *   op.start     an operation begins: op, params.kind = OpKind; params.wait
+ *                = 'user' while it waits for the person (a browser chooser,
+ *                a permission prompt)
+ *   op.progress  progress: done / total (null total = indeterminate);
+ *                params.wait = 'user' or null as the wait starts or ends
+ *   op.end       an operation ends: severity PASS / WARN / FAIL, code if any;
+ *                params.outcome = 'cancelled' (the person cancelled: not an
+ *                error) or 'stopped' (stopped on request: not a success)
  *   observe      an observation (a BLE advertisement, a file read): raw, decoded, measures
  *   marker       an operator marker on the timeline (button pressed, cable plugged)
  *   note         free text from the operator
