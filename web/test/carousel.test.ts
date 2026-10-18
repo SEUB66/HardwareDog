@@ -7,28 +7,31 @@ describe('banner carousel', () => {
     expect(ROTATE_MS).toBe(8000);
     let s = carousel(4);
     expect(turns(s, false)).toBe(true);
-    s = next(s, false);
+    s = next(s);
     expect(s.index).toBe(1);
     expect(turns(s, false)).toBe(true);
-    for (const r of ['hover', 'focus', 'hidden', 'offscreen', 'busy'] as const) {
+    for (const r of ['focus', 'hidden', 'offscreen', 'busy'] as const) {
       const held = hold(s, r, true);
       expect(turns(held, false), r).toBe(false);
       expect(turns(hold(held, r, false), false), r).toBe(true);
     }
     // two reasons: released one by one
-    const two = hold(hold(s, 'hover', true), 'busy', true);
-    expect(turns(hold(two, 'hover', false), false)).toBe(false);
+    const two = hold(hold(s, 'focus', true), 'busy', true);
+    expect(turns(hold(two, 'focus', false), false)).toBe(false);
   });
 
-  it('a slide chosen by hand stops it until play; pause and play are explicit', () => {
-    let s = next(carousel(3));
-    expect(s.stopped).toBe(true);
+  it('a slide chosen by hand keeps it turning and restarts the 8 s; only pause stops it', () => {
+    const a = carousel(3);
+    let s = next(a);
+    expect(s.stopped).toBe(false);
+    expect(turns(s, false)).toBe(true);
+    // choosing the slide already shown still restarts the countdown
+    expect(go(s, s.index).moves).toBe(s.moves + 1);
+    s = pause(s);
     expect(turns(s, false)).toBe(false);
-    s = hold(hold(s, 'hover', true), 'hover', false);
-    expect(turns(s, false)).toBe(false);
+    expect(turns(next(s), false)).toBe(false);
     s = play(s);
     expect(turns(s, false)).toBe(true);
-    expect(turns(pause(s), false)).toBe(false);
   });
 
   it('never turns with reduced motion, nor with one slide; wraps both ways', () => {
