@@ -541,6 +541,17 @@ describe('report', () => {
   });
 });
 
+describe('the posters slideshow', () => {
+  it('has the five sheets, objects 01 to 80 without a gap, and wraps both ways', async () => {
+    const { POSTERS, step } = await import('../src/ui/camera/PosterSlider');
+    expect(POSTERS).toHaveLength(5);
+    POSTERS.forEach((p, i) => expect(p.range).toEqual([i * 16 + 1, i * 16 + 16]));
+    expect(step(4, 1)).toBe(0);
+    expect(step(0, -1)).toBe(4);
+    expect(step(2, 1)).toBe(3);
+  });
+});
+
 describe('the lab database upgrade', () => {
   it('waits for a tab holding the older version, then works in memory and says why; this version never blocks a newer one', async () => {
     const { IDBFactory } = await import('fake-indexeddb');

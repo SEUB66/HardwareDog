@@ -185,9 +185,38 @@ Filters: room, power, local storage documented, communication documented,
 inspection method, text. Each sheet: observable particularities, ordinary
 look-alikes, possible checks, scanner limits, documented models.
 
-**Illustrations are generic drawings, labeled as such, never a photo of a
-product.** No photo is shown unless its reuse is allowed and credited; none
-is in this version.
+**The catalog's illustrations are generic drawings, labeled as such, never
+a photo of a product.**
+
+### The posters ("sniff the sniffer")
+
+The overview shows the owner's five posters as a slideshow (arrows, keys,
+a swipe; a click opens one full screen, a second click shows it at full
+width to read the small print): 80 hidden-camera products in five sheets,
+power and connections, clocks and media, everyday objects, room and
+outdoor, personal and portable, each with its seller, the seller's
+description and reference. Sources: `assets/illustrations/Camera-Sniffer-0N-*.png`
+(2400 x 3540); `npm run assets` makes the WebP the page loads (1200 for
+the page, 2400 for full screen), only the poster on screen and the next.
+
+What is open on them, said rather than hidden:
+
+- The product photos are the sellers' (SpyCentre, SpyAssociates), credited
+  on each sheet. No licence to reuse them was found on either site, and no
+  permission is on file: until there is one, they are all rights reserved.
+- A brand name in a listing (Kidde, First Alert, Philips, Roku, LG,
+  Logitech...) is the seller's: a camera built into that product, not a
+  product of that brand.
+- A sample of eleven references was checked by web search only (the
+  sellers' pages could not be opened from the build environment): six
+  found as printed; #12 is LawMate PV-CG20 (title); #41 carries the USB
+  hub's reference (the diffuser's is reported as LM-LMDiffuser); #49's
+  reference was not found; #70 reads KB-PV-900EV03 where the model is
+  PV-900EVO3 (letter O); #03's reference was not found.
+- The "companion index" the sheets mention (source links, exact
+  references) is not in this repository yet.
+- Cameras marked 4G (#26, #59, #60) send over the mobile network: they
+  never appear on the local network, like the SD-card ones.
 
 Documented models (version 2026-10-17.1): two LawMate charger references
 were found by web search on 2026-10-17 (KJB/LawMate PV-CS10iA on a retailer
