@@ -28,7 +28,12 @@ if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: re
       observer.unobserve(entry.target);
     }
   }, { threshold: 0.08 });
-  document.querySelectorAll('.reveal').forEach(el => { el.classList.add('animate'); observer.observe(el); });
+  // What is on screen at load is painted at once (the largest paint never waits for this script); the rest fades in.
+  document.querySelectorAll('.reveal').forEach(el => {
+    if (el.getBoundingClientRect().top < innerHeight) return;
+    el.classList.add('animate');
+    observer.observe(el);
+  });
 }
 const translations: Record<string, string> = {
 'Offrir un café à Seub':'Buy Seub a coffee',
@@ -106,6 +111,20 @@ Object.assign(translations, {
 'Lire le plan complet ↗':'Read the full plan ↗'
 });
 Object.assign(translations, {
+  'LES OUTILS / DANS LE NAVIGATEUR': 'THE TOOLS / IN YOUR BROWSER',
+  'Diagnostic matériel local-first.': 'Local-first hardware diagnostics.',
+  'Dans votre navigateur.': 'In your browser.',
+  'Camera Sniffer, Bluetooth Lab, Flipper Lab, USB, réseau et série : ce que chaque outil fait vraiment, et ses limites. Une démo fonctionne dans tous les navigateurs.': 'Camera Sniffer, Bluetooth Lab, Flipper Lab, USB, network and serial: what each tool really does, and its limits. A demo works in every browser.',
+  'Caméras cachées : des indices, sans app cloud.': 'Hidden cameras: clues, without a cloud app.',
+  'Repère des indices de caméras sur un réseau que vous choisissez (avec dogd), en Bluetooth et en USB, et guide une inspection physique objet par objet. Il dit ce qu’il observe : un scan sans indice ne prouve pas qu’il n’y a aucune caméra.': 'Looks for camera clues on a network you choose (with dogd), over Bluetooth and USB, and guides a physical inspection object by object. It says what it observes: a scan with no clue does not prove there is no camera.',
+  'Un scanner Bluetooth LE dans le navigateur.': 'A Bluetooth LE scanner in your browser.',
+  'Les appareils Bluetooth LE autour de vous, par Web Bluetooth quand le navigateur le permet, ou par dogd sous Linux.': 'The Bluetooth LE devices around you, through Web Bluetooth where the browser allows it, or dogd on Linux.',
+  'Flipper Zero par Web Serial, sans app à installer.': 'Flipper Zero over Web Serial, no app to install.',
+  'Lire le stockage et les captures d’un Flipper Zero depuis un navigateur Chromium sur ordinateur (Web Serial).': 'Read a Flipper Zero’s storage and captures from a Chromium browser on a computer (Web Serial).',
+  'USB · RÉSEAU · SÉRIE': 'USB · NETWORK · SERIAL',
+  'La console d’une carte, le réseau de cet ordinateur.': 'A board’s console, this computer’s network.',
+  'La console série de n’importe quelle carte dans le navigateur ; le réseau et les périphériques USB de cet ordinateur par dogd, le daemon local optionnel. La sonde Hardware Dog est encore en développement.': 'Any board’s serial console in the browser; this computer’s network and USB devices through dogd, the optional local daemon. The Hardware Dog probe is still in development.',
+  'Les outils': 'The tools',
   'Architecture.': 'Architecture.',
   'Plans & contrats.': 'Plans & contracts.',
   'Les documents du dépôt, directement. Schémas texte, couches du système, câblage et conditions de validation.': 'Straight from the repository: text diagrams, system layers, wiring and validation gates.',
@@ -127,8 +146,8 @@ if (language === 'en') {
     }
   });
   const engineering = document.body.dataset.page === 'engineering';
-  document.title = engineering ? 'Hardware Dog — Architecture & roadmap' : 'Hardware Dog — Your hardware. Your rules.';
-  document.querySelector('meta[name="description"]')?.setAttribute('content', engineering ? 'Hardware Dog architecture, development plan and roadmap: TypeScript, Rust, ESP32-S3 firmware and verifiable evidence.' : 'Hardware Dog: local hardware diagnostics. No account, no subscription, no required cloud.');
+  document.title = engineering ? 'Hardware Dog — Architecture & roadmap' : 'Hardware Dog — Camera Sniffer & Hardware Diagnostics';
+  document.querySelector('meta[name="description"]')?.setAttribute('content', engineering ? 'Hardware Dog architecture, development plan and roadmap: TypeScript, Rust, ESP32-S3 firmware and verifiable evidence.' : 'Local-first hardware diagnostic tool in your browser: hidden camera clues without a cloud app, a Bluetooth LE scanner, Flipper Zero over Web Serial. No account. No tracking.');
 }
 const motion = matchMedia('(prefers-reduced-motion: reduce)');
 if (!motion.matches) {

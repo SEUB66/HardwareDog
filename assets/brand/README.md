@@ -49,12 +49,15 @@ source/hd-icon-pixel-head.png       LAUNCH     the pixel head on its own dark gr
 source/hd-og-launch-banner.png      LAUNCH     launch banner: Camera Sniffer (fisheye), Bluetooth Lab,
                                                Flipper Lab, USB / Network / Serial, 1733x907 (uploaded
                                                F5A9EE44-....png): web/public/og/hardware-dog-1200x630.jpg
-                                               (og:image, twitter:image); all by `npm run assets`
+                                               (share image of engineering.html); all by `npm run assets`
 source/hd-flipper-lab-banner.png    FLIPPER LAB pixel-art lab banner: the dog and the dolphin, 1983x793
 source/hd-camera-sniffer-banner.png CAMERA      Camera Sniffer banner (pixel art, owner-supplied), 1983x793;
                                                web/hd-camera-sniffer-banner-800/1600.webp by `npm run assets`
-05AFE914-....png                    BANNER     NO COOKIES. (home, slide 1), 1983x793, as committed
-4A39216F-....png                    BANNER     YOUR DATA. YOUR MACHINE. (home, slide 2), 1983x793
+05AFE914-....png                    BANNER     NO COOKIES. (home, slide 1), 1983x793, as committed; also
+                                               web/public/og/hardware-dog-no-cookies-1200x630.jpg (the home's
+                                               share image: whole, wall and floor continued above and below)
+4A39216F-....png                    BANNER     YOUR DATA. YOUR MACHINE. (home, slide 2), 1983x793; also
+                                               web/public/og/hardware-dog-your-data-1200x630.jpg (the tool's)
 73B77AA8-....png                    BANNER     NO LEASH. (home, slide 3), 1983x793
 10CA7130-....jpeg                   BANNER     ONE LAST FIX. signed Sébastien Germain (home, slide 4), 1983x793
 D3332EF6-....png                    BANNER     SCAN THIS. NOT MY FACE. (Camera Sniffer, slide 2), 1983x793

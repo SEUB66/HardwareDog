@@ -6,24 +6,24 @@
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#101112" />
     <title>Hardware Dog — Camera Sniffer &amp; Hardware Diagnostics</title>
-    <meta name="description" content="Local-first tools for camera inspection, Bluetooth, Flipper Zero, USB, network and serial diagnostics. No account. No subscription." />
+    <meta name="description" content="Local-first hardware diagnostic tool in your browser: hidden camera clues without a cloud app, a Bluetooth LE scanner, Flipper Zero over Web Serial. No account. No tracking." />
     <link rel="canonical" href="https://hardwaredog.org/diagnostic.html" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Hardware Dog" />
     <meta property="og:title" content="Hardware Dog — Camera Sniffer &amp; Hardware Diagnostics" />
-    <meta property="og:description" content="Local-first tools for camera inspection, Bluetooth, Flipper Zero, USB, network and serial diagnostics. No account. No subscription." />
+    <meta property="og:description" content="Local-first hardware diagnostic tool in your browser: hidden camera clues without a cloud app, a Bluetooth LE scanner, Flipper Zero over Web Serial. No account. No tracking." />
     <meta property="og:url" content="https://hardwaredog.org/diagnostic.html" />
     <meta property="og:locale" content="en_US" />
-    <meta property="og:image" content="https://hardwaredog.org/og/hardware-dog-1200x630.jpg" />
+    <meta property="og:image" content="https://hardwaredog.org/og/hardware-dog-your-data-1200x630.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Hardware Dog: the robot dog with a magnifier next to Camera Sniffer, Bluetooth Lab, Flipper Lab, and USB, network and serial tools. Local-first. No account. No subscription." />
+    <meta property="og:image:alt" content="Hardware Dog: the robot dog next to a beige computer whose screen shows a LOCAL folder. YOUR DATA. YOUR MACHINE. Local diagnostics. You control the export." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Hardware Dog — Camera Sniffer &amp; Hardware Diagnostics" />
-    <meta name="twitter:description" content="Local-first tools for camera inspection, Bluetooth, Flipper Zero, USB, network and serial diagnostics. No account. No subscription." />
-    <meta name="twitter:image" content="https://hardwaredog.org/og/hardware-dog-1200x630.jpg" />
-    <meta name="twitter:image:alt" content="Hardware Dog: the robot dog with a magnifier next to Camera Sniffer, Bluetooth Lab, Flipper Lab, and USB, network and serial tools." />
+    <meta name="twitter:description" content="Local-first hardware diagnostic tool in your browser: hidden camera clues without a cloud app, a Bluetooth LE scanner, Flipper Zero over Web Serial. No account. No tracking." />
+    <meta name="twitter:image" content="https://hardwaredog.org/og/hardware-dog-your-data-1200x630.jpg" />
+    <meta name="twitter:image:alt" content="Hardware Dog: the robot dog next to a beige computer whose screen shows a LOCAL folder. YOUR DATA. YOUR MACHINE. Local diagnostics. You control the export." />
     <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png" />
@@ -34,14 +34,16 @@
   <body>
     <!-- What this tool is, readable before (and without) JavaScript; the interface replaces it when it starts. -->
     <main id="intro" class="intro-static">
-      <h1>Hardware Dog — Camera Sniffer &amp; hardware diagnostics</h1>
-      <p>Local-first diagnostic tools that run in your browser. No account. No subscription. Sessions stay on this machine; you choose what to export.</p>
-      <ul>
-        <li><b>Camera Sniffer</b>: clues of cameras on a network you choose (through dogd), over Bluetooth and USB, and a guided physical inspection. It says what it observes; a scan with no clue does not prove a place has no camera.</li>
-        <li><b>Bluetooth Lab</b>: scan, inspect and read Bluetooth LE devices, through Web Bluetooth where the browser offers it or dogd on Linux.</li>
-        <li><b>Flipper Lab</b>: read a Flipper Zero's storage and captures over USB.</li>
-        <li><b>USB, network, serial</b>: a board's serial console in the browser; this computer's network and USB devices through dogd, the optional local daemon.</li>
-      </ul>
+      <h1>Hardware Dog — a local-first hardware diagnostic tool in your browser</h1>
+      <p>Sniff the hardware. Not the human. No account. No subscription. No tracking. Sessions stay on this machine; you choose what to export.</p>
+      <h2>Camera Sniffer: hidden camera clues, without a cloud app</h2>
+      <p>Looks for clues of cameras on a network you choose (through dogd), over Bluetooth and USB, and guides a physical inspection object by object. It says what it observes; a scan with no clue does not prove a place has no camera.</p>
+      <h2>Bluetooth Lab: a Bluetooth LE scanner in the browser</h2>
+      <p>Scan, inspect and read Bluetooth LE devices (GATT), through Web Bluetooth where the browser offers it or dogd on Linux. The source is public.</p>
+      <h2>Flipper Lab: Flipper Zero over Web Serial, no app to install</h2>
+      <p>Read a Flipper Zero's storage and captures over USB, from a Chromium-based browser on a computer.</p>
+      <h2>USB, network, serial</h2>
+      <p>A board's serial console in the browser; this computer's network and USB devices through dogd, the optional local daemon.</p>
       <p>Limits: Web Serial and Web Bluetooth need a Chromium-based browser on a computer; network discovery needs dogd running on this computer; the Hardware Dog probe is still in development. A demo works in any browser.</p>
       <p><a href="./">About Hardware Dog</a> · <a href="./engineering.html">Architecture</a></p>
     </main>
