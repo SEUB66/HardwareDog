@@ -20,6 +20,7 @@ import { webSerialSupported } from '../../core/webserial';
 import { BannerCarousel } from '../brand/BannerCarousel';
 import { HOME_SLIDES } from '../brand/slides';
 import { Icon } from '../components/Icon';
+import { InstallCard } from '../Pwa';
 
 export type DogdState = 'checking' | 'running' | 'absent';
 
@@ -196,6 +197,8 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
           </li>
         </ul>
       </div>
+
+      <InstallCard lang={lang} />
 
       <section class="home-tools" aria-labelledby="home-tools-title">
         <h2 id="home-tools-title" class="home-h2">

@@ -25,3 +25,23 @@
   [headers.values]
     Content-Type = "text/plain; charset=utf-8"
     Cache-Control = "no-cache"
+
+# The service worker is checked on every visit: a new version is found as
+# soon as it is deployed (it then waits for the person, docs/WEB_APP.md).
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# Hashed build files never change under the same name.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "no-cache"
+

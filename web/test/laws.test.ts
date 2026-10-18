@@ -61,8 +61,9 @@ describe('LAW: the cloud is never required', () => {
 
   for (const [path, page] of Object.entries(html)) {
     it(`${path} loads nothing from a remote host`, () => {
-      // A user-activated repository link is navigation, not a runtime dependency.
-      const resources = page.replace(/<a\b[^>]*>/gi, '');
+      // A user-activated repository link is navigation, not a runtime dependency;
+      // the canonical address names the page for search engines, nothing loads it.
+      const resources = page.replace(/<a\b[^>]*>/gi, '').replace(/<link rel="canonical" href="https:\/\/hardwaredog\.org\/[a-z.]*">|<link rel="canonical" href="https:\/\/hardwaredog\.org\/[a-z.]*" \/>/g, '');
       expect(resources).not.toMatch(/(src|href)\s*=\s*["']https?:/);
       expect(resources).not.toMatch(/(src|href)\s*=\s*["']\/\//);
     });
