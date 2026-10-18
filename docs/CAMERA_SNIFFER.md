@@ -35,6 +35,16 @@ TESTS       web/test/camera.test.ts, dogd: cargo test lan, cargo test usb
 
 ---
 
+## THE BANNERS
+
+Three brand banners turn at the top of the section: CAMERA SNIFFER, SCAN
+THIS. NOT MY FACE., HUMAN VERIFICATION FAILED. They are brand pictures:
+never a measurement, never a detection result, and the caption under the
+last one says so. They hold still while a scan or an inspection runs,
+and with reduced motion. Next to them, one line on what the section can
+and cannot do: it helps identify clues and devices; a camera off the
+network, switched off or recording to an SD card may not appear.
+
 ## THE FIVE VIEWS
 
 ```text

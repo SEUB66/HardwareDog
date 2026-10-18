@@ -28,7 +28,7 @@ BROWSER                Chrome or Edge on a computer (Web Serial), over https
 
 ```text
 1. PLUG IN     the board, with a data cable (some cables only charge)
-2. CHOOSE      START HERE -> SERIAL CONSOLE, then the port in Chrome's list
+2. CHOOSE      the home: TOOLS -> SERIAL CONSOLE -> OPEN THE CONSOLE, then the port in Chrome's list
 3. WATCH       SERIAL: every line, live; the rate is 115200 to start
 4. RATE        unreadable lines? choose the board's rate on SERIAL (9600,
                74880 for an ESP8266 boot, 115200...) and APPLY

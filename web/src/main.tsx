@@ -4,10 +4,15 @@ import { render } from 'preact';
 import '@fontsource/ibm-plex-mono/latin-400.css';
 import '@fontsource/ibm-plex-mono/latin-600.css';
 import '@fontsource/ibm-plex-sans-condensed/latin-600.css';
+// Descriptions read at length (home, banners): the condensed sans, regular.
+import '@fontsource/ibm-plex-sans-condensed/latin-400.css';
+// The pixel lettering of the banners, for short titles only.
+import '@fontsource/silkscreen/latin-400.css';
 import './styles/tokens.css';
 import './styles/app.css';
 import './styles/glass.css';
 import './styles/lab.css';
+import './styles/home.css';
 import { SessionArchive } from './core/archive';
 import { BUILD } from './core/ascii';
 import { createLab } from './core/lab/context';

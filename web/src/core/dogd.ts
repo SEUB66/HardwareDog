@@ -52,6 +52,9 @@ async function getJson<T>(url: string): Promise<T> {
 
 export const dogdLink = (base = DOGD_URL): Promise<DogdLink> => getJson<DogdLink>(`${base}/v1/link`);
 
+/** Is dogd running on this computer? Its version when it answers (nothing is started by asking). */
+export const dogdHealth = (base = DOGD_URL): Promise<{ dogd: string; hdp: number; status: string }> => getJson(`${base}/v1/health`);
+
 /** Every link dogd holds, D1 first. A dogd older than packs has one: /v1/link. */
 export async function dogdLinks(base = DOGD_URL): Promise<DogdLink[]> {
   try {

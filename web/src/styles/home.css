@@ -1,0 +1,558 @@
+/*
+ * HARDWARE DOG / HOME AND BANNERS
+ *
+ * The banners set the tone: robot dog, pixel art, CRT, cyan, magenta and
+ * cream. Short titles in the pixel font (Silkscreen, bundled); everything
+ * read at length stays in Plex. Content on opaque surfaces; state colors
+ * (green, amber, red) only for states.
+ */
+
+:root {
+  --pixel: 'Silkscreen', var(--cond);
+  --cream: #f2f0e9;
+  --magenta: #ff3d8b;
+  /* the edge of a control: 3:1 or more against its surface (WCAG 1.4.11) */
+  --control-edge: #666d72;
+}
+:root[data-theme='light'] {
+  --magenta: #c4246f;
+  --control-edge: #7d858d;
+}
+:root[data-field='on'] {
+  --magenta: #b3005e;
+  --control-edge: #2a2e31;
+}
+
+.btn {
+  border-color: var(--control-edge);
+}
+/* On the light themes the cyan is darker: its button text turns white to stay readable. */
+:root[data-theme='light'] .btn.primary,
+:root[data-field='on'] .btn.primary {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  color: #ffffff;
+}
+
+/* The pixel wordmark and screen titles: the banners' lettering, short words only. */
+.head .wordmark,
+.screen-title {
+  font-family: var(--pixel);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+.head .wordmark {
+  font-size: 20px;
+}
+/* only the regular weight is bundled: no synthesized bold */
+.head .wordmark b,
+.screen-title b {
+  font-weight: 400;
+}
+.screen-title .sub {
+  font-family: var(--mono);
+  font-weight: 400;
+}
+
+/* ------------------------------------------------------------------ home */
+
+.home {
+  display: grid;
+  gap: 16px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 8px;
+}
+
+.home-hero {
+  display: grid;
+  gap: 6px;
+  padding: 2px 2px 0;
+}
+.home-tagline {
+  margin: 0;
+  font-family: var(--pixel);
+  font-weight: 400;
+  font-size: clamp(20px, 3.1vw, 34px);
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--cream);
+  text-shadow: 2px 2px 0 var(--magenta);
+}
+:root[data-theme='light'] .home-tagline,
+:root[data-field='on'] .home-tagline {
+  color: var(--text);
+  text-shadow: 2px 2px 0 #ff3d8b55;
+}
+.home-values {
+  margin: 0;
+  font-family: var(--pixel);
+  font-size: 14px;
+  letter-spacing: 0;
+  color: var(--cyan);
+}
+.home-privacy {
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 400;
+  font-size: 16px;
+  color: var(--text);
+}
+
+/* Device, dogd, browser: three facts, side by side. */
+.home-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.home-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: var(--fs-text);
+}
+.home-state-k {
+  font-family: var(--pixel);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.home-state-v.ok {
+  color: var(--green);
+}
+.home-state-v.warn {
+  color: var(--amber);
+}
+.home-state-v.unknown {
+  color: var(--text);
+}
+.home-state-act {
+  min-height: 24px;
+  font-size: var(--fs-meta);
+}
+
+.home-h2 {
+  margin: 0 0 10px;
+  font-family: var(--pixel);
+  font-weight: 400;
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--cream);
+}
+:root[data-theme='light'] .home-h2,
+:root[data-field='on'] .home-h2 {
+  color: var(--text);
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--cyan);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 10px 26px #00000033;
+}
+.tool-card.tone-pink {
+  border-top-color: var(--magenta);
+}
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tool-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel-alt);
+  color: var(--cyan);
+}
+.tone-pink .tool-icon {
+  color: var(--magenta);
+}
+.tool-title {
+  margin: 0;
+  font-family: var(--pixel);
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+.tool-text {
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+}
+.tool-can {
+  margin: 0;
+  font-family: var(--cond);
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+.tool-can.ok .tool-can-mark {
+  color: var(--green);
+}
+.tool-can.no {
+  color: var(--amber);
+}
+.tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+.home .btn {
+  min-height: 44px;
+}
+/* Unavailable: said in words next to it; the button stays readable, never faded. */
+.home .btn:disabled {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--border);
+  color: var(--text-dim);
+  box-shadow: none;
+  transform: none;
+}
+.home .btn.primary:disabled {
+  background: transparent;
+  color: var(--text-dim);
+}
+.home .demo-btn {
+  border-color: #e4b04a99;
+  color: var(--amber);
+}
+
+.home-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.home-sources-k {
+  font-family: var(--pixel);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-right: 4px;
+}
+
+.home-guide {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.home-guide > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 16px;
+  font-family: var(--pixel);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--cyan);
+  cursor: pointer;
+  list-style: none;
+}
+.home-guide > summary::-webkit-details-marker {
+  display: none;
+}
+.home-guide > summary::before {
+  content: '+';
+  width: 18px;
+  color: var(--magenta);
+}
+.home-guide[open] > summary::before {
+  content: '−';
+}
+.home-guide-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 16px 16px;
+  font-family: var(--cond);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.home-guide-body p {
+  margin: 0;
+}
+
+/* Wide screens: the banners and the words side by side, the tools in view. */
+.home-top,
+.home-side {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .home-top {
+    grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+    align-items: start;
+    gap: 18px;
+  }
+  .home-tagline {
+    font-size: clamp(22px, 2.1vw, 30px);
+  }
+  .home-states {
+    display: grid;
+    gap: 6px;
+  }
+}
+
+/* ------------------------------------------------------------------ banner carousel */
+
+.banner-carousel {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0c0d0e;
+  overflow: hidden;
+}
+/* The picture's own box, reserved before it loads: whole, never cropped. */
+.bc-viewport {
+  position: relative;
+  aspect-ratio: 1983 / 793;
+  width: 100%;
+  background: #0c0d0e;
+  touch-action: pan-y;
+}
+.bc-slide {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.45s ease,
+    visibility 0s linear 0.45s;
+}
+.bc-slide.shown {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.45s ease,
+    visibility 0s;
+}
+.banner-carousel.still .bc-slide,
+:root[data-motion='reduced'] .bc-slide {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bc-slide {
+    transition: none;
+  }
+}
+.bc-slide img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.bc-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+.bc-captions {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+.bc-caption {
+  grid-area: 1 / 1;
+  margin: 0;
+  visibility: hidden;
+  font-family: var(--cond);
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+}
+.bc-caption.shown {
+  visibility: visible;
+}
+.bc-count {
+  flex: none;
+  margin-right: 8px;
+  font-family: var(--pixel);
+  font-size: 11px;
+  color: var(--magenta);
+}
+.bc-controls {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.bc-btn,
+.bc-dot {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.bc-btn:hover,
+.bc-dot:hover {
+  background: var(--panel-alt);
+  color: var(--cyan);
+}
+.bc-btn span[aria-hidden='true'] {
+  font-family: var(--mono);
+}
+.bc-dots {
+  display: flex;
+}
+.bc-dot span {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--text-dim);
+}
+.bc-dot.on span {
+  background: var(--magenta);
+  border-color: var(--magenta);
+}
+.bc-btn:focus-visible,
+.bc-dot:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+/* ------------------------------------------------------------------ camera sniffer */
+
+.camera-banners {
+  border-color: var(--lab-line, var(--border));
+  border-bottom: 3px solid var(--lab-orange, var(--magenta));
+}
+.camera-top {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .camera-top {
+    grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+    align-items: center;
+    gap: 18px;
+  }
+  .camera-top .camera-intro {
+    margin: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ narrow screens */
+
+/* The header between phone and desktop: the facts that do not fit give way to the short tags. */
+@media (max-width: 1180px) {
+  .head .wordmark {
+    font-size: 16px;
+  }
+}
+@media (min-width: 761px) and (max-width: 1024px) {
+  .head .opt {
+    display: none;
+  }
+  .head .narrow-only {
+    display: contents;
+  }
+}
+
+@media (max-width: 1100px) {
+  .tool-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .home {
+    gap: 12px;
+  }
+  .tool-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The caption on its own line under the picture, the controls under it. */
+  .bc-bar {
+    flex-wrap: wrap;
+    padding: 6px 4px 2px 12px;
+    gap: 0;
+  }
+  .bc-captions {
+    flex-basis: 100%;
+    padding: 4px 8px 2px 0;
+    align-items: start;
+  }
+  .bc-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .home-state {
+    padding: 6px 10px;
+  }
+  .home-tagline {
+    font-size: 20px;
+  }
+  .head .wordmark {
+    font-size: 13px;
+  }
+}
+
+/* The pixel font comes in one weight: never a synthesized bold or slant. */
+.head .wordmark,
+.screen-title,
+.home-tagline,
+.home-values,
+.home-h2,
+.tool-title,
+.home-state-k,
+.home-sources-k,
+.home-guide > summary,
+.bc-count {
+  font-synthesis: none;
+}
+
+/* Camera Sniffer on a narrow screen: the views and the scan first, the TV after them. */
+@media (max-width: 1100px) {
+  .camera-lab .lab-side {
+    order: 0;
+  }
+}
