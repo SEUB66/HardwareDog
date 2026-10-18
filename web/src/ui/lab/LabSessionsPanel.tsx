@@ -8,6 +8,7 @@ import { useMemo, useState } from 'preact/hooks';
 import type { Lab } from '../../core/lab/context';
 import { LAB_SOURCES, instantOp, type LabEvent, type LabSource } from '../../core/lab/events';
 import { compare, labReport, near, parseHdlab, splitAt, toHdlab, type LabSessionData } from '../../core/lab/session';
+import { labStoreProblem } from '../../core/lab/store';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
 import { download } from './FlipperLab';
@@ -203,7 +204,7 @@ export function LabSessionsPanel({ lab, onReplayBle }: { lab: Lab; onReplayBle?:
           />
         </label>
       </div>
-      {!s.persistent && <p class="note warn">This browser refused storage: sessions last until the page closes. Export them.</p>}
+      {!s.persistent && <p class="note warn">{labStoreProblem() ?? 'This browser refused storage'}: sessions last until the page closes. Export them.</p>}
       {error && <p class="note warn">{error}</p>}
 
       <table class="trace">

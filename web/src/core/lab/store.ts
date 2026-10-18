@@ -40,16 +40,34 @@ const DB = 'hwdog-lab';
 const STORES = ['sessions', 'library', 'camera', 'photos'] as const;
 export type LabStoreName = (typeof STORES)[number];
 
-function openDb(factory: IDBFactory): Promise<IDBDatabase> {
+/** Why the lab works in memory only, when it does (null: it does not, or no reason known). */
+let problem: string | null = null;
+export const labStoreProblem = (): string | null => problem;
+
+function openDb(factory: IDBFactory, blockedWait = 4000): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     // 2: Camera Sniffer's stores; an older database gets them on upgrade, its data untouched.
     const req = factory.open(DB, 2);
+    let late: ReturnType<typeof setTimeout> | null = null;
     req.onupgradeneeded = () => {
       for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
     };
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => {
+      if (late) clearTimeout(late);
+      const db = req.result;
+      // A newer version opened in another tab: let it upgrade instead of blocking it.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     req.onerror = () => reject(req.error ?? new Error('indexedDB open failed'));
-    req.onblocked = () => reject(new Error('indexedDB blocked'));
+    // Another tab still holds the older version open. The upgrade waits for it to close;
+    // past a few seconds the lab goes on in memory, and says why.
+    req.onblocked = () => {
+      late ??= setTimeout(() => {
+        problem = 'Another Hardware Dog tab holds an older version of the lab (close it, then reload this page)';
+        reject(new Error('indexedDB blocked'));
+      }, blockedWait);
+    };
   });
 }
 
