@@ -1,7 +1,9 @@
 /**
  * HARDWARE DOG / RETRO TV
  *
- * The companion's TV, in four layers:
+ * The companion's TV, in four layers (the TV and who lives in it follow
+ * the companion's profile: the turquoise TV and the dog, or Flipper Lab's
+ * orange TV and its companion):
  *
  *   1  SCREEN CONTENT   the pixel scene on a canvas, or text (TOOL, EVENT views)
  *   2  CRT EFFECTS      scanlines, glow, vignette: inside the opening only
@@ -23,8 +25,9 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { DIAL_MODES, type Companion, type DialMode } from '../../core/lab/companion';
 import type { LabEvent } from '../../core/lab/events';
 import type { CommandRegistry } from '../../core/lab/registry';
-import { SCREEN_H, SCREEN_W, DOLPHIN, preloadCompanion, type SpriteSet } from './sprites';
-import { ORANGE_TV, boxStyle, ellipseStyle, screenClip, screenPath, type TvSkin } from './tvSkin';
+import { DOG } from './dogSprites';
+import { SCREEN_H, SCREEN_W, COMPANION, type SpriteSet } from './sprites';
+import { ORANGE_TV, TURQUOISE_TV, boxStyle, ellipseStyle, screenClip, screenPath, skinFor, type TvSkin } from './tvSkin';
 import { tvSound } from './tvSound';
 import { useRev } from './useRev';
 
@@ -52,9 +55,10 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
   const b = buffer.getContext('2d')!;
   // The scene the screen opens on, and closes from: where the companion is.
   const rest = c.hardware === 'CONNECTED' ? 'idle' : 'wait';
+  const stage = { section: c.focus.section, calm: false, code: null };
   if (c.power === 'BOOTING') {
     if (reduced) {
-      sprites.drawScene(b, rest, now);
+      sprites.drawScene(b, rest, now, null, stage);
       ctx.globalAlpha = Math.min(1, e / tr.ms);
       ctx.drawImage(buffer, 0, 0);
       ctx.globalAlpha = 1;
@@ -87,7 +91,7 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
       sprites.drawSplash(ctx, e - 1000);
     } else {
       sprites.drawSplash(ctx, 650);
-      sprites.drawScene(b, rest, now);
+      sprites.drawScene(b, rest, now, null, stage);
       ctx.globalAlpha = Math.min(1, (e - 1650) / 300);
       ctx.drawImage(buffer, 0, 0);
       ctx.globalAlpha = 1;
@@ -130,7 +134,7 @@ function TvCanvas({ companion, sprites, reduced }: { companion: Companion; sprit
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    preloadCompanion();
+    sprites.preload?.();
     const buffer = canvas.ownerDocument.createElement('canvas');
     buffer.width = SCREEN_W;
     buffer.height = SCREEN_H;
@@ -148,7 +152,7 @@ function TvCanvas({ companion, sprites, reduced }: { companion: Companion; sprit
       }
       if (companion.power !== 'ON') drawPower(ctx, buffer, companion, sprites, now, reduced);
       // Reduced motion: the same scene, held still on a representative moment.
-      else sprites.drawScene(ctx, companion.anim, reduced ? 1200 : now - companion.animSince, companion.subject);
+      else sprites.drawScene(ctx, companion.scene, reduced ? 1200 : now - companion.animSince, companion.subject, reduced ? { ...companion.stage, calm: false } : companion.stage);
     };
     const loop = (now: number) => {
       frame = 0;
@@ -179,15 +183,23 @@ function TvCanvas({ companion, sprites, reduced }: { companion: Companion; sprit
 const hhmmss = (t: number) => new Date(t).toLocaleTimeString([], { hour12: false });
 
 function ToolView({ companion }: { companion: Companion }) {
+  // The tool looked at first: its link, its operations; the others after.
   const ops = companion.operations;
+  const f = companion.focus;
   return (
     <div class="tv-text">
-      <div class="tv-text-title">TOOL STATE</div>
-      <div>
-        HARDWARE <b class={`hw-${companion.hardware}`}>{companion.hardware}</b>
-      </div>
-      {companion.hardwareDetail && <div class="tv-dim">{companion.hardwareDetail}</div>}
-      {[...companion.links].map(([src, line]) => (
+      <div class="tv-text-title">TOOL · {f.section}</div>
+      {f.unavailable ? (
+        <div class="sev-WARN">{f.unavailable}</div>
+      ) : (
+        <>
+          <div>
+            {f.source ?? 'LINK'} <b class={`hw-${companion.hardware}`}>{companion.hardware}</b>
+          </div>
+          {companion.hardwareDetail && <div class="tv-dim">{companion.hardwareDetail}</div>}
+        </>
+      )}
+      {[...companion.links].filter(([src]) => src !== f.source).map(([src, line]) => (
         <div key={src} class="tv-dim">
           {src}: {line}
         </div>
@@ -195,10 +207,11 @@ function ToolView({ companion }: { companion: Companion }) {
       {ops.length === 0 ? (
         <div>NO OPERATION RUNNING</div>
       ) : (
-        ops.slice(0, 3).map((o, i) => (
-          <div key={i}>
-            ▸ {o.message}
-            <div class="tv-dim">{progressText(o.progress)}</div>
+        ops.slice(0, 3).map((o) => (
+          <div key={o.id}>
+            ▸ {o.source !== f.source ? `${o.source} · ` : ''}
+            {o.message}
+            <div class="tv-dim">{o.waiting ? 'waiting for you' : progressText(o.progress)}</div>
           </div>
         ))
       )}
@@ -207,8 +220,9 @@ function ToolView({ companion }: { companion: Companion }) {
   );
 }
 
-function EventView({ companion }: { companion: Companion }) {
+function EventView({ companion, registry }: { companion: Companion; registry: CommandRegistry }) {
   const e = companion.lastEvent;
+  const why = registry.blocked('lab.log', e ? { source: e.source } : undefined);
   return (
     <div class="tv-text">
       <div class="tv-text-title">LAST EVENT</div>
@@ -224,6 +238,9 @@ function EventView({ companion }: { companion: Companion }) {
           <div class="tv-msg">{e.message}</div>
           {e.code && <div>CODE {e.code}</div>}
           {e.origin !== 'PHYSICAL' && <div class="tv-dim">{e.origin === 'SIMULATED' ? 'DEMO DATA' : 'REPLAY'}</div>}
+          <button class="tv-act" disabled={!!why} title={why ?? 'The full log of this tool'} onClick={() => void registry.run('lab.log', { source: e.source })}>
+            DETAILS
+          </button>
         </>
       ) : (
         <div>NOTHING YET</div>
@@ -245,9 +262,19 @@ export interface RetroTvProps {
   handleLabel?: string;
 }
 
-export function RetroTv({ companion, registry, skin = ORANGE_TV, sprites = DOLPHIN, dev = false, sound = false, reducedMotion = false, onHandleDown, handleLabel }: RetroTvProps) {
+export function RetroTv({ companion, registry, skin: skinProp, sprites: spritesProp, dev = false, sound = false, reducedMotion = false, onHandleDown, handleLabel }: RetroTvProps) {
   useRev(companion);
+  // Who lives in the TV follows the section: the dog, or Flipper Lab's companion. Same companion, same power.
+  const skin = skinProp ?? skinFor(companion.profile);
+  const sprites = spritesProp ?? (companion.profile === 'flipper' ? COMPANION : DOG);
   const p = skin.profile;
+  // the other TV's picture, warmed: a section change never shows an empty frame
+  useEffect(() => {
+    if (typeof Image === 'undefined') return;
+    for (const k of [ORANGE_TV, TURQUOISE_TV]) new Image().src = k.frame.src;
+    COMPANION.preload?.();
+    DOG.preload?.();
+  }, []);
   const [osd, setOsd] = useState<number>(0);
   const lastDial = useRef(companion.dial);
   useEffect(() => {
@@ -277,10 +304,11 @@ export function RetroTv({ companion, registry, skin = ORANGE_TV, sprites = DOLPH
 
   return (
     <div class={`tv power-${companion.power}${dev ? ' tv-dev' : ''}`} style={{ aspectRatio: `${p.reference.width} / ${p.reference.height}` }}>
-      <div class="tv-screen" style={{ ...boxStyle(p.screen.box), clipPath: screenClip(p) }}>
+      <div class={`tv-screen${on && companion.badge ? ' has-badge' : ''}`} style={{ ...boxStyle(p.screen.box), clipPath: screenClip(p) }}>
         <TvCanvas companion={companion} sprites={sprites} reduced={reducedMotion} />
         {on && companion.dial === 'TOOL' && <ToolView companion={companion} />}
-        {on && companion.dial === 'EVENT' && <EventView companion={companion} />}
+        {on && companion.dial === 'EVENT' && <EventView companion={companion} registry={registry} />}
+        {on && companion.badge && <div class={`tv-badge tv-badge-${companion.badge}`}>{companion.badge}</div>}
         {on && companion.dial === 'COMPANION' && msg && (
           <div class={`tv-bubble sev-${msg.severity}`} role="status">
             <div class="tv-bubble-text">
@@ -289,11 +317,15 @@ export function RetroTv({ companion, registry, skin = ORANGE_TV, sprites = DOLPH
             </div>
             {msg.code && <div class="tv-code">CODE {msg.code}</div>}
             <div class="tv-bubble-actions">
-              {msg.actions?.map((a) => (
-                <button key={a.command} class="tv-act" disabled={registry.isRunning(a.command) || !registry.has(a.command)} onClick={() => void registry.run(a.command, a.args)}>
-                  {a.label}
-                </button>
-              ))}
+              {msg.actions?.map((a) => {
+                // checked at the moment it is shown and again at the click: never a stale RETRY
+                const why = registry.blocked(a.command, a.args);
+                return (
+                  <button key={a.command} class="tv-act" disabled={!!why} title={why ?? undefined} onClick={() => void registry.run(a.command, a.args)}>
+                    {a.label}
+                  </button>
+                );
+              })}
               <button class="tv-act" onClick={() => companion.messages.dismiss()} aria-label="Dismiss message">
                 OK
               </button>
@@ -322,7 +354,7 @@ export function RetroTv({ companion, registry, skin = ORANGE_TV, sprites = DOLPH
         class="tv-zone tv-power"
         style={boxStyle(p.power)}
         aria-pressed={companion.heading}
-        aria-label={`Power: the TV is ${companion.power.toLowerCase().replace('_', ' ')}. Switches the companion screen only, never the Flipper or a capture.`}
+        aria-label={`Power: the TV is ${companion.power.toLowerCase().replace('_', ' ')}. Switches the companion screen only, never a device, a scan or a recording.`}
         title="POWER: the companion screen only"
         onPointerDown={stop}
         onClick={power}

@@ -47,6 +47,14 @@ const TEXT: Record<string, Text> = {
   'cam.done': { en: 'Inspection finished. Some devices can stay invisible to scans.', fr: 'Inspection terminée. Certains appareils peuvent rester invisibles aux scans.' },
   'cam.netdone': { en: 'Network scan finished. Some devices can stay invisible to scans.', fr: 'Scan réseau terminé. Certains appareils peuvent rester invisibles aux scans.' },
   'cam.dogd': { en: 'Network discovery needs dogd running on this computer.', fr: 'La découverte réseau nécessite dogd sur cet ordinateur.' },
+  'dev.connected': { en: 'Device connected.', fr: 'Appareil connecté.' },
+  'dev.lost': { en: 'Device link lost. Check the USB cable.', fr: 'Liaison avec l’appareil perdue. Vérifie le câble USB.' },
+  'dev.dogd': { en: 'dogd was not reached on this computer. Start it, then retry.', fr: 'dogd est injoignable sur cet ordinateur. Lance-le, puis réessaie.' },
+  permission: { en: 'Permission needed to continue.', fr: 'Permission nécessaire pour continuer.' },
+  'scan.running': { en: 'Scan running…', fr: 'Scan en cours…' },
+  'ble.adapter': { en: 'Bluetooth adapter disconnected.', fr: 'Adaptateur Bluetooth déconnecté.' },
+  'export.done': { en: 'Export finished.', fr: 'Export terminé.' },
+  cancelled: { en: 'Cancelled.', fr: 'Annulé.' },
 };
 
 /** Camera Sniffer messages: neutral words, never an alarm. A success means an operation finished, not that a place is safe. */
@@ -79,7 +87,26 @@ const RPC_CODES: Record<string, string> = {
   ERROR_STORAGE_NOT_IMPLEMENTED: 'rpc.notimpl',
 };
 
+/** Tools whose successful end is a file handed to the person: an export. */
+const EXPORTS = /(^|\.)(report|export)$/;
+
 export function suggest(e: LabEvent, lang: Lang): Suggestion | null {
+  // An operation waiting for the person (a chooser, a permission prompt): said once, whatever the tool.
+  if ((e.type === 'op.start' || e.type === 'op.progress') && e.params?.['wait'] === 'user') return say('permission', { ...e, severity: 'INFO' }, lang);
+  if (e.type === 'op.start' && e.params?.['kind'] === 'search' && e.source !== 'CAMERA') return say('scan.running', { ...e, severity: 'INFO' }, lang);
+  if (e.type === 'op.end' && e.severity === 'PASS' && EXPORTS.test(e.tool)) return say('export.done', e, lang);
+  if (e.source === 'DEVICE') {
+    if (e.type === 'link.state') {
+      const state = e.params?.['state'];
+      if (state === 'CONNECTED') return say('dev.connected', { ...e, severity: 'PASS' }, lang);
+      if (state === 'DISCONNECTED' && e.params?.['reason'] === 'lost') return say('dev.lost', { ...e, severity: 'FAIL' }, lang, [details(lang)]);
+      return null;
+    }
+    if (e.type === 'op.end' && e.code === 'DOGD_UNREACHABLE') return say('dev.dogd', e, lang, [retry('device.dogd', lang), details(lang)]);
+  }
+  if (e.type === 'op.end' && e.params?.['outcome'] === 'stopped') return null;
+  if (e.type === 'op.end' && (e.code === 'CANCELLED' || e.code === 'ABORTED' || e.params?.['outcome'] === 'cancelled') && e.source !== 'CAMERA')
+    return say('cancelled', { ...e, severity: 'INFO' }, lang);
   if (e.source === 'CAMERA') {
     const key = e.params?.['say'];
     if (typeof key === 'string' && TEXT[key]) return say(key, { ...e, severity: e.severity === 'FAIL' ? 'FAIL' : 'INFO' }, lang);
@@ -100,7 +127,7 @@ export function suggest(e: LabEvent, lang: Lang): Suggestion | null {
     return null;
   }
   const code = e.code ?? '';
-  const connect = e.source === 'FLIPPER' ? 'flipper.connect' : 'ble.start';
+  const connect = e.source === 'FLIPPER' ? 'flipper.connect' : e.source === 'DEVICE' ? 'device.connect' : 'ble.start';
   switch (code) {
     case 'SERIAL_UNSUPPORTED':
       return say('serial.unsupported', e, lang);
@@ -117,7 +144,7 @@ export function suggest(e: LabEvent, lang: Lang): Suggestion | null {
     case 'BLE_UNSUPPORTED':
       return say('ble.unsupported', e, lang, [details(lang)]);
     case 'BLE_NO_ADAPTER':
-      return say('ble.noadapter', e, lang, [details(lang)]);
+      return say(e.params?.['phase'] === 'running' ? 'ble.adapter' : 'ble.noadapter', e, lang, [details(lang)]);
     case 'FORMAT_INVALID':
       return say('file.invalid', e, lang, [details(lang)]);
   }

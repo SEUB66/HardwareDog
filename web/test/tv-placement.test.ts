@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TvPlacement, tabBottom } from '../src/ui/lab/TvHost';
 
-/** A window of a given size with the bottom menu (nav.nav) of a phone, or none. */
-function screen(width: number, height: number, navHeight: number | null): void {
+/** A window of a given size with the bottom menu (nav.nav) of a phone, or none, and a computer's footer bar, or none. */
+function screen(width: number, height: number, navHeight: number | null, footHeight: number | null = null): void {
   vi.stubGlobal('window', { innerWidth: width, innerHeight: height });
+  const bar = (h: number | null) => (h !== null ? { getBoundingClientRect: () => ({ top: height - h, height: h }) } : null);
   vi.stubGlobal('document', {
-    querySelector: (sel: string) => (sel === 'nav.nav' && navHeight !== null ? { getBoundingClientRect: () => ({ top: height - navHeight, height: navHeight }) } : null),
+    querySelector: (sel: string) => (sel === 'nav.nav' ? bar(navHeight) : sel === 'footer.foot' ? bar(footHeight) : null),
   });
 }
 
@@ -37,6 +38,24 @@ describe('floating TV placement', () => {
     expect(p.state.y + p.floatHeight).toBeLessThanOrEqual(844 - 58 + 0.5);
     expect(p.state.x + p.floatWidth).toBeLessThanOrEqual(390);
     expect(tabBottom()).toBe(58 + 12);
+    // a computer: the TV tab sits above the footer bar, never on it
+    screen(1440, 900, null, 36);
+    expect(tabBottom()).toBe(36 + 12);
+  });
+
+  it('moves to the next corner without dragging, inside the window', () => {
+    screen(1440, 900, null, 36);
+    const p = new TvPlacement();
+    p.float();
+    const seen = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      p.corner();
+      seen.add(`${Math.round(p.state.x)},${Math.round(p.state.y)}`);
+      expect(p.state.x).toBeGreaterThanOrEqual(0);
+      expect(p.state.x + p.floatWidth).toBeLessThanOrEqual(1440);
+      expect(p.state.y + p.floatHeight).toBeLessThanOrEqual(900 - 36 + 0.5);
+    }
+    expect(seen.size).toBe(4);
   });
 
   it('snaps to the nearest side on a phone when let go, not on a computer', () => {

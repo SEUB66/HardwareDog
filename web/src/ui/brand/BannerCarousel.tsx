@@ -5,10 +5,12 @@
  * always whole (its own 2.5:1 box, reserved before it loads); its caption
  * is HTML under it, readable on a phone where the lettering in the picture
  * is small. Previous, next, one button per slide, pause and play: real
- * buttons, 44 px targets. It turns every 8 s only while nothing holds it
- * (core/carousel.ts) and never with reduced motion; a hidden slide is
- * inert, so the keyboard and screen readers only meet the one shown, and
- * the turns are not announced (only a slide chosen by hand is).
+ * buttons. It turns by itself every 8 s (core/carousel.ts); a slide chosen
+ * by hand gets its full 8 s, then the turning carries on; keyboard focus,
+ * a hidden tab, the carousel off screen or a running scan hold it; pause
+ * stops it; reduced motion never turns it. A hidden slide is inert, so the
+ * keyboard and screen readers only meet the one shown, and the turns are
+ * not announced (only while paused is a slide chosen by hand announced).
  */
 
 import { useEffect, useRef, useState } from 'preact/hooks';
@@ -19,6 +21,15 @@ import { BANNER_H, BANNER_W, type BannerSlide } from './slides';
 const WORDS: Record<Lang, { prev: string; next: string; pause: string; play: string; slide: (i: number, n: number, t: string) => string }> = {
   en: { prev: 'Previous banner', next: 'Next banner', pause: 'Pause the banners', play: 'Play the banners', slide: (i, n, t) => `Banner ${i} of ${n}: ${t}` },
   fr: { prev: 'Bannière précédente', next: 'Bannière suivante', pause: 'Mettre les bannières en pause', play: 'Reprendre les bannières', slide: (i, n, t) => `Bannière ${i} sur ${n} : ${t}` },
+};
+
+/** Keyboard focus holds the carousel; the focus a click or a tap leaves on a button does not. */
+const focusVisible = (t: EventTarget | null) => {
+  try {
+    return t instanceof Element && t.matches(':focus-visible');
+  } catch {
+    return true;
+  }
 };
 
 export interface BannerCarouselProps {
@@ -67,9 +78,9 @@ export function BannerCarousel({ slides, label, lang, reducedMotion, busy = fals
   const rotating = turns(s, reducedMotion);
   useEffect(() => {
     if (!rotating) return;
-    const t = setTimeout(() => update((x) => next(x, false)), ROTATE_MS);
+    const t = setTimeout(() => update((x) => next(x)), ROTATE_MS);
     return () => clearTimeout(t);
-  }, [rotating, s.index]);
+  }, [rotating, s.moves]);
 
   // the slide shown is fetched; the next one too, once the shown one is in
   useEffect(() => {
@@ -108,9 +119,7 @@ export function BannerCarousel({ slides, label, lang, reducedMotion, busy = fals
       class={`banner-carousel${reducedMotion ? ' still' : ''}${extra ? ` ${extra}` : ''}`}
       aria-roledescription="carousel"
       aria-label={label}
-      onMouseEnter={() => holdBy('hover', true)}
-      onMouseLeave={() => holdBy('hover', false)}
-      onFocusIn={() => holdBy('focus', true)}
+      onFocusIn={(e) => holdBy('focus', focusVisible(e.target))}
       onFocusOut={(e) => !root.current?.contains(e.relatedTarget as Node | null) && holdBy('focus', false)}
       onKeyDown={onKey}
     >
@@ -179,7 +188,9 @@ export function BannerCarousel({ slides, label, lang, reducedMotion, busy = fals
           </div>
           {showPlay && (
             <button class="bc-btn" onClick={() => update((x) => (x.stopped ? play(x) : pause(x)))} aria-label={s.stopped ? w.play : w.pause}>
-              <span aria-hidden="true">{s.stopped ? '▶' : '❚❚'}</span>
+              <span aria-hidden="true" class="bc-play">
+                {s.stopped ? '▶' : '❚❚'}
+              </span>
             </button>
           )}
           <button class="bc-btn" onClick={() => update((x) => next(x))} aria-label={w.next}>

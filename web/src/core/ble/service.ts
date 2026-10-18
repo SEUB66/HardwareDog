@@ -143,11 +143,24 @@ export class BleService {
 
   private async fail(code: string, message: string): Promise<void> {
     const source = this.source;
+    // a failure after the scan had started (the adapter pulled out) is said differently from a start that failed
+    const running = this.state === 'SCANNING';
     this.source = null;
     await source?.stop().catch(() => {});
     this.state = 'ERROR';
     this.error = { code, message };
-    if (this.scanOp) this.bus.emit({ source: 'BLE', tool: 'ble.scan', type: 'op.end', op: this.scanOp, severity: code === 'NotFoundError' ? 'INFO' : 'FAIL', message: `BLE scan: ${message}`, code, origin: this.origin === 'SIMULATED' ? 'SIMULATED' : 'PHYSICAL' });
+    if (this.scanOp)
+      this.bus.emit({
+        source: 'BLE',
+        tool: 'ble.scan',
+        type: 'op.end',
+        op: this.scanOp,
+        severity: code === 'NotFoundError' ? 'INFO' : 'FAIL',
+        message: `BLE scan: ${message}`,
+        code,
+        origin: this.origin === 'SIMULATED' ? 'SIMULATED' : 'PHYSICAL',
+        ...(running ? { params: { phase: 'running' } } : {}),
+      });
     this.scanOp = null;
     this.changed();
   }
@@ -167,7 +180,8 @@ export class BleService {
         op: this.scanOp,
         severity: 'PASS',
         message: `BLE scan stopped: ${this.model.observations} observation(s), ${this.model.devices.size} id(s)`,
-        params: { observations: this.model.observations, devices: this.model.devices.size, lost: this.model.sourceLost, refused: this.model.refused },
+        // stopped on request: not a success to celebrate, not an error
+        params: { outcome: 'stopped', observations: this.model.observations, devices: this.model.devices.size, lost: this.model.sourceLost, refused: this.model.refused },
         origin: source.origin,
       });
     this.scanOp = null;
