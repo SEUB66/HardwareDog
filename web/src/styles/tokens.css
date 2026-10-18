@@ -6,11 +6,11 @@
 
 :root {
   /* Base */
-  --bg: #0b0d0f;
-  --panel: #111417;
-  --panel-alt: #16191c;
-  --border: #34393d;
-  --text: #ece8de;
+  --bg: #101112;
+  --panel: #181a1b;
+  --panel-alt: #202325;
+  --border: #33383b;
+  --text: #f2f0e9;
   --text-dim: #8a9195;
 
   /* Signals */
@@ -52,7 +52,7 @@
   --border: #c5cad1;
   --text: #15181c;
   --text-dim: #59616a;
-  --cyan: #00829a;
+  --cyan: #007084; /* 4.7:1 or more on the light surfaces (WCAG AA) */
   --pink: #c4246f;
   --amber: #9a6200;
   --green: #22803a;

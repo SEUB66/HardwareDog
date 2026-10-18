@@ -203,6 +203,8 @@ const STATUS: Record<string, string> = {
   UNBOUNDED: 'The error of this clock is not known yet (hello only). Times from it are never compared finely with another Dog.',
   ONLINE: 'Frames are arriving from the device.',
   OFFLINE: 'No device connected.',
+  'NO DEVICE': 'No device is connected to this interface. This is not about dogd, nor about the browser network: the home says each one apart.',
+  'DEVICE OFFLINE': 'The source of this session no longer sends frames. What was received is kept.',
   CONNECTING: 'Waiting for the device to answer.',
   LOST: 'The link to the device dropped. What was received is kept.',
   CONNECTED: 'A USB device is enumerated on the port.',

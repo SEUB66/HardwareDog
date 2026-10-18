@@ -12,8 +12,8 @@
  */
 
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import banner800 from '../../../../assets/brand/web/hd-camera-sniffer-banner-800.webp';
-import banner1600 from '../../../../assets/brand/web/hd-camera-sniffer-banner-1600.webp';
+import { BannerCarousel } from '../brand/BannerCarousel';
+import { CAMERA_SLIDES } from '../brand/slides';
 import { CATALOG } from '../../core/camera/catalog';
 import { BLE_SIGNATURES_VERSION, bleClues, bleLabel, USB_EMPTY_NOTE, USB_FUNCTION_LABEL, usbClues, type UsbClue } from '../../core/camera/clues';
 import { classify, namesOf, NOT_ESTABLISHED, STATE_LABEL, STATE_ORDER, type NetDevice, type NetState } from '../../core/camera/model';
@@ -47,8 +47,8 @@ const TOOL_PURPOSE: Record<CameraTool, string> = {
 
 const SUBTITLE = { en: 'Spot the clues. Inspect the devices.', fr: 'Repérer les indices. Inspecter les appareils.' };
 const LIMIT_LINE = {
-  en: 'It helps you investigate; it never certifies that there is no camera. A camera recording to a card, off the network or switched off can escape every scan.',
-  fr: 'Il aide à enquêter ; il ne certifie jamais l’absence de caméra. Une caméra qui enregistre sur carte, hors réseau ou éteinte peut échapper aux scans.',
+  en: 'It helps identify clues and devices; it never certifies that a place is free of cameras. A camera off the network, switched off or recording to an SD card may not appear.',
+  fr: 'Il aide à repérer des indices et des appareils ; il ne certifie jamais qu’un lieu est exempt de caméras. Une caméra hors réseau, éteinte ou qui enregistre sur carte SD peut ne pas apparaître.',
 };
 
 const STATE_TAG: Record<NetState, 'PASS' | 'WARN' | 'FAIL' | 'UNKNOWN' | 'LIVE'> = {
@@ -97,17 +97,26 @@ export function CameraSniffer({ lab, placement, reducedMotion, tool, onTool }: {
 
   return (
     <div class="lab camera-lab">
-      <header class="lab-banner camera-banner">
-        <img src={banner800} srcset={`${banner800} 800w, ${banner1600} 1600w`} sizes="(max-width: 900px) 100vw, 900px" alt="Camera Sniffer: a pixel-art living room seen through a camera lens, the Hardware Dog robot holding a small camera" width={800} height={320} decoding="async" />
-      </header>
-      <div class="camera-intro">
-        <p class="camera-subtitle">{SUBTITLE[lang]}</p>
-        <p class="note dim">{LIMIT_LINE[lang]}</p>
-        {cameraMsg && (
-          <p class={`camera-msg sev-${cameraMsg.severity}`} role="status">
-            {cameraMsg.text}
-          </p>
-        )}
+      <div class="camera-top">
+        {/* Brand pictures, never results; still while a scan or an inspection runs. */}
+        <BannerCarousel
+          slides={CAMERA_SLIDES}
+          label={lang === 'fr' ? 'Camera Sniffer : bannières' : 'Camera Sniffer banners'}
+          lang={lang}
+          reducedMotion={reducedMotion}
+          busy={lab.camera.net.busy || (lab.camera.inspections.current.rooms.length > 0 && !lab.camera.inspections.current.finished)}
+          sizes="(max-width: 1099px) 100vw, 52vw"
+          class="camera-banners"
+        />
+        <div class="camera-intro">
+          <p class="camera-subtitle">{SUBTITLE[lang]}</p>
+          <p class="note dim">{LIMIT_LINE[lang]}</p>
+          {cameraMsg && (
+            <p class={`camera-msg sev-${cameraMsg.severity}`} role="status">
+              {cameraMsg.text}
+            </p>
+          )}
+        </div>
       </div>
       <div class="lab-body">
         <div class="lab-main">
