@@ -39,12 +39,13 @@ source/hd-companion-dog-states.png  COMPANION  owner's sheet "HW DOG / COMPANION
                                                DISCONNECTED PERMISSION TIMEOUT IDLE; the reference for those
                                                states, cut into web/hd-dog-scenes.webp by `npm run companion`
 source/hd-app-icon-rounded.png      LAUNCH     rounded app icon, the dog's head in a cyan frame, transparent
-                                               corners, 1254x1254 (uploaded 97A15BE3-....png):
-                                               web/public/icon-192.png, icon-512.png ("any")
+                                               corners, 1254x1254 (uploaded 97A15BE3-....png): kept as a
+                                               source, not derived (the browser icons float, unframed)
 source/hd-icon-pixel-head.png       LAUNCH     the pixel head on its own dark ground, 1254x1254 (uploaded
-                                               B6070AE8-....png): maskable 192/512 (inside the safe zone),
-                                               apple-touch-icon.png, favicon-16/32.png and favicon.ico
-                                               (the face only, checked at 16 px)
+                                               B6070AE8-....png): floating (ground made transparent, its
+                                               black outline kept) for favicon-16/32.png, favicon.ico (the
+                                               face) and icon-192/512.png ("any"); on its ground for the
+                                               maskable 192/512 (safe zone) and apple-touch-icon.png
 source/hd-og-launch-banner.png      LAUNCH     launch banner: Camera Sniffer (fisheye), Bluetooth Lab,
                                                Flipper Lab, USB / Network / Serial, 1733x907 (uploaded
                                                F5A9EE44-....png): web/public/og/hardware-dog-1200x630.jpg

@@ -23,14 +23,17 @@ name / short_name   Hardware Dog / HW DOG
 start_url, id       ./diagnostic.html
 scope               ./  (the whole site)
 colors              #101112, the interface's own background
-icons               192 and 512 "any" (the rounded app icon as drawn)
-                    192 and 512 "maskable" (the pixel head on its own dark
+icons               192 and 512 "any": the pixel head floating, transparent
+                    around it, its black outline kept
+                    192 and 512 "maskable": the same head on its own dark
                     ground, full bleed, every drawn pixel inside the 40 %
-                    safe circle, no rounded corner: the system masks it)
-apple-touch-icon    180, opaque (iOS rounds it itself)
-favicons            16 and 32 PNG, favicon.ico with 16, 32 and 48: the pixel
-                    head's face, checked at 16 px (the rounded icon's frame
-                    and the collar's tag turn to noise there)
+                    safe circle, no rounded corner (the system masks it and
+                    would fill a transparent ground itself)
+apple-touch-icon    180, opaque on the dark ground (iOS fills transparency
+                    with black and rounds the corners itself)
+favicons            16 and 32 PNG, favicon.ico with 16, 32 and 48: the head
+                    floating, its face only, checked at 16 px on light and
+                    dark tabs
 ```
 
 Where the browser offers installation (Chrome, Edge on a computer or on
