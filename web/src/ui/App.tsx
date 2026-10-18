@@ -28,7 +28,10 @@ import { Boot } from './Boot';
 import { CommandPalette, type PaletteEntry } from './CommandPalette';
 import { Hint } from './components/Hint';
 import { IntegrityTag } from './components/IntegrityTag';
-import { ConnectBanner, ConnectStrip } from './components/ConnectBanner';
+import { ConnectStrip } from './components/ConnectBanner';
+import { ErrorBlock } from './components/ErrorBlock';
+import { Home } from './home/Home';
+import { browserLang } from '../core/lab/rules';
 import { SimBanner } from './components/SimBanner';
 import { Tour } from './Tour';
 import { WhatsNew } from './WhatsNew';
@@ -267,7 +270,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     root.dataset['theme'] = system.settings.theme;
     root.dataset['field'] = system.settings.fieldMode ? 'on' : 'off';
     root.dataset['motion'] = system.settings.reducedMotion ? 'reduced' : 'full';
-    const color = system.settings.fieldMode ? '#F4F1E8' : system.settings.theme === 'light' ? '#E6E8EB' : '#0B0D0F';
+    const color = system.settings.fieldMode ? '#F4F1E8' : system.settings.theme === 'light' ? '#E6E8EB' : '#101112';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
   }, [system.settings.theme, system.settings.fieldMode, system.settings.reducedMotion]);
 
@@ -595,8 +598,11 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   ) : system.link === 'LOST' ? (
     <Tag status="FAIL" label="LINK LOST" />
   ) : (
-    <Tag status="UNKNOWN" label={system.link} />
+    // No device, a source gone quiet, or a link opening: never one ambiguous "OFFLINE".
+    <Tag status="UNKNOWN" label={system.link === 'OFFLINE' ? (session.transport ? 'DEVICE OFFLINE' : 'NO DEVICE') : system.link} />
   );
+  /** Nothing connected, on STATUS: the home, in place of empty cards. */
+  const home = session.transport === null && screen === 'STATUS';
 
   const body = (() => {
     switch (screen) {
@@ -790,16 +796,24 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
 
       <main class="work" id="workspace">
         {session.transport === null && screen !== 'STATUS' && !labScreen && <ConnectStrip onChoose={() => navigate('STATUS')} onDemo={() => void switchTransport('SIMULATOR')} />}
-        {session.transport === null && screen === 'STATUS' && (
-          <ConnectBanner
+        {home && (
+          <Home
+            lang={browserLang()}
+            reducedMotion={reducedMotion}
+            sessions={archived.length}
             onConsole={() => void openConsole()}
-            onSerial={() => void switchTransport('WEB SERIAL')}
+            onProbe={() => void switchTransport('WEB SERIAL')}
             onDogd={() => void switchTransport('DOGD')}
             onNetwork={() => void openNetwork()}
             onOpen={(file) => void openFile(file)}
             onDemo={() => void switchTransport('SIMULATOR')}
             onTour={startTour}
-          />
+            onGo={(s) => navigate(s)}
+          >
+            {/* A source that just failed is said before anything else. */}
+            {system.lastError && <ErrorBlock error={system.lastError} />}
+            {sessionMessage && <p class="note warn">{sessionMessage}</p>}
+          </Home>
         )}
         {!labScreen && <SimBanner
           system={system}
@@ -807,7 +821,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
           onConnect={() => navigate('SETUP')}
           onStop={demoOf(session.transport) ? () => void start(null) : null}
         />}
-        {body}
+        {!home && body}
       </main>
 
       <footer class="foot">

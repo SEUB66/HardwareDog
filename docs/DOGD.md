@@ -134,7 +134,7 @@ flashes anything. Note: opening a serial port can reset some boards (DTR).
 ./target/release/dogd --source host
 ```
 
-Then in the interface: **START HERE → THIS COMPUTER'S NETWORK**.
+Then in the interface: **TOOLS → NETWORK · USB → WATCH THIS COMPUTER** (on the home, nothing connected).
 
 `host` is a device that lives in dogd and speaks HDP v1 like a probe,
 with the capabilities it really has: `net`, `probe`, and `usb` where the

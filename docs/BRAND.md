@@ -60,8 +60,12 @@ TEXT DIM     #8A9195
 ```
 
 Most of the interface is black, charcoal, warm off-white and grey. Color
-means system state. Solid fills, 1 px borders, zero radius. No glass, no
-blur, no translucent panels, no glow, no decorative gradients.
+means system state. Content sits on opaque surfaces with a clear edge; a
+dark, readable glass is kept for the header and the menu only (with an
+opaque fallback). No translucent content panels, no color washes behind
+text, no opacity on anything that holds text or buttons. The brand
+banners carry the cyan, magenta and cream; the interface keeps them for
+titles and accents, never for states.
 
 Source of truth in code: `web/src/styles/tokens.css`.
 
@@ -69,7 +73,9 @@ Source of truth in code: `web/src/styles/tokens.css`.
 
 ```text
 IBM Plex Mono              interface, values, logs   (400, 600)
-IBM Plex Sans Condensed    panel titles              (600)
+IBM Plex Sans Condensed    panel titles (600), descriptions read at length (400)
+Silkscreen (OFL)           short titles only: the wordmark, screen titles, the home
+                           tagline, tool names (400; the bold W reads as a block)
 UPPERCASE                  system states: ONLINE STABLE PASS WARN FAIL
 ```
 

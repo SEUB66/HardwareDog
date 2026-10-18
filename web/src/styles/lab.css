@@ -111,7 +111,9 @@
   margin: 0;
 }
 .flipper-lab .btn.usb-off {
-  opacity: 0.5;
+  /* unavailable, still readable: no opacity on text */
+  color: var(--text-dim);
+  border-style: dashed;
   border-style: dashed;
   white-space: normal;
   max-width: 100%;
@@ -182,7 +184,7 @@
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
-  opacity: 0.8;
+  color: var(--text-dim);
 }
 .lab-workspace {
   display: flex;
@@ -622,7 +624,7 @@
   margin-bottom: 0.4em;
 }
 .tv-text .tv-dim {
-  opacity: 0.7;
+  color: #9fb8bd;
 }
 .tv-text .sev-FAIL,
 .tv-bubble.sev-FAIL .tv-code {
@@ -687,7 +689,8 @@
   cursor: pointer;
 }
 .tv-act:disabled {
-  opacity: 0.4;
+  color: #7f9a9e;
+  border-color: #3d5357;
   cursor: default;
 }
 .tv-act:focus-visible {
@@ -1089,7 +1092,7 @@
 }
 .camera-iface.refused {
   cursor: not-allowed;
-  opacity: 0.6;
+  color: var(--text-dim);
 }
 .camera-methods {
   margin: 8px 0;
