@@ -48,6 +48,8 @@ export interface NetDevice {
   methods: string[];
   evidence: Evidence[];
   origin: Origin;
+  /** Repeated or minor answers not kept once the evidence list was full. */
+  dropped?: number;
 }
 
 /** What a person said about a device. Never changes the observations. */
@@ -69,7 +71,8 @@ export const STATE_LABEL: Record<NetState, string> = {
   DISCOVERED: 'Device discovered',
   MEDIA_SERVICE: 'Media service observed',
   VIDEO_COMPATIBLE: 'Clues compatible with video equipment',
-  MODEL_IDENTIFIED: 'Model identified',
+  // what the device says about itself: not a confirmed (nor a hidden) camera
+  MODEL_IDENTIFIED: 'Model reported by the device',
   CONFIRMED: 'Camera confirmed by a documented verification',
   UNDETERMINED: 'Undetermined',
 };
@@ -90,6 +93,9 @@ export interface Classification {
 }
 
 const MAX_EVIDENCE = 60;
+
+/** Answers the classification reads to set a state (not only a hint). */
+const decisive = (e: Evidence) => e.kind === 'wsd' || e.kind === 'upnp' || (e.kind === 'service' && !!e.fields['rtsp_status']) || (e.kind === 'mdns' && !!e.service && e.service !== '_services._dns-sd._udp.local');
 
 function summary(o: DogdLanObservation): string {
   const f = o.fields;
@@ -128,8 +134,8 @@ export class NetModel {
   }
 
   /** Add one observation; returns the device it changed, or null (a note, a duplicate). */
-  add(o: DogdLanObservation, origin: Origin, labSeq?: number): NetDevice | null {
-    const id = `${o.scan}:${o.seq}`;
+  add(o: DogdLanObservation, origin: Origin, labSeq?: number, run = 0): NetDevice | null {
+    const id = `${run}:${o.scan}:${o.seq}`;
     if (this.seen.has(id)) return null;
     this.seen.add(id);
     const ev: Evidence = { id, kind: o.kind, method: o.method, at: o.wall_ms, summary: summary(o), service: o.service, port: o.port, name: o.name, fields: { ...o.fields }, raw: o.raw };
@@ -156,7 +162,9 @@ export class NetModel {
       same.at = Math.max(same.at, ev.at);
       return d;
     }
-    if (d.evidence.length < MAX_EVIDENCE) d.evidence.push(ev);
+    // Past the limit, only answers that can change the state are still kept; the rest is counted.
+    if (d.evidence.length < MAX_EVIDENCE || (decisive(ev) && d.evidence.length < MAX_EVIDENCE * 2)) d.evidence.push(ev);
+    else d.dropped = (d.dropped ?? 0) + 1;
     return d;
   }
 }
@@ -225,6 +233,8 @@ export function classify(d: NetDevice, note: DeviceNote = emptyNote()): Classifi
     if (has(n.value, 'cam', 'ipc', 'nvr', 'dvr', 'video')) reasons.push({ text: `Announces the name "${n.value}" (${n.via}). A name is chosen by whoever set the device up: it identifies nothing.`, evidence: d.evidence.find((e) => e.name === n.value)?.id ?? null, role: 'HINT' });
   }
   if (d.vendor) reasons.push({ text: `MAC prefix registered to ${d.vendor.name}: the origin of its network chip, not what the device is.`, evidence: d.evidence.find((e) => e.kind === 'neighbor')?.id ?? null, role: 'HINT' });
+  const macs = [...new Set(d.evidence.filter((e) => e.kind === 'neighbor').map((e) => e.summary.match(/as (\S+)$/)?.[1]).filter(Boolean))];
+  if (macs.length > 1) reasons.push({ text: `Several MACs were seen at this address (${macs.join(', ')}): two devices one after the other (addresses are reassigned), or a phone changing its random MAC. The rows are one address, not one device.`, evidence: d.evidence.find((e) => e.kind === 'neighbor')?.id ?? null, role: 'HINT' });
   if (d.macLocal) reasons.push({ text: 'Its MAC is locally administered (often random, as phones do on Wi-Fi): no manufacturer can be read from it.', evidence: d.evidence.find((e) => e.kind === 'neighbor')?.id ?? null, role: 'HINT' });
 
   const readable = d.evidence.some((e) => !(e.kind === 'upnp' && e.fields['note']));
@@ -240,6 +250,19 @@ export function classify(d: NetDevice, note: DeviceNote = emptyNote()): Classifi
   if (note.ble.length) reasons.push({ text: `You linked it to ${note.ble.length} Bluetooth device(s). This association is yours, not observed.`, evidence: null, role: 'USER' });
   return { state, reasons, model };
 }
+
+/**
+ * What a state does NOT establish, said next to it everywhere (device detail,
+ * report): a model on the network is not a confirmed hidden camera.
+ */
+export const NOT_ESTABLISHED: Record<NetState, string> = {
+  DISCOVERED: 'What this device is. Nothing it announced points to video; that excludes nothing.',
+  MEDIA_SERVICE: 'What the media service carries, or that the device is a camera.',
+  VIDEO_COMPATIBLE: 'That it is a camera hidden here, where it is, or what it films: a recorder or a declared camera answers the same way. A visual check decides.',
+  MODEL_IDENTIFIED: 'That it is a camera hidden here, where it is, or what it films: the model is what the device says about itself, and a declared camera, a recorder or a doorbell report one too. A visual check decides.',
+  CONFIRMED: 'Anything by the scan itself: the confirmation is your documented verification, kept apart from the observations.',
+  UNDETERMINED: 'Anything yet: its answers could not be read.',
+};
 
 /** The devices that deserve a look first: video clues, then media, then the rest. Never a probability. */
 export const STATE_ORDER: Record<NetState, number> = { CONFIRMED: 0, MODEL_IDENTIFIED: 1, VIDEO_COMPATIBLE: 2, MEDIA_SERVICE: 3, UNDETERMINED: 4, DISCOVERED: 5 };
