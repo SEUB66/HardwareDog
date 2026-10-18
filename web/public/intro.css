@@ -1,0 +1,20 @@
+/* The static introduction of diagnostic.html, shown until the interface starts (and without JavaScript). */
+html,
+body {
+  margin: 0;
+  background: #101112;
+  color: #f2f0e9;
+}
+.intro-static {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px;
+  font: 16px/1.55 ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+.intro-static h1 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+.intro-static a {
+  color: #00d9f5;
+}

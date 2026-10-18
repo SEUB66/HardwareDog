@@ -1,0 +1,7 @@
+# Hardware Dog: every public page may be crawled. robots.txt is a request
+# to well-behaved crawlers, not a protection: nothing private is served here
+# (sessions and scans stay in each visitor's own browser).
+User-agent: *
+Allow: /
+
+Sitemap: https://hardwaredog.org/sitemap.xml

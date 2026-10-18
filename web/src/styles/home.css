@@ -603,3 +603,27 @@
 .home-tv .tv-toolbar {
   justify-content: center;
 }
+
+/* A new version waits for a reload; the install offer on the home. */
+.update-note,
+.install-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--cond);
+  font-size: 15px;
+}
+.update-note {
+  margin-bottom: 12px;
+}
+.update-note span,
+.install-card p {
+  flex: 1 1 260px;
+  margin: 0;
+}
