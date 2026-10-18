@@ -19,6 +19,7 @@ import { BLE_SIGNATURES_VERSION, bleClues, bleLabel, USB_EMPTY_NOTE, USB_FUNCTIO
 import { classify, namesOf, NOT_ESTABLISHED, STATE_LABEL, STATE_ORDER, type NetDevice, type NetState } from '../../core/camera/model';
 import { DOGD_HOWTO, LAN_METHODS, METHOD_LABEL, type LanMethod } from '../../core/camera/net';
 import { useSettled } from '../lab/useSettled';
+import { PosterSlider } from './PosterSlider';
 import { LIMITS } from '../../core/camera/report';
 import { dogdUsb } from '../../core/dogd';
 import { loadNumbers } from '../../core/ble/decode';
@@ -179,6 +180,9 @@ function Overview({ lab, usb, reportSeen, onTool }: { lab: Lab; usb: UsbReading 
           SEE THE REPORT
         </button>
       </div>
+      <Panel title="SNIFF THE SNIFFER · 5 POSTERS" info="Anti-sniffer documentation by Seub: 80 hidden-camera products as their sellers sell them, in five sheets. A matching shell does not prove a camera. Arrows, keys or a swipe to change poster; click for full screen, click again to read the small print.">
+        <PosterSlider />
+      </Panel>
       <Panel title="TOOLS AVAILABLE" info="What this computer and this browser can really do now. Nothing is assumed: a tool that is missing says how to get it.">
         <div class="camera-scroll">
           <table class="trace camera-tools">
