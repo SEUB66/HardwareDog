@@ -20,7 +20,7 @@ import type { Lang } from '../lab/rules';
 import { family } from './catalog';
 import { bleLabel, type BleClue, type UsbClue } from './clues';
 import { ITEM_STATUSES, priorityWhy, STATUS_LABEL, type Inspection } from './inspection';
-import { classify, namesOf, STATE_LABEL, STATE_ORDER, type DeviceNote, type NetDevice, type NetState } from './model';
+import { classify, namesOf, NOT_ESTABLISHED, STATE_LABEL, STATE_ORDER, type DeviceNote, type NetDevice, type NetState } from './model';
 
 export interface ReportInput {
   inspection: Inspection;
@@ -170,6 +170,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   L.push('');
 
   L.push('## INTERPRETATIONS (how the classification reads the facts)', '');
+  L.push('A state is what the answers support. None of them, alone, confirms a hidden camera: a model reported on the network is what a device says about itself.', '');
   if (!devices.length) L.push('- No network device to interpret.');
   for (const { d, c } of devices) {
     L.push(`- ${m.alias('host', d.ip)}: ${STATE_LABEL[c.state]}${c.model ? ` · model: ${m.scrub(c.model)}` : ''}`);
@@ -177,6 +178,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
       const ev = d.evidence.find((e) => e.id === r.evidence);
       L.push(`  - ${r.role === 'HINT' ? 'hint: ' : ''}${m.scrub(r.text)}${ref(ev?.labSeq)}`);
     }
+    L.push(`  - not established: ${NOT_ESTABLISHED[c.state]}`);
   }
   for (const u of usbVideo) L.push(`- USB ${u.id}: ${u.reading}`);
   L.push('');

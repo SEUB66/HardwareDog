@@ -518,6 +518,23 @@ describe('report', () => {
     expect(facts).toMatch(/more answer\(s\)/);
   });
 
+  it('a model reported on the network is never shown as a confirmed hidden camera', () => {
+    const m = new NetModel();
+    m.add(obs({ ip: '192.168.1.60', kind: 'wsd', method: 'wsd', service: 'dn:NetworkVideoTransmitter', fields: { hardware: 'IPC-X1' } }), 'PHYSICAL');
+    const d = [...m.devices.values()][0]!;
+    expect(classify(d).state).toBe('MODEL_IDENTIFIED');
+    const r = buildReport(base({ devices: [d] }), { maskNetwork: false, hidePersonal: false });
+    expect(r.text).toContain('Model reported by the device');
+    expect(r.text).toMatch(/not established: That it is a camera hidden here/);
+    const facts = r.text.slice(r.text.indexOf('## FACTS'), r.text.indexOf('## LIMITS'));
+    expect(facts).not.toMatch(/camera confirmed/i);
+    // only a person's documented verification confirms, and it reads as theirs
+    const notes = new Map([[d.key, { ...emptyNote(), confirmation: 'lens seen behind the smoke detector grille, bedroom ceiling' }]]);
+    const c = buildReport(base({ devices: [d], notes }), { maskNetwork: false, hidePersonal: false });
+    expect(c.text).toMatch(/camera confirmed by your verification: lens seen/);
+    expect(c.text).toMatch(/not established: Anything by the scan itself/);
+  });
+
   it('labels simulated data', () => {
     const r = buildReport(base({ network: { ...base().network, origin: 'SIMULATED' } }), { maskNetwork: false, hidePersonal: false });
     expect(r.text).toMatch(/SIMULATED DATA/);

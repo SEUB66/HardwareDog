@@ -71,7 +71,8 @@ export const STATE_LABEL: Record<NetState, string> = {
   DISCOVERED: 'Device discovered',
   MEDIA_SERVICE: 'Media service observed',
   VIDEO_COMPATIBLE: 'Clues compatible with video equipment',
-  MODEL_IDENTIFIED: 'Model identified',
+  // what the device says about itself: not a confirmed (nor a hidden) camera
+  MODEL_IDENTIFIED: 'Model reported by the device',
   CONFIRMED: 'Camera confirmed by a documented verification',
   UNDETERMINED: 'Undetermined',
 };
@@ -249,6 +250,19 @@ export function classify(d: NetDevice, note: DeviceNote = emptyNote()): Classifi
   if (note.ble.length) reasons.push({ text: `You linked it to ${note.ble.length} Bluetooth device(s). This association is yours, not observed.`, evidence: null, role: 'USER' });
   return { state, reasons, model };
 }
+
+/**
+ * What a state does NOT establish, said next to it everywhere (device detail,
+ * report): a model on the network is not a confirmed hidden camera.
+ */
+export const NOT_ESTABLISHED: Record<NetState, string> = {
+  DISCOVERED: 'What this device is. Nothing it announced points to video; that excludes nothing.',
+  MEDIA_SERVICE: 'What the media service carries, or that the device is a camera.',
+  VIDEO_COMPATIBLE: 'That it is a camera hidden here, where it is, or what it films: a recorder or a declared camera answers the same way. A visual check decides.',
+  MODEL_IDENTIFIED: 'That it is a camera hidden here, where it is, or what it films: the model is what the device says about itself, and a declared camera, a recorder or a doorbell report one too. A visual check decides.',
+  CONFIRMED: 'Anything by the scan itself: the confirmation is your documented verification, kept apart from the observations.',
+  UNDETERMINED: 'Anything yet: its answers could not be read.',
+};
 
 /** The devices that deserve a look first: video clues, then media, then the rest. Never a probability. */
 export const STATE_ORDER: Record<NetState, number> = { CONFIRMED: 0, MODEL_IDENTIFIED: 1, VIDEO_COMPATIBLE: 2, MEDIA_SERVICE: 3, UNDETERMINED: 4, DISCOVERED: 5 };
