@@ -188,7 +188,9 @@ export function BannerCarousel({ slides, label, lang, reducedMotion, busy = fals
           </div>
           {showPlay && (
             <button class="bc-btn" onClick={() => update((x) => (x.stopped ? play(x) : pause(x)))} aria-label={s.stopped ? w.play : w.pause}>
-              <span aria-hidden="true">{s.stopped ? '▶' : '❚❚'}</span>
+              <span aria-hidden="true" class="bc-play">
+                {s.stopped ? '▶' : '❚❚'}
+              </span>
             </button>
           )}
           <button class="bc-btn" onClick={() => update((x) => next(x))} aria-label={w.next}>

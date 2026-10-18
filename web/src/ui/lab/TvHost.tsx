@@ -1,7 +1,9 @@
 /**
  * HARDWARE DOG / WHERE THE TV LIVES
  *
- *   DOCKED     a permanent place in Flipper Lab
+ *   DOCKED     its place in a page that has one (the home, Flipper Lab,
+ *              Camera Sniffer); on a page without one, a small TV tab
+ *              that brings it floating
  *   FLOATING   it follows across every section; dragged by its body
  *              (mouse, pen or finger: a tap on POWER or the dial stays a
  *              tap), minimized to a small tab, docked back, kept on screen
@@ -50,12 +52,15 @@ const MARGIN = 8;
 
 const narrow = (): boolean => typeof window !== 'undefined' && window.innerWidth < PHONE_W;
 
-/** Where the screen ends for a floating TV: above the bottom menu when there is one. */
+/** Where the screen ends for a floating TV: above the bottom menu, or the footer bar, when there is one. */
 function bottomLimit(): number {
   if (typeof window === 'undefined') return 0;
-  const nav = document.querySelector('nav.nav');
-  const r = nav?.getBoundingClientRect();
-  return r && r.height > 0 && r.top > window.innerHeight / 2 ? r.top : window.innerHeight;
+  let limit = window.innerHeight;
+  for (const sel of ['nav.nav', 'footer.foot']) {
+    const r = document.querySelector(sel)?.getBoundingClientRect();
+    if (r && r.height > 0 && r.top > window.innerHeight / 2) limit = Math.min(limit, r.top);
+  }
+  return limit;
 }
 
 /** Where the minimized tab sits: above the bottom menu. */
@@ -72,6 +77,10 @@ export class TvPlacement {
   pip: Window | null = null;
   /** A drag in progress (not saved): no snapping animation while the finger moves. */
   dragging = false;
+  /** Places on the page the docked TV can sit in, mounted now. */
+  docks = 0;
+  /** Another view shows the TV right now (What's new): one TV visible, never two. */
+  held = false;
   private listeners = new Set<() => void>();
   private rev = 0;
 
@@ -94,6 +103,18 @@ export class TvPlacement {
     this.rev++;
     for (const l of [...this.listeners]) l();
   }
+  /** Another view takes the TV for a moment (true), then gives it back (false). */
+  hold(on: boolean): void {
+    this.held = on;
+    this.set({}, false);
+  }
+
+  /** A page's place for the TV appeared (+1) or went (-1). */
+  dock(n: 1 | -1): void {
+    this.docks = Math.max(0, this.docks + n);
+    this.set({}, false);
+  }
+
   /** The floating TV's width: the chosen one, smaller on a phone so it never covers the page. */
   get floatWidth(): number {
     if (!narrow()) return this.state.width;
@@ -119,6 +140,32 @@ export class TvPlacement {
     const x = Math.min(Math.max(0, this.state.x), Math.max(0, window.innerWidth - w));
     const y = Math.min(Math.max(0, this.state.y), Math.max(0, bottomLimit() - this.floatHeight));
     if (x !== this.state.x || y !== this.state.y) this.set({ x, y });
+  }
+
+  /** Without dragging: the next corner of the window (clockwise from the top left), above the bottom menu. */
+  corner(): void {
+    if (typeof window === 'undefined') return;
+    const w = this.floatWidth;
+    const h = this.floatHeight;
+    const left = MARGIN;
+    const right = window.innerWidth - w - MARGIN;
+    const top = MARGIN + 64;
+    const bottom = bottomLimit() - h - MARGIN;
+    const corners: [number, number][] = [
+      [left, top],
+      [right, top],
+      [right, bottom],
+      [left, bottom],
+    ];
+    // the corner nearest to where it is, then the next one
+    let near = 0;
+    corners.forEach(([x, y], i) => {
+      const [nx, ny] = corners[near]!;
+      if (Math.hypot(x - this.state.x, y - this.state.y) < Math.hypot(nx - this.state.x, ny - this.state.y)) near = i;
+    });
+    const [x, y] = corners[(near + 1) % 4]!;
+    this.set({ x, y });
+    this.clamp();
   }
 
   /** Let go on a phone: to the nearest side. */
@@ -197,14 +244,22 @@ function Toolbar({ placement, props, onDrag }: { placement: TvPlacement; props: 
           <button class="btn" onClick={() => placement.set({ minimized: true })} title="Minimize to a small tab">
             –
           </button>
-          <button class="btn" onClick={() => placement.set({ mode: 'docked', minimized: false })} title="Back to its place in Flipper Lab">
+          <button class="btn" onClick={() => placement.set({ mode: 'docked', minimized: false })} title="Back to its place in the page">
             DOCK
+          </button>
+          <button class="btn" onClick={() => placement.corner()} title="Move the TV to the next corner (no dragging needed)" aria-label="Move the TV to the next corner">
+            ⤢
           </button>
         </>
       ) : (
-        <button class="btn" onClick={() => placement.float()} title="Float: the TV follows you across sections (drag it by the handle)">
-          FLOAT
-        </button>
+        <>
+          <button class="btn" onClick={() => placement.set({ minimized: true })} title="Reduce to a small bar: the TV keeps watching">
+            –
+          </button>
+          <button class="btn" onClick={() => placement.float()} title="Float: the TV follows you across sections (drag it by the handle)">
+            FLOAT
+          </button>
+        </>
       )}
       <button
         class="btn tv-detach"
@@ -295,14 +350,34 @@ function useDrag(placement: TvPlacement, box: () => HTMLElement | null, anywhere
   };
 }
 
-/** The docked TV: rendered by Flipper Lab, in its place. */
+/** A one-line TV: its light, its state, a tap brings it back. */
+function TvBar({ companion, onShow, title }: { companion: Companion; onShow: () => void; title: string }) {
+  useRev(companion);
+  return (
+    <button class={`tv-bar hw-${companion.hardware}`} onClick={onShow} title={title}>
+      <span class={`tv-tab-light power-${companion.power}`} aria-hidden="true" />
+      TV · {companion.focus.section} · {companion.hardware}
+      {companion.badge ? ` · ${companion.badge}` : ''}
+      {companion.message ? ` · ${companion.message.severity}` : ''}
+    </button>
+  );
+}
+
+/** The docked TV: rendered by a page that has a place for it (the home, Flipper Lab, Camera Sniffer). */
 export function TvDocked(props: HostProps) {
   const { placement } = props;
   useRev(placement);
   const ref = useRef<HTMLDivElement>(null);
   const drag = useDrag(placement, () => ref.current, false);
+  useEffect(() => {
+    placement.dock(1);
+    return () => placement.dock(-1);
+  }, [placement]);
   const s = placement.state;
   if (placement.pip) return <TvAway placement={placement} />;
+  // shown elsewhere for a moment: its place is kept, empty
+  if (placement.held && s.mode === 'docked') return <div class="tv-docked tv-held" aria-hidden="true" />;
+  if (s.mode === 'docked' && s.minimized) return <TvBar companion={props.companion} onShow={() => placement.set({ minimized: false })} title="Show the TV" />;
   if (s.mode !== 'docked')
     return (
       <div class="tv-docked tv-away">
@@ -349,7 +424,17 @@ export function TvFloating(props: HostProps) {
     return () => window.removeEventListener('resize', onResize);
   }, [placement]);
   const s = placement.state;
-  if (s.mode !== 'floating' || placement.pip) return null;
+  if (placement.pip || placement.held) return null;
+  // Docked, on a page with no place for it: a small tab, never nothing; a tap brings it floating.
+  if (s.mode === 'docked') {
+    if (placement.docks > 0) return null;
+    return (
+      <button class={`tv-tab hw-${companion.hardware}`} style={{ bottom: `${tabBottom()}px` }} onClick={() => placement.float()} title="Bring the TV: it floats and follows you">
+        <span class={`tv-tab-light power-${companion.power}`} aria-hidden="true" />
+        TV{companion.message ? ` · ${companion.message.severity}` : ''}
+      </button>
+    );
+  }
   if (s.minimized)
     return (
       <button class={`tv-tab hw-${companion.hardware}`} style={{ bottom: `${tabBottom()}px` }} onClick={() => placement.set({ minimized: false })} title="Show the TV">

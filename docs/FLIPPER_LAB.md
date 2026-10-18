@@ -108,6 +108,12 @@ kinds.
 
 ## THE COMPANION TV
 
+One companion lives in the whole interface ([`COMPANION.md`](COMPANION.md)):
+the robot dog in a turquoise TV everywhere, Flipper Lab's companion in
+this orange TV here. Opening Flipper Lab switches the profile: same
+companion, same power, no reconnection. What follows is the orange TV and
+its scenes.
+
 A small Japanese-style portable TV, seen from the front. The box is a
 realistic picture; the pixel art lives inside the screen.
 
@@ -144,9 +150,10 @@ size (`web/test/tv-profile.test.ts` checks the zones, the transparency of
 the derivatives, and the mapping at five sizes). ZONES (or `?tvdev`) shows
 the mapped zones over the TV.
 
-A new TV picture is a new source, new numbers in `TV_REGIONS`, `npm run
-assets`: no component change. A Hardware Dog TV with the dog is a new skin
-(`tvSkin.ts`) and a new `SpriteSet` (`sprites.ts`); the engine stays.
+A new TV picture is a new source, new numbers in `TVS`, `npm run
+assets`: no component change. Hardware Dog's turquoise TV with the dog is
+exactly that: a second skin (`tvSkin.ts`) and a second `SpriteSet`
+(`dogSprites.ts`); the engine stayed.
 
 ### Power
 
@@ -253,7 +260,8 @@ starts anything on a device. Click, arrow keys or the mouse wheel turn it;
 the knob turns with the view.
 
 ```text
-DOCKED     its place in Flipper Lab (on a phone: 320 px at most, centered).
+DOCKED     its place in Flipper Lab, the home or Camera Sniffer (on a phone:
+           320 px at most, centered); elsewhere a small TV tab.
            Pull it by the handle and it floats
 FLOATING   it follows every section; drag it by its body with a mouse, a
            pen or a finger (the move starts after a few pixels: a tap on

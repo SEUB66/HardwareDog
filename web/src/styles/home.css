@@ -305,9 +305,9 @@
   margin: 0;
 }
 
-/* Wide screens: the banners and the words side by side, the tools in view. */
-.home-top,
-.home-side {
+/* Wide screens: the banners and the dog's TV side by side, the states and the words under them, the tools in view.
+   A phone: banners, TV, words, states, one under the other. */
+.home-top {
   display: grid;
   gap: 14px;
   min-width: 0;
@@ -315,8 +315,23 @@
 @media (min-width: 1100px) {
   .home-top {
     grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr);
+    grid-template-areas:
+      'banners tv'
+      'states hero';
     align-items: start;
     gap: 18px;
+  }
+  .home-top .home-banners {
+    grid-area: banners;
+  }
+  .home-top .home-tv {
+    grid-area: tv;
+  }
+  .home-top .home-hero {
+    grid-area: hero;
+  }
+  .home-top .home-states {
+    grid-area: states;
   }
   .home-tagline {
     font-size: clamp(22px, 2.1vw, 30px);
@@ -324,6 +339,18 @@
   .home-states {
     display: grid;
     gap: 6px;
+  }
+}
+
+/* The dog's TV on the home: beside the tagline on a computer, a small TV under the banners on a phone. */
+.home-tv {
+  width: 100%;
+  max-width: 400px;
+  justify-self: center;
+}
+@media (max-width: 760px) {
+  .home-tv {
+    max-width: 280px;
   }
 }
 
@@ -438,6 +465,10 @@
 }
 .bc-btn span[aria-hidden='true'] {
   font-family: var(--mono);
+}
+.bc-btn .bc-play {
+  font-size: 0.62em;
+  letter-spacing: -0.1em;
 }
 .bc-dots {
   display: flex;
@@ -567,4 +598,8 @@
   .camera-lab .lab-side {
     order: 0;
   }
+}
+
+.home-tv .tv-toolbar {
+  justify-content: center;
 }
