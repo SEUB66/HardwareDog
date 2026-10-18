@@ -73,6 +73,8 @@ export interface Stage {
   section: string;
   /** Nothing running, nothing serious said: a small scene or a value may show. */
   calm: boolean;
+  /** The exact code of the result on screen (an error, a warning), or null: a timeout is not drawn like a refusal. */
+  code: string | null;
 }
 
 /** What an animation is about: the tool, and the kind of file when known. */
@@ -449,6 +451,7 @@ export class Companion {
       return true;
     }
     this.lastResult = { tool: ended.tool, topic: ended.topic };
+    this.lastCode = e.code ?? null;
     this.clearHold();
     if (isCancel(e)) this.hold('CANCELLED', TIMING.cancel);
     else if (e.params?.['outcome'] === 'stopped') this.recompute();
@@ -480,8 +483,9 @@ export class Companion {
     this.op = best ? OP_STATE[best.kind] : 'IDLE';
   }
 
-  /** The operation that ended last: what a result on screen is about. */
+  /** The operation that ended last: what a result on screen is about, and its code. */
   private lastResult: Subject | null = null;
+  private lastCode: string | null = null;
 
   /**
    * What the animation is about: the tool and the kind of file of the
@@ -502,7 +506,11 @@ export class Companion {
   /** The section's decor at rest, and whether a small scene may play. */
   get stage(): Stage {
     const m = this.messages.current;
-    return { section: this.focus.section, calm: this.active.size === 0 && (!m || m.severity === 'INFO' || m.severity === 'PASS') };
+    return {
+      section: this.focus.section,
+      calm: this.active.size === 0 && (!m || m.severity === 'INFO' || m.severity === 'PASS'),
+      code: this.op === 'ERROR' || this.op === 'WARNING' ? this.lastCode : null,
+    };
   }
 
   /** How long the hardware has been in its current state, ms. */

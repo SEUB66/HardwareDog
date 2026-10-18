@@ -55,7 +55,7 @@ function drawPower(ctx: CanvasRenderingContext2D, buffer: HTMLCanvasElement, c: 
   const b = buffer.getContext('2d')!;
   // The scene the screen opens on, and closes from: where the companion is.
   const rest = c.hardware === 'CONNECTED' ? 'idle' : 'wait';
-  const stage = { section: c.focus.section, calm: false };
+  const stage = { section: c.focus.section, calm: false, code: null };
   if (c.power === 'BOOTING') {
     if (reduced) {
       sprites.drawScene(b, rest, now, null, stage);

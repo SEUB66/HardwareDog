@@ -5,15 +5,15 @@ import { DOG_SCENE_IDS, dogFrameAt, dogSceneFor, type DogSceneId } from '../src/
 const atlas = atlasJson as unknown as {
   frame: { w: number; h: number };
   frames: string[];
-  source: string;
-  scenes: Record<string, { at: [number, number][]; eyes: unknown[]; ear: unknown; dog: { x0: number; y0: number; x1: number; y1: number } }>;
+  sources: string[];
+  scenes: Record<string, { at: [number, number][]; eyes: unknown[]; ear: unknown; sheet: string; dog: { x0: number; y0: number; x1: number; y1: number } }>;
 };
 
-describe("the dog's scenes (the owner's sheet)", () => {
-  it('has every scene of the sheet, four frames each, on the 136 x 100 grid', () => {
+describe("the dog's scenes (the owner's sheets)", () => {
+  it('has every scene, four frames each, on the 136 x 100 grid', () => {
     expect(atlas.frame).toEqual({ w: 136, h: 100 });
     expect(atlas.frames).toEqual(['base', 'breath', 'blink', 'ear']);
-    expect(atlas.source).toBe('assets/brand/source/hd-companion-dog-sheet.png');
+    expect(atlas.sources).toEqual(['assets/brand/source/hd-companion-dog-sheet.png', 'assets/brand/source/hd-companion-dog-states.png']);
     expect(Object.keys(atlas.scenes).sort()).toEqual([...DOG_SCENE_IDS].sort());
     const seen = new Set<string>();
     for (const id of DOG_SCENE_IDS) {
@@ -31,6 +31,12 @@ describe("the dog's scenes (the owner's sheet)", () => {
     }
   });
 
+  it('takes the ten states from the states sheet, where they read best', () => {
+    const states = ['serial', 'bluetooth', 'network', 'camera', 'power', 'saved', 'disconnected', 'permission', 'timeout', 'rest'];
+    for (const id of states) expect(atlas.scenes[id]!.sheet, id).toBe('states');
+    for (const id of ['hero', 'usb', 'analyze', 'success', 'error', 'replay', 'export']) expect(atlas.scenes[id]!.sheet, id).toBe('first');
+  });
+
   it('breathes on a slow cycle, blinks only where the drawing has open eyes', () => {
     const frames = (id: DogSceneId) => new Set(Array.from({ length: 800 }, (_, i) => dogFrameAt(id, i * 25)));
     for (const id of DOG_SCENE_IDS) {
@@ -38,20 +44,22 @@ describe("the dog's scenes (the owner's sheet)", () => {
       expect(f.has(0) && f.has(1), id).toBe(true);
       expect(f.has(2), id).toBe(atlas.scenes[id]!.eyes.length > 0);
     }
-    // asleep with a tune, eyes shut with joy: no blink
-    expect(atlas.scenes.idle!.eyes).toEqual([]);
+    // asleep in its bed, eyes shut with joy: no blink
+    expect(atlas.scenes.rest!.eyes).toEqual([]);
+    expect(atlas.scenes.saved!.eyes).toEqual([]);
     expect(atlas.scenes.success!.eyes).toEqual([]);
   });
 });
 
 describe('which scene plays', () => {
-  const at = (scene: Parameters<typeof dogSceneFor>[0], tool = '', calm = false, t = 0, section = 'STATUS') => dogSceneFor(scene, t, { tool, topic: null }, { section, calm });
+  const at = (scene: Parameters<typeof dogSceneFor>[0], tool = '', calm = false, t = 0, section = 'STATUS', code: string | null = null) => dogSceneFor(scene, t, { tool, topic: null }, { section, calm, code });
 
   it('a section opened is a decor on the workshop monitor; an operation started is the activity', () => {
     expect(at('wait', '', false, 0, 'BLE')).toEqual({ id: 'hero', t: 0, monitor: { kind: 'decor' } });
     expect(at('search', 'ble.scan')?.id).toBe('bluetooth');
     expect(at('connect', 'device.connect')?.id).toBe('usb');
     expect(at('connect', 'device.console')?.id).toBe('serial');
+    expect(at('connect', 'device.dogd')?.id).toBe('network');
     expect(at('search', 'camera.net')?.id).toBe('network');
     expect(at('search', 'net.watch')?.id).toBe('network');
     expect(at('read', 'camera.object')?.id).toBe('camera');
@@ -59,29 +67,36 @@ describe('which scene plays', () => {
     expect(at('read', 'device.usb')?.id).toBe('usb');
     expect(at('read', 'device.serial')?.id).toBe('serial');
     expect(at('search', 'device.bus')?.monitor).toEqual({ kind: 'board' });
-    expect(at('read', 'device.power')?.monitor).toEqual({ kind: 'meter' });
+    expect(at('read', 'device.power')?.id).toBe('power');
     expect(at('read', 'device.replay')?.id).toBe('replay');
     expect(at('transfer', 'lab.report')?.id).toBe('export');
-    expect(at('success')?.id).toBe('success');
-    expect(at('error')?.id).toBe('error');
     expect(at('disconnect')?.id).toBe('disconnected');
-    expect(at('shutdown')?.id).toBe('idle');
+    expect(at('shutdown')?.id).toBe('rest');
     expect(dogSceneFor('none', 0)).toBeNull();
   });
 
+  it('results: an export saved, a success, an error, and no answer drawn apart from a refusal', () => {
+    expect(at('success', 'lab.report')?.id).toBe('saved');
+    expect(at('success', 'camera.report')?.id).toBe('saved');
+    expect(at('success', 'device.usb')?.id).toBe('success');
+    expect(at('error', 'device.usb', false, 0, 'STATUS', 'TIMEOUT')?.id).toBe('timeout');
+    expect(at('error', 'device.dogd', false, 0, 'STATUS', 'DOGD_UNREACHABLE')?.id).toBe('timeout');
+    expect(at('error', 'flipper.files', false, 0, 'STATUS', 'ERROR_STORAGE_DENIED')?.id).toBe('error');
+    expect(at('error')?.id).toBe('error');
+  });
+
   it('waiting, cancelled, unavailable: said without pretending to work', () => {
-    expect(at('permission')?.monitor).toEqual({ kind: 'sign', name: 'LOCK', blink: true });
+    expect(at('permission')?.id).toBe('permission');
     expect(at('cancel', '', false, 100)?.monitor).toEqual({ kind: 'text', text: '--' });
     expect(at('cancel', '', false, 900)?.monitor).toEqual({ kind: 'decor' });
-    const na = at('unavailable');
-    expect(na).toEqual({ id: 'hero', t: 0, monitor: { kind: 'text', text: 'N/A' }, still: true });
+    expect(at('unavailable')).toEqual({ id: 'hero', t: 0, monitor: { kind: 'text', text: 'N/A' }, still: true });
   });
 
   it('values and the nap come only when calm: never over an operation, an error or a request', () => {
     const seen = (calm: boolean) => new Set(Array.from({ length: 200 }, (_, i) => JSON.stringify(at('wait', '', calm, i * 500))));
     const calm = [...seen(true)].join(' ');
     expect(calm).toContain('"kind":"text"');
-    expect(calm).toContain('"id":"idle"');
+    expect(calm).toContain('"id":"rest"');
     const busy = [...seen(false)];
     expect(busy).toHaveLength(200); // only the time changes
     expect(busy.every((s) => s.includes('"kind":"decor"'))).toBe(true);

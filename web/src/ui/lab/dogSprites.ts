@@ -2,22 +2,25 @@
  * HARDWARE DOG / THE DOG'S SCENES
  *
  * What plays inside the turquoise TV: Hardware Dog's robot dog, from the
- * owner's sheet (assets/brand/source/hd-companion-dog-sheet.png), cut and
- * brought to the 136 x 100 screen by web/scripts/build-dog-scenes.mjs,
- * nothing redrawn: cream panels, dark joints, cyan eyes and joints, the
- * collar and its USB tag, the workshop.
+ * owner's two sheets: "HW DOG / COMPANION STATES"
+ * (assets/brand/source/hd-companion-dog-states.png, ten states drawn to
+ * be read at a glance) and the first sheet
+ * (hd-companion-dog-sheet.png: the workshop at rest, USB, analysis,
+ * success, error, replay, filing), cut and brought to the 136 x 100
+ * screen by web/scripts/build-dog-scenes.mjs, nothing redrawn: cream
+ * panels, dark joints, cyan eyes and joints, the collar and its USB tag.
  *
  * The drawings come alive here:
  *   - the dog breathes (head and back one pixel lower, on a slow cycle),
  *     blinks, twitches an ear, from frames made from the drawing itself
  *   - what is around it moves: the terminal typed, the radio waves leaving
  *     the antenna, the router's LEDs and packets along the cable, a glint
- *     on the magnifier, the bars of the chart, the ? hopping, the play
- *     sign of the replay, the box's arrow...
+ *     on the magnifier, the scope's trace, the sand of the hourglass, the
+ *     padlock glowing, the saved check, the stars over its bed...
  *   - at rest, the workshop monitor shows the section's sign (a terminal
  *     for SERIAL, a trident for USB...); now and then, when nothing runs
- *     and nothing serious is said, a value scrolls on it, or the dog lies
- *     down with a tune
+ *     and nothing serious is said, a value scrolls on it, or the dog naps
+ *     in its bed
  *
  * A section opened is a decor; an operation really started is an activity:
  * opening Bluetooth shows the Bluetooth sign on the monitor, only a scan
@@ -35,7 +38,25 @@ import atlasJson from '../../../../assets/brand/web/hd-dog-scenes.json';
 import { SCREEN_H, SCREEN_W, alpha, glint, led, pixelText, pixelTextWidth, pulse, rect, rnd, twinkle, type SceneName, type SpriteSet } from './sprites';
 
 /** The dog's scenes, by their name on the sheet (the hero is the big scene in the TV). */
-export const DOG_SCENE_IDS = ['hero', 'idle', 'usb', 'serial', 'bluetooth', 'network', 'camera', 'analyze', 'success', 'error', 'disconnected', 'replay', 'export'] as const;
+export const DOG_SCENE_IDS = [
+  'hero',
+  'usb',
+  'analyze',
+  'success',
+  'error',
+  'replay',
+  'export',
+  'serial',
+  'bluetooth',
+  'network',
+  'camera',
+  'power',
+  'saved',
+  'disconnected',
+  'permission',
+  'timeout',
+  'rest',
+] as const;
 export type DogSceneId = (typeof DOG_SCENE_IDS)[number];
 
 interface AtlasScene {
@@ -223,17 +244,6 @@ function along(ctx: CanvasRenderingContext2D, t: number, path: [number, number][
   }
 }
 
-/** A needle swinging on a dial: a measuring instrument read (no value invented). */
-function meter(ctx: CanvasRenderingContext2D, t: number): void {
-  screenBg(ctx);
-  const cx = MON.x + 12;
-  const cy = MON.y + 14;
-  for (let a = -1.1; a <= 1.1; a += 0.22) rect(ctx, DOG_PALETTE.cyan, cx + Math.sin(a) * 9, cy - Math.cos(a) * 9, 1, 1);
-  const ang = Math.sin(t / 700) * 0.8;
-  for (let r = 0; r < 8; r++) rect(ctx, DOG_PALETTE.amber, cx + Math.sin(ang) * r, cy - Math.cos(ang) * r, 1, 1);
-  rect(ctx, DOG_PALETTE.cyan, cx - 1, cy - 1, 3, 2);
-}
-
 /** A little board with its two lines (SDA, SCL) blinking: I2C watched. */
 function board(ctx: CanvasRenderingContext2D, t: number): void {
   sign(ctx, 'BUS');
@@ -244,52 +254,35 @@ function board(ctx: CanvasRenderingContext2D, t: number): void {
   }
 }
 
+/** Darkened for a moment: something blinking off, on any background. */
+const dim = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, a = 0.55) => alpha(ctx, a, '#000', x, y, w, h);
+
+/** A glow breathing over something lit (a padlock, a check). */
+const glow = (ctx: CanvasRenderingContext2D, t: number, x: number, y: number, w: number, h: number, color: string, every = 1400) => {
+  const p = (Math.sin((t / every) * Math.PI * 2) + 1) / 2;
+  alpha(ctx, 0.12 + 0.18 * p, color, x - 2, y - 2, w + 4, h + 4);
+};
+
+/** Zs floating up from a point. */
+function snore(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string): void {
+  const PERIOD = 2800;
+  for (let i = 0; i < 2; i++) {
+    const p = ((t + i * (PERIOD / 2)) % PERIOD) / PERIOD;
+    const zx = Math.round(x + p * 7);
+    const zy = Math.round(y - p * 12);
+    ctx.globalAlpha = p < 0.8 ? 1 : (1 - p) * 5;
+    rect(ctx, color, zx, zy, 3, 1);
+    rect(ctx, color, zx + 1, zy + 1, 1, 1);
+    rect(ctx, color, zx, zy + 2, 3, 1);
+    ctx.globalAlpha = 1;
+  }
+}
+
 const OVERLAYS: Record<DogSceneId, Overlay> = {
   hero: () => {},
-  idle: (ctx, t) => {
-    hop(ctx, 'idle', 83, 50, 9, 13, pulse(t, 1200, 600) ? -1 : 0, '#44342b');
-  },
   usb: (ctx, t) => {
     if (!pulse(t, 700, 380)) alpha(ctx, 0.75, '#1e1c23', 91, 50, 11, 11);
     twinkle(ctx, t, 97, 71, '#fff6b0', 0);
-  },
-  serial: (ctx, t) => {
-    terminal(ctx, t, 80, 30, 26, 8, '#121c20');
-  },
-  bluetooth: (ctx, t) => {
-    emit(
-      ctx,
-      t,
-      [
-        [92, 30, 5, 12],
-        [97, 25, 6, 21],
-        [103, 20, 9, 31],
-      ],
-      '#25282f',
-    );
-    led(ctx, t, 86, 34, DOG_PALETTE.cyan, 640, 320);
-  },
-  network: (ctx, t) => {
-    for (let i = 0; i < 5; i++) if (rnd(Math.floor(t / 180) * 5 + i) < 0.35) rect(ctx, '#1d3a1f', 117 + i * 3, 62, 2, 2);
-    along(
-      ctx,
-      t,
-      [
-        [56, 76],
-        [64, 74],
-        [72, 71],
-        [80, 67],
-        [88, 62],
-        [96, 59],
-        [104, 58],
-      ],
-      '#7ff5ff',
-    );
-  },
-  camera: (ctx, t) => {
-    glint(ctx, t, 75, 57, 5);
-    if (!pulse(t, 800, 420)) alpha(ctx, 0.75, '#1a1e28', 92, 48, 12, 13);
-    led(ctx, t, 119, 61, '#ff4040', 1000, 300);
   },
   analyze: (ctx, t) => {
     // the chart's bars move like a live reading; no number is shown
@@ -310,10 +303,6 @@ const OVERLAYS: Record<DogSceneId, Overlay> = {
     hop(ctx, 'error', 71, 21, 18, 27, pulse(t, 800, 400) ? -1 : 0, '#172235');
     if (!pulse(t, 500, 300)) alpha(ctx, 0.6, '#1a2234', 97, 46, 26, 26);
   },
-  disconnected: (ctx, t) => {
-    if (!pulse(t, 900, 450)) alpha(ctx, 0.75, '#20202c', 79, 42, 11, 17);
-    twinkle(ctx, t, 63, 50, '#fff6b0', 200);
-  },
   replay: (ctx, t) => {
     if (!pulse(t, 1000, 600)) alpha(ctx, 0.7, '#002a3f', 89, 36, 12, 13);
     const band = 32 + ((t / 40) % 24);
@@ -322,12 +311,94 @@ const OVERLAYS: Record<DogSceneId, Overlay> = {
   export: (ctx, t) => {
     hop(ctx, 'export', 72, 65, 18, 18, pulse(t, 900, 450) ? -1 : 0, '#996379');
   },
+  serial: (ctx, t) => {
+    terminal(ctx, t, 82, 28, 40, 14, '#011c30');
+    if (!pulse(t, 700, 380)) dim(ctx, 54, 25, 16, 17);
+  },
+  bluetooth: (ctx, t) => {
+    emit(
+      ctx,
+      t,
+      [
+        [69, 27, 8, 27],
+        [77, 21, 10, 39],
+        [87, 15, 10, 51],
+      ],
+      '#002a46',
+    );
+    led(ctx, t, 77, 42, DOG_PALETTE.cyan, 640, 320);
+    // the devices found answer one after the other
+    const k = Math.floor(t / 700) % 3;
+    for (const [i, [x, y, w, h]] of (
+      [
+        [111, 15, 25, 21],
+        [116, 39, 20, 20],
+        [106, 62, 17, 24],
+      ] as const
+    ).entries())
+      if (i !== k) dim(ctx, x, y, w, h, 0.35);
+  },
+  network: (ctx, t) => {
+    for (let i = 0; i < 4; i++) if (rnd(Math.floor(t / 180) * 4 + i) < 0.35) dim(ctx, 22 + i * 5, 67, 3, 4, 0.8);
+    along(
+      ctx,
+      t,
+      [
+        [44, 70],
+        [52, 70],
+        [60, 73],
+        [68, 77],
+        [76, 80],
+        [84, 82],
+      ],
+      '#7ff5ff',
+    );
+  },
+  camera: (ctx, t) => {
+    glint(ctx, t, 61, 57, 7);
+    if (!pulse(t, 800, 420)) dim(ctx, 79, 29, 17, 24);
+  },
+  power: (ctx, t) => {
+    // the scope's trace runs; no value is drawn
+    rect(ctx, '#021a1f', 80, 38, 38, 26);
+    for (let x = 0; x < 38; x++) {
+      const y = 51 + Math.round(Math.sin((x + t / 60) / 3.2) * 8);
+      rect(ctx, '#ffd21e', 80 + x, y, 1, 1);
+    }
+    rect(ctx, '#2a5a2a', 80, 51, 38, 1);
+  },
+  saved: (ctx, t) => {
+    glow(ctx, t, 92, 18, 32, 24, DOG_PALETTE.green);
+    twinkle(ctx, t, 88, 24, DOG_PALETTE.green, 0);
+    twinkle(ctx, t, 130, 26, DOG_PALETTE.green, 400);
+    twinkle(ctx, t, 89, 44, DOG_PALETTE.green, 800);
+  },
+  disconnected: (ctx, t) => {
+    if (!pulse(t, 900, 500)) dim(ctx, 64, 18, 72, 30, 0.45);
+    twinkle(ctx, t, 90, 63, '#fff6b0', 200);
+  },
+  permission: (ctx, t) => {
+    glow(ctx, t, 92, 28, 28, 42, DOG_PALETTE.amber, 1600);
+  },
+  timeout: (ctx, t) => {
+    // the sand falls, slowly; nothing answers
+    for (let i = 0; i < 4; i++) {
+      const y = 46 + ((t / 90 + i * 4) % 14);
+      rect(ctx, '#ff6a3a', 72, y, 1, 1);
+    }
+    if (!pulse(t, 1100, 650)) dim(ctx, 103, 33, 30, 34, 0.5);
+  },
+  rest: (ctx, t) => {
+    snore(ctx, t, 112, 36, '#9ff6ff');
+    twinkle(ctx, t, 120, 22, '#fff6b0', 0);
+    twinkle(ctx, t, 104, 14, '#fff6b0', 700);
+  },
 };
 
 // ---------------------------------------------------------------- scenes
 
 /** What the hero's monitor shows in a scene drawn on the hero. */
-type Monitor = { kind: 'decor' } | { kind: 'sign'; name: string; blink?: boolean } | { kind: 'text'; text: string } | { kind: 'meter' } | { kind: 'board' };
+type Monitor = { kind: 'decor' } | { kind: 'sign'; name: string; blink?: boolean } | { kind: 'text'; text: string } | { kind: 'board' };
 
 export interface DogScene {
   id: DogSceneId;
@@ -347,7 +418,7 @@ function rest(t: number, stage: Stage | null): DogScene {
   const p = t % REST_CYCLE;
   if (p < REST.decor) return { id: 'hero', t, monitor: { kind: 'decor' } };
   if (p < REST.decor + REST.value) return { id: 'hero', t, monitor: { kind: 'text', text: VALUES[Math.floor(t / REST_CYCLE) % VALUES.length]! } };
-  return { id: 'idle', t: p - REST.decor - REST.value };
+  return { id: 'rest', t: p - REST.decor - REST.value };
 }
 
 /**
@@ -358,13 +429,18 @@ function rest(t: number, stage: Stage | null): DogScene {
  * power on a meter, a replay on the little screen, an export filed in the
  * box.
  */
+/** Tools whose successful end is a file handed to the person. */
+const EXPORTS = /(^|\.)(report|export)$/;
+/** Codes that mean nothing answered: drawn as the hourglass, not as a refusal. */
+const NO_ANSWER = ['TIMEOUT', 'ETIMEDOUT', 'DOGD_UNREACHABLE', 'DOGD_LOST'];
+
 export function dogSceneFor(scene: SceneName, t: number, subject: Subject | null = null, stage: Stage | null = null): DogScene | null {
   const tool = subject?.tool ?? '';
   switch (scene) {
     case 'none':
       return null;
     case 'shutdown':
-      return { id: 'idle', t };
+      return { id: 'rest', t };
     case 'idle':
     case 'wait':
       return rest(t, stage);
@@ -373,6 +449,7 @@ export function dogSceneFor(scene: SceneName, t: number, subject: Subject | null
     case 'connect':
       if (tool.startsWith('ble.')) return { id: 'bluetooth', t };
       if (tool === 'device.console' || tool === 'device.serial') return { id: 'serial', t };
+      if (tool === 'device.dogd') return { id: 'network', t };
       return { id: 'usb', t };
     case 'search':
       if (tool.startsWith('ble.')) return { id: 'bluetooth', t };
@@ -387,21 +464,21 @@ export function dogSceneFor(scene: SceneName, t: number, subject: Subject | null
       if (tool === 'device.usb') return { id: 'usb', t };
       if (tool === 'device.serial' || tool === 'device.console') return { id: 'serial', t };
       if (tool === 'device.bus') return { id: 'hero', t, monitor: { kind: 'board' } };
-      if (tool === 'device.power') return { id: 'hero', t, monitor: { kind: 'meter' } };
+      if (tool === 'device.power') return { id: 'power', t };
       if (tool.startsWith('ble.')) return { id: 'bluetooth', t };
       return { id: 'analyze', t };
     case 'transfer':
       return { id: tool === 'device.replay' ? 'replay' : 'export', t };
     case 'success':
-      return { id: 'success', t };
+      return { id: EXPORTS.test(tool) ? 'saved' : 'success', t };
     case 'warning':
       return { id: 'analyze', t };
     case 'error':
-      return { id: 'error', t };
+      return { id: stage?.code && NO_ANSWER.includes(stage.code) ? 'timeout' : 'error', t };
     case 'disconnect':
       return { id: 'disconnected', t };
     case 'permission':
-      return { id: 'hero', t, monitor: { kind: 'sign', name: 'LOCK', blink: true } };
+      return { id: 'permission', t };
     case 'cancel':
       // the tool put down: the section's decor, the monitor quiet a moment
       return { id: 'hero', t, monitor: t < 700 ? { kind: 'text', text: '--' } : { kind: 'decor' } };
@@ -420,8 +497,6 @@ function drawMonitor(ctx: CanvasRenderingContext2D, m: Monitor, t: number, secti
       return;
     case 'text':
       return marquee(ctx, m.text, t);
-    case 'meter':
-      return meter(ctx, t);
     case 'board':
       return board(ctx, t);
   }

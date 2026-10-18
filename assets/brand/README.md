@@ -34,6 +34,10 @@ source/hd-companion-dog-sheet.png   COMPANION  owner's sheet "HARDWARE DOG - COM
                                                scenes IDLE USB SERIAL BLUETOOTH NETWORK CAMERA SNIFFER
                                                ANALYZING SUCCESS ERROR DISCONNECTED REPLAY EXPORT; cut into
                                                web/hd-dog-scenes.webp by `npm run companion`
+source/hd-companion-dog-states.png  COMPANION  owner's sheet "HW DOG / COMPANION STATES", 941x1672 (uploaded in
+                                               chat): SERIAL BLUETOOTH NETWORK CAMERA POWER EXPORT DONE
+                                               DISCONNECTED PERMISSION TIMEOUT IDLE; the reference for those
+                                               states, cut into web/hd-dog-scenes.webp by `npm run companion`
 source/hd-flipper-lab-banner.png    FLIPPER LAB pixel-art lab banner: the dog and the dolphin, 1983x793
 source/hd-camera-sniffer-banner.png CAMERA      Camera Sniffer banner (pixel art, owner-supplied), 1983x793;
                                                web/hd-camera-sniffer-banner-800/1600.webp by `npm run assets`

@@ -106,29 +106,36 @@ NET...). An operation really started is an **activity**. Opening
 Bluetooth is not a scan.
 
 ```text
-STATE                         DOG SCENE (sheet)       WHAT MOVES
-rest (no link / link idle)    the workshop (hero)     breath, blink, ear; the
-                                                      section's sign on the monitor
-rest, calm                    + a value on the        NO COOKIES. NO LEASH. LOCAL
-                              monitor, the nap (01)   ONLY... only when nothing runs
-                                                      and nothing serious is said
-connect: USB port             USB (02)                the ! marks, a spark at the plug
-connect / read: serial        SERIAL (03)             the terminal typed
-search: BLE                   BLUETOOTH (04)          waves leave the antenna
-search: network, dogd         NETWORK (05)            router LEDs, packets on the cable
-read: Camera Sniffer object   CAMERA SNIFFER (06)     a glint on the magnifier
-read: inspection, compare     ANALYZING (07)          the chart's bars (no number)
-read: I2C watch               the workshop            a board on the monitor
-read: power                   the workshop            a meter's needle (no value)
-read: replay                  REPLAY (11)             the play sign, the roll bar
-transfer: export, report      EXPORT (12)             the box's arrow
-success                       SUCCESS (08)            once, then rest
-error                         ERROR (09)              once, then rest; the message stays
-link lost                     DISCONNECTED (10)       then rest
-waiting for the person        the workshop            a padlock on the monitor
-cancelled                     the workshop            the tool put down, then rest
-not offered here              the workshop            N/A on the monitor, nothing moves
-power off                     the nap (01)
+STATE                         DOG SCENE (sheet)          WHAT MOVES
+rest (no link / link idle)    the workshop (1)           breath, blink, ear; the
+                                                         section's sign on the monitor
+rest, calm                    + a value on the monitor,  NO COOKIES. NO LEASH. LOCAL
+                              IDLE / READY (2)           ONLY...; Zs, stars: only when
+                                                         nothing runs, nothing serious said
+connect: USB port             USB (1)                    the ! marks, a spark at the plug
+connect / read: serial        SERIAL / LIVE (2)          the terminal typed
+search: BLE                   BLUETOOTH / SCAN (2)       waves leave the antenna, the
+                                                         devices found answer in turn
+search: network, dogd         NETWORK / TEST (2)         router LEDs, packets on the cable
+read: Camera Sniffer object   CAMERA / INSPECT (2)       a glint on the magnifier
+read: inspection, compare     ANALYZING (1)              the chart's bars (no number)
+read: power                   POWER / ANALYZE (2)        the scope's trace (no value)
+read: I2C watch               the workshop (1)           a board on the monitor
+read: replay                  REPLAY (1)                 the play sign, the roll bar
+transfer: export, report      EXPORT (1)                 the box's arrow
+success: export, report       EXPORT / DONE (2)          the check glows, once
+success                       SUCCESS (1)                once, then rest
+error: no answer (TIMEOUT,    ERROR / TIMEOUT (2)        the sand falls; once, then rest
+DOGD_UNREACHABLE, DOGD_LOST)
+error                         ERROR (1)                  once, then rest; the message stays
+link lost                     ERROR / DISCONNECTED (2)   then rest
+waiting for the person        WAIT / PERMISSION (2)      the padlock glows
+cancelled                     the workshop (1)           the tool put down, then rest
+not offered here              the workshop (1)           N/A on the monitor, nothing moves
+power off                     IDLE / READY (2)
+
+(1) hd-companion-dog-sheet.png   (2) hd-companion-dog-states.png, the reference
+                                     where it has the state
 ```
 
 Scenes are a SpriteSet, replaceable without touching the engine:
@@ -200,12 +207,13 @@ shows it, the page's place stays empty.
 
 ```text
 assets/brand/source/hd-tv-turquoise-frame.png   the turquoise TV, alpha cut-out, untouched
-assets/brand/source/hd-companion-dog-sheet.png  the owner's sheet: the dog, 12 scenes
+assets/brand/source/hd-companion-dog-sheet.png  the owner's first sheet: the dog, 12 scenes
+assets/brand/source/hd-companion-dog-states.png the owner's states sheet: 10 states, 941x1672
 assets/brand/web/hd-tv-turquoise-560|1120.webp  the frame, alpha snapped, color of the
                                                 transparent pixels zeroed (npm run assets)
 assets/brand/web/hd-tv-turquoise.profile.json   screen opening (traced, 72 rays), POWER,
                                                 dial and knob, handle, speaker, logo
-assets/brand/web/hd-dog-scenes.webp|json        13 scenes x 4 frames, 136 x 100
+assets/brand/web/hd-dog-scenes.webp|json        17 scenes x 4 frames, 136 x 100
                                                 (npm run companion)
 ```
 
@@ -214,9 +222,10 @@ picture's own alpha, snapped; the turquoise shell and the black details
 stay (`web/test/tv-profile.test.ts` checks both TVs, five sizes, and the
 shell's color). ZONES (or `?tvdev`) draws the mapped zones over the TV.
 
-The sheet is a reference, not a spritesheet: each scene is cut through
-one window of the same size (the dog keeps its size from scene to
-scene), fitted to the screen's width; the room continues above (its own
+The sheets are references, not spritesheets: the states sheet gives the
+ten states it draws (more readable at the widget's size), the first one
+the workshop and the rest. Each scene is cut through one window of the
+same size per sheet (the dog keeps its size from scene to scene), fitted to the screen's width; the room continues above (its own
 wall, darker toward the ceiling) and the floor below (its own mat, its
 grid continued). From each drawing the script makes the breath (head and
 back one pixel lower: the dog is found by its cream panels, its joints
