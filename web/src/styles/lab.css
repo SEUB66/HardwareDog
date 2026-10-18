@@ -696,6 +696,28 @@
 .tv-act:focus-visible {
   outline: 2px solid #ff4fa3;
 }
+/* DEMO or REPLAY: what the tool shows is not live hardware */
+.tv-badge {
+  position: absolute;
+  top: 5%;
+  left: 6%;
+  padding: 0.05em 0.45em;
+  font: 700 clamp(7px, 2cqw, 12px) / 1.4 var(--mono);
+  letter-spacing: 0.1em;
+  color: #101112;
+  background: #ffd27a;
+  pointer-events: none;
+}
+.tv-badge-REPLAY {
+  background: #9ff6ff;
+}
+.has-badge .tv-text {
+  padding-top: 14%;
+}
+.has-badge .tv-osd {
+  top: auto;
+  bottom: 6%;
+}
 .tv-osd {
   position: absolute;
   top: 6%;
@@ -725,6 +747,9 @@
 }
 .tv-docked {
   width: 100%;
+}
+.tv-held {
+  aspect-ratio: 1536 / 1024;
 }
 .tv-away {
   padding: 14px;
@@ -774,9 +799,25 @@
   padding: 5px 10px;
   background: var(--panel);
   color: var(--text);
-  border: 1px solid #ff8a1e;
+  border: 1px solid #12b8c4;
   font: 600 var(--fs-meta) var(--mono);
   letter-spacing: 0.06em;
+  cursor: pointer;
+}
+/* the docked TV reduced: one line in its place */
+.tv-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid #12b8c4;
+  font: 600 var(--fs-meta) var(--mono);
+  letter-spacing: 0.06em;
+  text-align: left;
   cursor: pointer;
 }
 .tv-tab-light {
@@ -791,6 +832,12 @@
 .tv-tab-light.power-BOOTING,
 .tv-tab-light.power-SHUTTING_DOWN {
   background: var(--amber);
+}
+
+/* the phone's MORE menu open: the floating TV steps aside, never over the navigation */
+.shell.menu-open .tv-floating,
+.shell.menu-open .tv-tab {
+  visibility: hidden;
 }
 
 /* detached window */

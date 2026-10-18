@@ -56,7 +56,8 @@ import type { Lab } from '../core/lab/context';
 import { instantOp } from '../core/lab/events';
 import { BluetoothLab, type BleTool } from './lab/BluetoothLab';
 import { FlipperLab, type FlipperTool } from './lab/FlipperLab';
-import { TvFloating, TvPlacement, useTvPower } from './lab/TvHost';
+import { TvDocked, TvFloating, TvPlacement, useTvPower } from './lab/TvHost';
+import { deviceLink } from '../core/lab/device';
 
 interface Session {
   system: System;
@@ -209,20 +210,43 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         setScreen('FLIPPER');
         return lab.flipper.connect(lab.flipper.lastMode).catch(() => {});
       }),
-      lab.registry.register('lab.log', () => {
-        const ble = lab.bus.recent().at(-1)?.source === 'BLE';
-        if (ble) {
+      lab.registry.register('lab.log', (args) => {
+        // the log of the tool the message is about; without one, of the latest event's tool
+        const source = args?.['source'] ?? lab.bus.recent((e) => e.type !== 'observe').at(-1)?.source;
+        if (source === 'BLE') {
           setScreen('BLE');
           setBleTool('LOG');
-        } else {
+        } else if (source === 'CAMERA') {
+          setScreen('CAMERA');
+          setCameraTool('REPORT');
+        } else if (source === 'FLIPPER') {
           setScreen('FLIPPER');
           setFlipperTool('LOG');
-        }
+        } else setScreen('TRACE');
+      }),
+      lab.registry.register('lab.open', (args) => {
+        const to: Record<string, Screen> = { FLIPPER: 'FLIPPER', BLE: 'BLE', CAMERA: 'CAMERA', DEVICE: 'STATUS' };
+        const s = to[args?.['source'] ?? ''];
+        if (s) setScreen(s);
       }),
       lab.registry.register('ble.start', () => {
         setScreen('BLE');
         setBleTool('SCAN');
       }),
+    ];
+    return () => off.forEach((f) => f());
+  }, [lab]);
+
+  // Commands that start something on the session: their preconditions are checked at the click.
+  const actions = useRef({ pick: () => {}, dogd: () => {} });
+  useEffect(() => {
+    const off = [
+      lab.registry.register(
+        'device.connect',
+        () => actions.current.pick(),
+        () => (typeof navigator !== 'undefined' && 'serial' in navigator ? null : 'this browser has no Web Serial'),
+      ),
+      lab.registry.register('device.dogd', () => actions.current.dogd()),
     ];
     return () => off.forEach((f) => f());
   }, [lab]);
@@ -336,17 +360,24 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario: ScenarioId = DEFAULT_SCENARIO) => {
     let transport: Transport;
     if (kind === 'WEB SERIAL') {
+      // the browser's port chooser: the companion waits with the person, nothing pretended
+      const op = lab.device.begin('device.connect', 'connect', 'choosing a USB port', 'PHYSICAL', true);
       try {
         transport = await WebSerialTransport.pick();
+        lab.device.end(op, 'device.connect', { severity: 'PASS', message: 'port chosen', origin: 'PHYSICAL' });
       } catch (e) {
+        lab.device.failed(op, 'device.connect', e, 'PHYSICAL');
         system.mark(`web serial: ${e instanceof Error ? e.message : String(e)}`);
         return;
       }
     } else if (kind === 'DOGD') {
+      const op = lab.device.begin('device.dogd', 'connect', 'reaching dogd on this computer', 'PHYSICAL');
       try {
         // One source: one device. Several: a pack, one Dog per source.
         transport = await connectDogd();
+        lab.device.end(op, 'device.dogd', { severity: 'PASS', message: 'dogd reached', origin: 'PHYSICAL' });
       } catch (e) {
+        lab.device.end(op, 'device.dogd', { severity: 'FAIL', message: e instanceof Error ? e.message : String(e), origin: 'PHYSICAL', code: 'DOGD_UNREACHABLE' });
         system.sourceFailed('DOGD NOT REACHED', DOGD_URL.replace(/^https?:\/\//, ''), e instanceof Error ? e.message : String(e));
         navigate('STATUS');
         return;
@@ -379,9 +410,12 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   /** Any board's serial console, read by this browser: no probe needed. Its console is the screen to watch. */
   const openConsole = async () => {
     let transport: ConsoleTransport;
+    const op = lab.device.begin('device.console', 'connect', 'choosing a serial port', 'PHYSICAL', true);
     try {
       transport = await ConsoleTransport.pick();
+      lab.device.end(op, 'device.console', { severity: 'PASS', message: 'port chosen', origin: 'PHYSICAL' });
     } catch (e) {
+      lab.device.failed(op, 'device.console', e, 'PHYSICAL');
       system.mark(`serial console: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
@@ -506,6 +540,32 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       system.mark(`library: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
+
+  actions.current = { pick: () => switchTransport('WEB SERIAL'), dogd: () => switchTransport('DOGD') };
+
+  // The companion follows the section: its decor, the tool that comes first, who lives in the TV.
+  useEffect(() => {
+    const source = screen === 'FLIPPER' || screen === 'BLE' || screen === 'CAMERA' ? screen : 'DEVICE';
+    const noSerial = typeof navigator === 'undefined' || !('serial' in navigator);
+    const unavailable = screen === 'SERIAL' && !session.transport && noSerial ? 'NO WEB SERIAL IN THIS BROWSER: CHROME, EDGE OR OPERA ON A COMPUTER, OR DOGD' : null;
+    lab.companion.setFocus({ section: screen, source, profile: screen === 'FLIPPER' ? 'flipper' : 'hwdog', unavailable });
+  }, [lab, screen, session]);
+
+  // The session on the lab bus: its link, and what runs until stopped. Facts the app has; nothing invented.
+  const origin = system.replayOf ? 'REPLAY' : system.origin === 'SIMULATED' ? 'SIMULATED' : 'PHYSICAL';
+  const linkState = deviceLink(session.transport !== null, system.link);
+  useEffect(() => {
+    const what = session.transport ? viaLabel(system) : 'no device chosen';
+    lab.device.link(linkState, `${linkState === 'ABSENT' ? 'no device' : system.device.id} · ${what}`, origin);
+  }, [lab, linkState, origin, session]);
+  useEffect(() => {
+    lab.device.watch('device.replay', session.transport instanceof ReplayTransport, 'read', 'replaying a recording', 'REPLAY');
+    return () => lab.device.watch('device.replay', false, 'read', 'replaying a recording', 'REPLAY');
+  }, [lab, session]);
+  const netOn = !!system.netWatch && system.link === 'ONLINE';
+  const busOn = system.bus.watchMs > 0 && system.link === 'ONLINE';
+  useEffect(() => lab.device.watch('net.watch', netOn, 'search', 'network checks', origin), [lab, netOn, origin]);
+  useEffect(() => lab.device.watch('device.bus', busOn, 'search', 'I2C watch', origin), [lab, busOn, origin]);
 
   const context: CommandContext = useMemo(
     () => ({
@@ -677,7 +737,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   const labScreen = screen === 'FLIPPER' || screen === 'BLE' || screen === 'CAMERA';
 
   return (
-    <div class="shell">
+    <div class={`shell${moreOpen ? ' menu-open' : ''}`}>
       <header class="head">
         <span class="brand">
           <img
@@ -809,6 +869,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
             onDemo={() => void switchTransport('SIMULATOR')}
             onTour={startTour}
             onGo={(s) => navigate(s)}
+            tv={<TvDocked companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />}
           >
             {/* A source that just failed is said before anything else. */}
             {system.lastError && <ErrorBlock error={system.lastError} />}
@@ -844,13 +905,14 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         </span>
       </footer>
 
-      {/* The floating TV follows every section; docked, it lives in Flipper Lab. */}
+      {/* One TV: floating, it follows every section; docked, it sits in the page's place for it (home, Flipper Lab, Camera Sniffer), elsewhere a small tab. */}
       <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
 
       {touring && <Tour onEnd={() => setTouring(false)} />}
       {whatsNew && !touring && (
         <WhatsNew
           lab={lab}
+          placement={placement}
           reducedMotion={reducedMotion}
           onClose={() => setWhatsNew(false)}
           onGo={(s) => {

@@ -22,7 +22,7 @@
  * would bring its own sheets and overlays, the engine stays the same.
  */
 
-import type { Anim, Subject } from '../../core/lab/companion';
+import type { Anim, Stage, Subject } from '../../core/lab/companion';
 import atlasUrl from '../../../../assets/brand/web/hd-companion-scenes.webp';
 import atlasJson from '../../../../assets/brand/web/hd-companion-scenes.json';
 
@@ -45,9 +45,15 @@ export type SceneName = Anim | 'shutdown';
 
 export interface SpriteSet {
   id: string;
-  /** `subject`: what the animation is about (tool, file kind), to pick the right scene. */
-  drawScene(ctx: CanvasRenderingContext2D, scene: SceneName, t: number, subject?: Subject | null): void;
+  /**
+   * `subject`: what the animation is about (tool, file kind), to pick the
+   * right scene. `stage`: the section on screen (the decor at rest) and
+   * whether a small scene may play.
+   */
+  drawScene(ctx: CanvasRenderingContext2D, scene: SceneName, t: number, subject?: Subject | null, stage?: Stage | null): void;
   drawSplash(ctx: CanvasRenderingContext2D, t: number): void;
+  /** Start loading the frames before the TV is switched on. */
+  preload?(): void;
 }
 
 /** The drawn scenes, by their name on the sketch sheets. */
@@ -82,25 +88,25 @@ const ATLAS = atlasJson as unknown as { frame: { w: number; h: number }; scenes:
 
 // ----------------------------------------------------------- canvas bits
 
-function rect(ctx: CanvasRenderingContext2D, c: string, x: number, y: number, w = 1, h = 1): void {
+export function rect(ctx: CanvasRenderingContext2D, c: string, x: number, y: number, w = 1, h = 1): void {
   ctx.fillStyle = c;
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 }
 
-function alpha(ctx: CanvasRenderingContext2D, a: number, c: string, x: number, y: number, w = 1, h = 1): void {
+export function alpha(ctx: CanvasRenderingContext2D, a: number, c: string, x: number, y: number, w = 1, h = 1): void {
   ctx.globalAlpha = Math.max(0, Math.min(1, a));
   rect(ctx, c, x, y, w, h);
   ctx.globalAlpha = 1;
 }
 
 /** A repeatable pseudo-random number in 0..1 from an integer. */
-const rnd = (n: number) => {
+export const rnd = (n: number) => {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
 };
 
 /** On for `on` ms every `every` ms. */
-const pulse = (t: number, every: number, on: number, phase = 0) => (t + phase) % every < on;
+export const pulse = (t: number, every: number, on: number, phase = 0) => (t + phase) % every < on;
 
 // ------------------------------------------------------------------ font
 
@@ -120,6 +126,31 @@ const FONT: Record<string, string[]> = {
   G: ['.###.', '#...#', '#....', '#.###', '#...#', '#...#', '.###.'],
   Y: ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
   Z: ['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####'],
+  C: ['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
+  J: ['..###', '...#.', '...#.', '...#.', '#..#.', '#..#.', '.##..'],
+  K: ['#...#', '#..#.', '#.#..', '##...', '#.#..', '#..#.', '#...#'],
+  M: ['#...#', '##.##', '#.#.#', '#.#.#', '#...#', '#...#', '#...#'],
+  N: ['#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#', '#...#'],
+  Q: ['.###.', '#...#', '#...#', '#...#', '#.#.#', '#..#.', '.##.#'],
+  S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+  T: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
+  U: ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
+  V: ['#...#', '#...#', '#...#', '#...#', '#...#', '.#.#.', '..#..'],
+  X: ['#...#', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '#...#'],
+  '0': ['.###.', '#...#', '#..##', '#.#.#', '##..#', '#...#', '.###.'],
+  '1': ['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '.###.'],
+  '2': ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
+  '3': ['####.', '....#', '....#', '.###.', '....#', '....#', '####.'],
+  '4': ['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.'],
+  '5': ['#####', '#....', '####.', '....#', '....#', '#...#', '.###.'],
+  '6': ['.###.', '#....', '#....', '####.', '#...#', '#...#', '.###.'],
+  '7': ['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...'],
+  '8': ['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.'],
+  '9': ['.###.', '#...#', '#...#', '.####', '....#', '....#', '.###.'],
+  '.': ['.....', '.....', '.....', '.....', '.....', '.....', '..#..'],
+  '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'],
+  '-': ['.....', '.....', '.....', '#####', '.....', '.....', '.....'],
+  ':': ['.....', '..#..', '.....', '.....', '.....', '..#..', '.....'],
   '!': ['..#..', '..#..', '..#..', '..#..', '..#..', '.....', '..#..'],
   '?': ['.###.', '#...#', '....#', '...#.', '..#..', '.....', '..#..'],
   ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....'],
@@ -200,7 +231,7 @@ function hop(ctx: CanvasRenderingContext2D, id: SceneId, x: number, y: number, w
 // -------------------------------------------------------------- overlays
 
 /** Code typed line after line, the last line growing, a cursor after it. */
-function typing(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, w: number, rows: number, bg: string, colors: string[]): void {
+export function typing(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, w: number, rows: number, bg: string, colors: string[]): void {
   const LINE = 1400;
   const n = Math.floor(t / LINE);
   rect(ctx, bg, x, y, w, rows * 3);
@@ -239,7 +270,7 @@ function rain(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, w:
 }
 
 /** Something light rising and fading from a point: steam, smoke. */
-function rise(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, height: number, puffs = 3, period = 2400): void {
+export function rise(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, height: number, puffs = 3, period = 2400): void {
   for (let i = 0; i < puffs; i++) {
     const p = ((t + (i * period) / puffs) % period) / period;
     const py = y - p * height;
@@ -250,7 +281,7 @@ function rise(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, co
 }
 
 /** Zs floating up from a point, growing as they go. */
-function zzz(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string): void {
+export function zzz(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string): void {
   const PERIOD = 2600;
   for (let i = 0; i < 2; i++) {
     const p = ((t + i * (PERIOD / 2)) % PERIOD) / PERIOD;
@@ -266,7 +297,7 @@ function zzz(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, col
 }
 
 /** A four-point sparkle, in phase with its own period. */
-function twinkle(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, phase: number): void {
+export function twinkle(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, phase: number): void {
   const p = ((t + phase) % 1200) / 1200;
   const r = p < 0.25 ? 1 : p < 0.5 ? 2 : p < 0.7 ? 1 : 0;
   if (!r) return;
@@ -280,14 +311,14 @@ function twinkle(ctx: CanvasRenderingContext2D, t: number, x: number, y: number,
 }
 
 /** A small LED blinking with a halo. */
-function led(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, every: number, on: number, phase = 0): void {
+export function led(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, every: number, on: number, phase = 0): void {
   if (!pulse(t, every, on, phase)) return;
   alpha(ctx, 0.35, color, x - 1, y - 1, 3, 3);
   rect(ctx, color, x, y, 1, 1);
 }
 
 /** Arcs pulsing outward from a point (radio, NFC). */
-function waves(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, dir: 1 | -1, max = 3): void {
+export function waves(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, color: string, dir: 1 | -1, max = 3): void {
   const k = Math.floor(t / 300) % (max + 2);
   for (let i = 1; i <= Math.min(k, max); i++) {
     const r = 2 + i * 2;
@@ -296,7 +327,7 @@ function waves(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, c
 }
 
 /** A light passing across a lens. */
-function glint(ctx: CanvasRenderingContext2D, t: number, cx: number, cy: number, r: number): void {
+export function glint(ctx: CanvasRenderingContext2D, t: number, cx: number, cy: number, r: number): void {
   const p = (t % 2600) / 700;
   if (p > 1) return;
   const off = -r + p * r * 2;
@@ -308,7 +339,7 @@ function glint(ctx: CanvasRenderingContext2D, t: number, cx: number, cy: number,
 }
 
 /** A spectrum, bars moving like a live signal. */
-function spectrum(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, w: number, h: number, bg: string, color: string): void {
+export function spectrum(ctx: CanvasRenderingContext2D, t: number, x: number, y: number, w: number, h: number, bg: string, color: string): void {
   rect(ctx, bg, x, y, w, h);
   const f = t / 140;
   for (let i = 0; i < w; i += 2) {
@@ -473,6 +504,15 @@ export function sceneFor(scene: SceneName, t: number, subject: Subject | null = 
       return t < 3500 ? { id: 'mad', t } : { id: 'repair', t: t - 3500 };
     case 'disconnect':
       return { id: 'disconnected', t };
+    // waiting for the person (the port chooser): the cable in hand, nothing pretended
+    case 'permission':
+      return { id: 'connect', t };
+    // cancelled: back to its desk
+    case 'cancel':
+      return { id: 'coding', t };
+    // not offered here: it rests, no activity
+    case 'unavailable':
+      return { id: 'idle', t };
   }
 }
 
@@ -510,6 +550,6 @@ export function drawCompanionSplash(ctx: CanvasRenderingContext2D, t: number): v
 }
 
 /** The companion of Flipper Lab: the owner's drawings, alive. */
-export const COMPANION: SpriteSet = { id: 'flipper-lab-companion', drawScene: drawCompanionScene, drawSplash: drawCompanionSplash };
+export const COMPANION: SpriteSet = { id: 'flipper-lab-companion', drawScene: drawCompanionScene, drawSplash: drawCompanionSplash, preload: preloadCompanion };
 /** Older name, kept for imports. */
 export const DOLPHIN = COMPANION;

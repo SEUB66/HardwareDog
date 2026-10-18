@@ -15,8 +15,9 @@ import { FEATURES } from '../core/features';
 import type { Lab } from '../core/lab/context';
 import { browserLang } from '../core/lab/rules';
 import { RetroTv } from './lab/RetroTv';
+import type { TvPlacement } from './lab/TvHost';
 
-export function WhatsNew({ lab, reducedMotion, onGo, onClose }: { lab: Lab; reducedMotion: boolean; onGo: (s: Screen) => void; onClose: () => void }) {
+export function WhatsNew({ lab, placement, reducedMotion, onGo, onClose }: { lab: Lab; placement: TvPlacement; reducedMotion: boolean; onGo: (s: Screen) => void; onClose: () => void }) {
   const lang = browserLang();
   const close = useRef<HTMLButtonElement>(null);
   const [first, ...rest] = FEATURES;
@@ -29,9 +30,14 @@ export function WhatsNew({ lab, reducedMotion, onGo, onClose }: { lab: Lab; redu
     close.current?.focus();
     // The CRT comes on with the screen, as asked: a TV left off is switched on once here.
     if (!lab.companion.heading) lab.companion.setPower(true);
+    // the TV is here for now: the page's own stays empty meanwhile (one TV visible)
+    placement.hold(true);
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      placement.hold(false);
+    };
   }, []);
   if (!first) return null;
   return (

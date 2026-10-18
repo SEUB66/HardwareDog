@@ -1,8 +1,8 @@
 /**
  * HARDWARE DOG / HOME
  *
- * Nothing connected: the brand banners, one line on what this is, the
- * tools one tap away with what this device can really do, and the start
+ * Nothing connected: the brand banners, the dog's TV, one line on what
+ * this is, the tools one tap away with what this device can really do, and the start
  * guide folded underneath. Three states are kept apart, never summed up
  * as one "OFFLINE": a device (none connected yet), dogd (running on this
  * computer or not) and this browser's network (which Hardware Dog does
@@ -38,16 +38,30 @@ interface HomeProps {
   onGo: (s: Screen) => void;
   /** A fault to show first (a source that failed). */
   children?: ComponentChildren;
+  /** The companion's TV, in its place on the home. */
+  tv?: ComponentChildren;
 }
 
 type T = Record<Lang, string>;
 const t = (x: T, lang: Lang) => x[lang];
 
 const TEXT = {
-  tagline: { en: 'YOUR HARDWARE. YOUR TOOLS. YOUR RULES.', fr: 'VOTRE MATÉRIEL. VOS OUTILS. VOS RÈGLES.' },
-  values: { en: 'Local-first. No account. No subscription.', fr: 'Local d’abord. Sans compte. Sans abonnement.' },
-  privacy: { en: 'Your diagnostics stay on your machine. You control the export.', fr: 'Vos diagnostics restent sur votre machine. Vous contrôlez l’export.' },
-  banners: { en: 'Hardware Dog: what it stands for', fr: 'Hardware Dog : ses valeurs' },
+  tagline: {
+    en: 'YOUR HARDWARE. YOUR TOOLS. YOUR RULES.',
+    fr: 'VOTRE MATÉRIEL. VOS OUTILS. VOS RÈGLES.',
+  },
+  values: {
+    en: 'Local-first. No account. No subscription.',
+    fr: 'Local d’abord. Sans compte. Sans abonnement.',
+  },
+  privacy: {
+    en: 'Your diagnostics stay on your machine. You control the export.',
+    fr: 'Vos diagnostics restent sur votre machine. Vous contrôlez l’export.',
+  },
+  banners: {
+    en: 'Hardware Dog: what it stands for',
+    fr: 'Hardware Dog : ses valeurs',
+  },
   tools: { en: 'TOOLS', fr: 'OUTILS' },
   sources: { en: 'Other sources', fr: 'Autres sources' },
   demo: { en: 'TRY THE DEMO', fr: 'ESSAYER LA DÉMO' },
@@ -117,7 +131,7 @@ function ToolCard({ icon, title, text, can, children, tone = 'cyan' }: CardProps
   );
 }
 
-export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onProbe, onDogd, onOpen, onDemo, onTour, onGo, children }: HomeProps) {
+export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onProbe, onDogd, onOpen, onDemo, onTour, onGo, children, tv }: HomeProps) {
   const file = useRef<HTMLInputElement>(null);
   const [dogd, dogdVersion, askDogd] = useDogd();
   const online = useOnline();
@@ -149,39 +163,38 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
       <div class="home-top">
         <BannerCarousel slides={HOME_SLIDES} label={t(TEXT.banners, lang)} lang={lang} reducedMotion={reducedMotion} priority sizes="(max-width: 1099px) 100vw, 58vw" class="home-banners" />
 
-        <div class="home-side">
-          <section class="home-hero" aria-labelledby="home-tagline">
-            <h1 id="home-tagline" class="home-tagline">
-              {t(TEXT.tagline, lang)}
-            </h1>
-            <p class="home-values">{t(TEXT.values, lang)}</p>
-            <p class="home-privacy">{t(TEXT.privacy, lang)}</p>
-          </section>
+        {tv && <div class="home-tv">{tv}</div>}
+        <section class="home-hero" aria-labelledby="home-tagline">
+          <h1 id="home-tagline" class="home-tagline">
+            {t(TEXT.tagline, lang)}
+          </h1>
+          <p class="home-values">{t(TEXT.values, lang)}</p>
+          <p class="home-privacy">{t(TEXT.privacy, lang)}</p>
+        </section>
 
-          <ul class="home-states" aria-label={fr ? 'États' : 'States'}>
-            <li class="home-state">
-              <span class="home-state-k">{fr ? 'APPAREIL' : 'DEVICE'}</span>
-              <span class="home-state-v unknown">{fr ? 'aucun connecté' : 'none connected'}</span>
-            </li>
-            <li class="home-state">
-              <span class="home-state-k">DOGD</span>
-              <span class={`home-state-v ${dogd === 'running' ? 'ok' : dogd === 'absent' ? 'warn' : 'unknown'}`}>
-                {dogd === 'running' ? (fr ? 'en marche' : 'running') : dogd === 'absent' ? (fr ? 'absent sur cet ordinateur' : 'not on this computer') : fr ? 'vérification…' : 'checking…'}
-              </span>
-              {dogd !== 'checking' && (
-                <button class="link home-state-act" onClick={askDogd}>
-                  {fr ? 'revérifier' : 'check again'}
-                </button>
-              )}
-            </li>
-            <li class="home-state">
-              <span class="home-state-k">{fr ? 'NAVIGATEUR' : 'BROWSER'}</span>
-              <span class={`home-state-v ${online ? 'ok' : 'warn'}`}>
-                {online ? (fr ? 'en ligne' : 'online') : fr ? 'hors ligne : l’outil chargé fonctionne' : 'offline: what is loaded keeps working'}
-              </span>
-            </li>
-          </ul>
-        </div>
+        <ul class="home-states" aria-label={fr ? 'États' : 'States'}>
+          <li class="home-state">
+            <span class="home-state-k">{fr ? 'APPAREIL' : 'DEVICE'}</span>
+            <span class="home-state-v unknown">{fr ? 'aucun connecté' : 'none connected'}</span>
+          </li>
+          <li class="home-state">
+            <span class="home-state-k">DOGD</span>
+            <span class={`home-state-v ${dogd === 'running' ? 'ok' : dogd === 'absent' ? 'warn' : 'unknown'}`}>
+              {dogd === 'running' ? (fr ? 'en marche' : 'running') : dogd === 'absent' ? (fr ? 'absent sur cet ordinateur' : 'not on this computer') : fr ? 'vérification…' : 'checking…'}
+            </span>
+            {dogd !== 'checking' && (
+              <button class="link home-state-act" onClick={askDogd}>
+                {fr ? 'revérifier' : 'check again'}
+              </button>
+            )}
+          </li>
+          <li class="home-state">
+            <span class="home-state-k">{fr ? 'NAVIGATEUR' : 'BROWSER'}</span>
+            <span class={`home-state-v ${online ? 'ok' : 'warn'}`}>
+              {online ? (fr ? 'en ligne' : 'online') : fr ? 'hors ligne : l’outil chargé fonctionne' : 'offline: what is loaded keeps working'}
+            </span>
+          </li>
+        </ul>
       </div>
 
       <section class="home-tools" aria-labelledby="home-tools-title">
@@ -194,7 +207,14 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
             tone="pink"
             title="SERIAL CONSOLE"
             text={fr ? 'La console série de n’importe quelle carte : Arduino, ESP32, routeur. Sans sonde.' : 'The serial console of any board: Arduino, ESP32, a router. No probe needed.'}
-            can={serial ? { ok: true, text: fr ? 'Web Serial disponible sur ce navigateur.' : 'Web Serial available in this browser.' } : { ok: false, text: serialNo }}
+            can={
+              serial
+                ? {
+                    ok: true,
+                    text: fr ? 'Web Serial disponible sur ce navigateur.' : 'Web Serial available in this browser.',
+                  }
+                : { ok: false, text: serialNo }
+            }
           >
             <button class="btn primary" onClick={onConsole} disabled={!serial}>
               {fr ? 'OUVRIR LA CONSOLE' : 'OPEN THE CONSOLE'}
@@ -210,7 +230,10 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
                 ? 'Le réseau de cet ordinateur (lien, DHCP, passerelle, DNS, Internet) et ses périphériques USB, par dogd.'
                 : 'This computer’s network (link, DHCP, gateway, DNS, Internet) and its USB devices, through dogd.'
             }
-            can={{ ok: dogd === 'running' ? true : dogd === 'absent' ? false : null, text: dogdText }}
+            can={{
+              ok: dogd === 'running' ? true : dogd === 'absent' ? false : null,
+              text: dogdText,
+            }}
           >
             <button class="btn primary" onClick={onNetwork} disabled={dogd !== 'running'}>
               {fr ? 'SURVEILLER CET ORDINATEUR' : 'WATCH THIS COMPUTER'}
@@ -248,8 +271,14 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
             text={fr ? 'Fichiers, captures et infos d’un Flipper Zero en USB, avec la TV compagnon.' : 'Files, captures and info of a Flipper Zero over USB, with the companion TV.'}
             can={
               serial
-                ? { ok: true, text: fr ? 'USB (Web Serial) disponible ; un Flipper de démo aussi.' : 'USB (Web Serial) available; a demo Flipper too.' }
-                : { ok: false, text: fr ? 'Pas de Web Serial ici : le Flipper de démo marche partout.' : 'No Web Serial here: the demo Flipper works anywhere.' }
+                ? {
+                    ok: true,
+                    text: fr ? 'USB (Web Serial) disponible ; un Flipper de démo aussi.' : 'USB (Web Serial) available; a demo Flipper too.',
+                  }
+                : {
+                    ok: false,
+                    text: fr ? 'Pas de Web Serial ici : le Flipper de démo marche partout.' : 'No Web Serial here: the demo Flipper works anywhere.',
+                  }
             }
           >
             <button class="btn primary" onClick={() => onGo('FLIPPER')}>
@@ -283,7 +312,10 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
             icon="RECORDING"
             title={fr ? 'SESSIONS · RELECTURE' : 'SESSIONS · REPLAY'}
             text={fr ? 'Rejouer un enregistrement (.hdlog), en lecture seule, ou une session gardée dans ce navigateur.' : 'Replay a recording (.hdlog), read-only, or a session kept in this browser.'}
-            can={{ ok: true, text: fr ? `${sessions} session(s) gardée(s) dans ce navigateur.` : `${sessions} session(s) kept in this browser.` }}
+            can={{
+              ok: true,
+              text: fr ? `${sessions} session(s) gardée(s) dans ce navigateur.` : `${sessions} session(s) kept in this browser.`,
+            }}
           >
             <button class="btn primary" onClick={() => file.current?.click()}>
               {fr ? 'OUVRIR UN FICHIER' : 'OPEN A RECORDING'}
