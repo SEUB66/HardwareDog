@@ -123,6 +123,12 @@ describe('what a crawler and a share preview read (raw HTML, no JavaScript)', ()
     '../diagnostic.html': `${ORIGIN}/diagnostic.html`,
     '../engineering.html': `${ORIGIN}/engineering.html`,
   };
+  // each page shares its own banner: the slogans for the home and the tool, the tools for the architecture
+  const shareImage: Record<string, string> = {
+    '../index.html': 'og/hardware-dog-no-cookies-1200x630.jpg',
+    '../diagnostic.html': 'og/hardware-dog-your-data-1200x630.jpg',
+    '../engineering.html': 'og/hardware-dog-1200x630.jpg',
+  };
 
   for (const [file, url] of Object.entries(expected)) {
     it(`${file.slice(3)}: title, description, canonical, Open Graph, card, icons, manifest`, async () => {
@@ -135,7 +141,7 @@ describe('what a crawler and a share preview read (raw HTML, no JavaScript)', ()
       expect(meta(html, 'og:title')).toBeTruthy();
       expect(meta(html, 'og:description')).toBeTruthy();
       const image = meta(html, 'og:image')!;
-      expect(image).toBe(`${ORIGIN}/og/hardware-dog-1200x630.jpg`);
+      expect(image).toBe(`${ORIGIN}/${shareImage[file]}`);
       expect(meta(html, 'og:image:width')).toBe('1200');
       expect(meta(html, 'og:image:height')).toBe('630');
       expect(meta(html, 'og:image:alt')!.length).toBeGreaterThan(30);
@@ -147,7 +153,7 @@ describe('what a crawler and a share preview read (raw HTML, no JavaScript)', ()
       expect(html).not.toMatch(/noindex/);
       // a heading a reader and a crawler see without running anything
       expect(html).toMatch(/<h1[^>]*>/);
-      const m = await sharp(`${pub}og/hardware-dog-1200x630.jpg`).metadata();
+      const m = await sharp(`${pub}${shareImage[file]}`).metadata();
       expect([m.width, m.height, m.format]).toEqual([1200, 630, 'jpeg']);
     });
   }
@@ -157,6 +163,20 @@ describe('what a crawler and a share preview read (raw HTML, no JavaScript)', ()
     const intro = html.slice(html.indexOf('<main id="intro"'), html.indexOf('</main>'));
     for (const word of ['Camera Sniffer', 'Bluetooth Lab', 'Flipper Lab', 'serial', 'dogd', 'Limits', 'does not prove']) expect(intro).toContain(word);
     expect(intro).not.toMatch(/detects (all|every)|100 ?%|guarantee/i);
+  });
+
+  it('the searches people make are answered in the headings, without overclaiming', () => {
+    const tool = pages['../diagnostic.html']!;
+    expect(tool).toMatch(/<h1>[^<]*local-first hardware diagnostic tool/i);
+    for (const heading of [/<h2>[^<]*hidden camera[^<]*without a cloud app/i, /<h2>[^<]*Bluetooth LE scanner in the browser/i, /<h2>[^<]*Flipper Zero over Web Serial/i]) expect(tool).toMatch(heading);
+    const home = pages['../index.html']!;
+    expect(home).toMatch(/<h2 id="tools-title">Diagnostic matériel local-first/);
+    for (const html of [tool, home]) {
+      // the license is PolyForm Noncommercial: source-available, not open source
+      expect(html).not.toMatch(/open[ -]source/i);
+      // clues, never a detection promise
+      expect(html).not.toMatch(/detects? (all|every|any) (hidden )?cameras?|détecte (toutes|tous)/i);
+    }
   });
 
   it('structured data: WebSite and SoftwareApplication, facts only (no rating, review, user count or award)', () => {

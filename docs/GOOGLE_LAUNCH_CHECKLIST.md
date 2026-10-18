@@ -47,7 +47,9 @@ https://hardwaredog.org/diagnostic.html          the tool, with a static     yes
 https://hardwaredog.org/engineering.html         architecture and roadmap    yes
 https://hardwaredog.org/sitemap.xml              the three pages above       -
 https://hardwaredog.org/robots.txt               Allow all + Sitemap line    -
-https://hardwaredog.org/og/hardware-dog-1200x630.jpg   the share image       -
+https://hardwaredog.org/og/hardware-dog-no-cookies-1200x630.jpg   share image of /                  -
+https://hardwaredog.org/og/hardware-dog-your-data-1200x630.jpg    share image of /diagnostic.html   -
+https://hardwaredog.org/og/hardware-dog-1200x630.jpg              share image of /engineering.html  -
 https://hardwaredog.org/manifest.webmanifest     the installed app           -
 any other path                                   404.html, status 404,       no
                                                  noindex
@@ -61,6 +63,45 @@ presentation page carries the structured data (WebSite, SoftwareApplication:
 name, address, category, free for personal use, license, author; no
 rating, review, user count or award). No hreflang: the language changes in
 the interface only, the addresses do not.
+
+Each page shares its own banner: NO COOKIES. (the home), YOUR DATA. YOUR
+MACHINE. (the tool), the launch banner with the tools (the architecture).
+The slogan banners are 2.5:1: they are shown whole (nothing of their
+lettering cropped), their wall and floor continued above and below.
+
+### What people search, and where the page answers
+
+```text
+SEARCH (intent)                              ANSWERED BY
+local-first hardware diagnostic tool         H1 of /diagnostic.html, H2 of the home's tools
+hidden camera without a cloud app            H2 Camera Sniffer: "clues", never "detects":
+                                             a scan with no clue proves nothing
+Flipper Zero over Web Serial                 H2 / H3 Flipper Lab (Chromium on a computer)
+Bluetooth LE scanner in the browser          H2 / H3 Bluetooth Lab
+open source ...                              NOT used: the license is PolyForm
+                                             Noncommercial (source-available, "code public")
+```
+
+### Rendering (JavaScript)
+
+The home and the architecture page are complete in their HTML; JavaScript
+only animates and, for a reader whose browser is not in French, translates
+them into English. ASSUMED: Googlebot renders in English (en-US), so the
+indexed home is the English version; its title stays the official one in
+both languages. The tool page's static introduction is in the raw HTML (what
+a share preview and a first crawl read); once JavaScript runs, the
+interface replaces it: the home carries the indexable text.
+
+### Speed (Core Web Vitals)
+
+No tracking script, no remote font, no remote call. The home's first screen
+is painted from the HTML: nothing on screen at load waits for the script to
+appear (the fade-in is kept for what is below). Measured locally (Chromium,
+production build, no network latency, so not a PageSpeed score): largest
+paint 0.13 to 0.20 s, layout shift 0.005 or less, desktop and iPhone 13
+emulation. The tool's script is large (about 197 KB compressed): it loads
+only on /diagnostic.html, and is cached by the service worker after the first
+visit.
 
 The sitemap has no `lastmod`: no reliable per-page date is kept, and a
 build date would be false.
@@ -120,6 +161,8 @@ curl -s  https://hardwaredog.org/sitemap.xml         three <loc>, the canonical 
 curl -sI https://hardwaredog.org/manifest.webmanifest   200, application/manifest+json
 curl -sI https://hardwaredog.org/sw.js               200, Cache-Control: no-cache
 curl -sI https://hardwaredog.org/og/hardware-dog-1200x630.jpg   200, image/jpeg
+curl -sI https://hardwaredog.org/og/hardware-dog-no-cookies-1200x630.jpg   200, image/jpeg
+curl -sI https://hardwaredog.org/og/hardware-dog-your-data-1200x630.jpg    200, image/jpeg
 curl -s  https://hardwaredog.org/diagnostic.html | grep -c 'og:image'   1 or more
 ```
 
@@ -151,6 +194,12 @@ NOT RUN  native install prompt and launching the installed app: headless Chromiu
 NOT RUN  real Android and iOS devices: none in this session
 NOT RUN  production checks (section 5): this session's network refuses hardwaredog.org;
          to run after the deploy, by the owner or a session allowed to reach the site
+PASS     share images per page: 1200 x 630, lettering whole and readable (checked by eye)
+PASS     headings carry the searched phrases, no "open source", no detection promise (tests)
+PASS     home rendered in English and French: official title, first screen painted at once,
+         largest paint under 0.25 s, layout shift under 0.01 (local, Chromium, emulation)
+NOT RUN  PageSpeed Insights on the real site: after the deploy, at
+         https://pagespeed.web.dev/ with https://hardwaredog.org/
 NOT RUN  Search Console: needs the owner's Google account
 ```
 
