@@ -41,7 +41,7 @@ sudo apt install ./hwdog-dogd_*_amd64.deb          # arm64 on a Pi or an ARM lap
 dogd serve --source host                           # this computer: network and USB
 ```
 
-Then in the interface: **START HERE → THIS COMPUTER**.
+Then in the interface: **TOOLS → NETWORK · USB → WATCH THIS COMPUTER** (on the home, nothing connected).
 
 To start it with your session instead of by hand:
 

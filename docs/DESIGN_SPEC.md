@@ -98,6 +98,35 @@ Colors still carry meaning (section 06): glass is the surface, never a
 signal. FIELD MODE stays opaque and high-contrast for sunlight.
 Code: `web/src/styles/glass.css`, on top of `app.css`.
 
+### Revision: opaque content and the brand banners
+
+The frosted panels over cyan and pink light read grey-mauve and washed
+out, and the home was a long notice before any tool. Now:
+
+```text
+BACKGROUND   #101112, plain: no color washes behind text
+SURFACES     content opaque, #181A1B, a clear edge; glass only for the
+             header and the menu, dark (#161819 at 84 %), opaque where
+             blur is missing or less transparency is asked for
+TEXT         #F2F0E9; no opacity on anything holding text or buttons:
+             unavailable is said in words, the control stays readable
+TYPE         Silkscreen (bundled) for short titles; Plex for the rest
+HOME         header, the brand banners, one line (YOUR HARDWARE. YOUR
+             TOOLS. YOUR RULES.), the tools with what this device can
+             do, the start guide folded. Device, dogd and the browser's
+             network said apart, never one "OFFLINE". A session running:
+             STATUS shows it, no banner pushes it down
+BANNERS      one carousel (web/src/ui/brand): the whole picture in its
+             2.5:1 box, an HTML caption under it, 8 s a slide only while
+             nothing holds it, still with reduced motion, paused by any
+             hand until play; Camera Sniffer has its own, still during
+             a scan or an inspection
+CONTRAST     WCAG AA checked: text 4.5:1 or more, control edges 3:1
+```
+
+Code: `web/src/styles/home.css`, `web/src/ui/home/Home.tsx`,
+`web/src/ui/brand/BannerCarousel.tsx`, `web/src/core/carousel.ts`.
+
 ---
 
 ## 02 — PRODUCT PERSONALITY
@@ -231,12 +260,12 @@ meaning, not decoration.
 ### Base
 
 ```text
-BACKGROUND      #0B0D0F
-PANEL           #111417
-PANEL ALT       #16191C
-BORDER          #34393D
-TEXT            #ECE8DE
-TEXT DIM        #8A9195
+BACKGROUND      #101112
+PANEL           #181A1B
+PANEL ALT       #202325
+BORDER          #33383B   (control edges #666D72: 3:1 on the panel)
+TEXT            #F2F0E9
+TEXT DIM        #A9AFB4
 ```
 
 ### Signal colors

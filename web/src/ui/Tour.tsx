@@ -13,12 +13,12 @@ export const TOUR: readonly TourStop[] = [
   {
     target: '.head',
     title: 'THE HEADER',
-    text: 'Which device you are reading (DEVICE), how it reaches you (VIA), how long the session has run and its id. On the right, the link: ONLINE, LINK LOST or OFFLINE. SIMULATOR in amber means the data is not from real hardware.',
+    text: 'Which device you are reading (DEVICE), how it reaches you (VIA), how long the session has run and its id. On the right, the device link: ONLINE, LINK LOST, or NO DEVICE when nothing is connected. SIMULATOR in amber means the data is not from real hardware.',
   },
   {
-    target: '.connect-banner',
-    title: 'CHOOSE A SOURCE',
-    text: 'Nothing is measured until you choose: a Hardware Dog on USB (Web Serial), the local daemon dogd, a recorded session (.hdlog), or the demo. The demo is always labeled SIMULATED.',
+    target: '.home-tools',
+    title: 'THE TOOLS',
+    text: 'Nothing is measured until you choose: a board’s serial console, this computer through dogd, Bluetooth Lab, Flipper Lab, Camera Sniffer, a recorded session (.hdlog), or the demo. Each card says what this device can do; the demo is always labeled SIMULATED.',
   },
   {
     target: '.sim-banner',

@@ -78,6 +78,17 @@ const CAMERA_BANNER = join(SRC, 'hd-camera-sniffer-banner.png');
 const POSTERS_SRC = join(repo, 'assets/illustrations');
 const POSTERS_WEB = join(repo, 'assets/illustrations/web');
 export const POSTERS = ['01-Power-Connections', '02-Clocks-Media', '03-Everyday-Objects', '04-Room-Outdoor', '05-Personal-Portable'];
+// The owner's brand banners (1983 x 793, about 2.5:1), as committed: the
+// file names are the ones they came with, the slide names are ours.
+export const BANNERS = {
+  'no-cookies': 'assets/brand/05AFE914-C795-44CA-BC9A-95E26579846F.png',
+  'your-data': 'assets/brand/4A39216F-A497-4635-BB14-1A41485E2353.png',
+  'no-leash': 'assets/brand/73B77AA8-C5BB-4B91-AE36-CF79D43511B7.png',
+  'one-last-fix': 'assets/brand/10CA7130-B71B-43BD-A0D0-56C1B111756E.jpeg',
+  'camera-sniffer': 'assets/brand/source/hd-camera-sniffer-banner.png',
+  'scan-this': 'assets/brand/D3332EF6-A026-4D88-8922-41DBBA9D0B66.png',
+  'human-verification': 'assets/brand/E015CEBE-D6D8-49D2-A636-7961415EE1A0.png',
+};
 
 const outputs = [];
 
@@ -294,6 +305,13 @@ async function main() {
   for (const name of POSTERS) {
     for (const w of [1200, 2400]) {
       await save(join(POSTERS_WEB, `camera-sniffer-${name.toLowerCase()}-${w}.webp`), sharp(join(POSTERS_SRC, `Camera-Sniffer-${name}.png`)).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 86, smartSubsample: true, effort: 6 }));
+    }
+  }
+
+  // Banners: pixel lettering survives only a gentle compression, checked by eye at 100 %.
+  for (const [name, file] of Object.entries(BANNERS)) {
+    for (const w of [800, 1200, 1983]) {
+      await save(join(WEB, 'banners', `hd-banner-${name}-${w}.webp`), sharp(join(repo, file)).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 88, smartSubsample: true, effort: 6 }));
     }
   }
 
