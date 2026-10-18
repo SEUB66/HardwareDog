@@ -46,30 +46,53 @@ const HEAD_BOX = { left: 100, top: 165, width: 930, height: 620 };
 const COLLAR_REGION = '0,600 140,640 560,780 640,860 700,1254 0,1254';
 
 /**
- * FLIPPER LAB TV: the orange portable TV, seen from the front, 1536 x 1024.
- * The source already has an alpha cut-out (outside the body and the
- * screen opening); its edges carry noise (1-15) and a red fringe in the
- * transparent pixels, and the body tops out at 253. Nothing is keyed by
- * color: the black bezel and the black controls stay as drawn.
+ * THE COMPANION TVS: portable TVs seen from the front, 1536 x 1024 each.
+ *   hd-tv-orange      Flipper Lab's TV
+ *   hd-tv-turquoise   Hardware Dog's TV, the dog's, every other section
+ * Both sources already have an alpha cut-out (outside the body and the
+ * screen opening); their edges carry noise (1-15), and the body tops out
+ * at 253. Nothing is keyed by color: the black bezel, the black controls
+ * and the turquoise of the shell stay as drawn, the cut-out is the
+ * picture's own alpha, snapped.
  *
  * Regions below are source pixels, written once here and normalized in
- * the profile the component reads (web/src/ui/lab/tvProfile.ts). A new
- * TV picture is a new source + new numbers here, never new code.
+ * the profile the component reads (web/src/ui/lab/tvSkin.ts). A new TV
+ * picture is a new source + new numbers here, never new code.
  */
-const TV = join(SRC, 'hd-tv-orange-frame.png');
-const TV_REGIONS = {
-  /** A point inside the screen opening: the aperture is traced from it. */
-  apertureSeed: { x: 625, y: 520 },
-  /** Content runs this far under the bezel so no seam shows at any size. */
-  apertureBleed: 6,
-  power: { left: 1206, top: 457, width: 198, height: 118 },
-  dial: { cx: 1305, cy: 312, r: 120 },
-  /** The metal knob inside the dial: it turns with the view. */
-  knob: { cx: 1306, cy: 312, r: 68 },
-  handle: { left: 412, top: 12, width: 718, height: 60 },
-  speaker: { left: 1183, top: 600, width: 246, height: 286 },
-  logo: { left: 585, top: 906, width: 363, height: 63 },
-};
+const TVS = [
+  {
+    id: 'hd-tv-orange',
+    file: 'hd-tv-orange-frame.png',
+    regions: {
+      /** A point inside the screen opening: the aperture is traced from it. */
+      apertureSeed: { x: 625, y: 520 },
+      /** Content runs this far under the bezel so no seam shows at any size. */
+      apertureBleed: 6,
+      power: { left: 1206, top: 457, width: 198, height: 118 },
+      dial: { cx: 1305, cy: 312, r: 120 },
+      /** The metal knob inside the dial: it turns with the view. */
+      knob: { cx: 1306, cy: 312, r: 68 },
+      handle: { left: 412, top: 12, width: 718, height: 60 },
+      speaker: { left: 1183, top: 600, width: 246, height: 286 },
+      logo: { left: 585, top: 906, width: 363, height: 63 },
+    },
+  },
+  {
+    id: 'hd-tv-turquoise',
+    file: 'hd-tv-turquoise-frame.png',
+    regions: {
+      apertureSeed: { x: 630, y: 530 },
+      apertureBleed: 6,
+      power: { left: 1206, top: 458, width: 198, height: 118 },
+      dial: { cx: 1305, cy: 314, r: 120 },
+      knob: { cx: 1306, cy: 312, r: 68 },
+      /** The bar and its two metal brackets. */
+      handle: { left: 352, top: 10, width: 836, height: 94 },
+      speaker: { left: 1182, top: 598, width: 248, height: 290 },
+      logo: { left: 584, top: 906, width: 366, height: 64 },
+    },
+  },
+];
 /** Flipper Lab banner: pixel-art lab, the dog and the dolphin, 1983 x 793. */
 const BANNER = join(SRC, 'hd-flipper-lab-banner.png');
 /** Camera Sniffer banner: pixel-art living room seen through a lens, the dog with a camera, 1983 x 793. */
@@ -118,8 +141,9 @@ async function cleanAlpha(input) {
  * through resampling), and the screen opening traced from inside.
  * Returns the cleaned PNG and the aperture outline in source pixels.
  */
-async function tvOverlay() {
-  const { data, info } = await sharp(TV).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+async function tvOverlay(tv) {
+  const TV_REGIONS = tv.regions;
+  const { data, info } = await sharp(join(SRC, tv.file)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
   for (let i = 0; i < data.length; i += 4) {
     const a = data[i + 3];
@@ -148,7 +172,8 @@ async function tvOverlay() {
 }
 
 /** The mapping profile: everything normalized to 0..1 of the picture. */
-function tvProfile({ width, height, points }) {
+function tvProfile(tv, { width, height, points }) {
+  const TV_REGIONS = tv.regions;
   const nx = (v) => +(v / width).toFixed(5);
   const ny = (v) => +(v / height).toFixed(5);
   const box = (b) => ({ x: nx(b.left), y: ny(b.top), w: nx(b.width), h: ny(b.height) });
@@ -156,9 +181,9 @@ function tvProfile({ width, height, points }) {
   const ys = points.map((p) => p[1]);
   const { dial, knob } = TV_REGIONS;
   return {
-    id: 'hd-tv-orange',
+    id: tv.id,
     version: 1,
-    source: 'assets/brand/source/hd-tv-orange-frame.png',
+    source: `assets/brand/source/${tv.file}`,
     reference: { width, height, ratio: +(width / height).toFixed(5) },
     screen: {
       box: { x: nx(Math.min(...xs)), y: ny(Math.min(...ys)), w: nx(Math.max(...xs) - Math.min(...xs)), h: ny(Math.max(...ys) - Math.min(...ys)) },
@@ -281,15 +306,17 @@ async function main() {
   await save(join(SOCIAL, 'hd-og-1200x630.jpg'), banner.clone().jpeg({ quality: 90, mozjpeg: true }));
   await save(join(SOCIAL, 'hd-og-1200x630.webp'), banner.clone().webp({ quality: 90 }));
 
-  // FLIPPER LAB TV: the overlay at 2x and 1x of its 560 px display width.
+  // THE TVS: each overlay at 2x and 1x of its 560 px display width, and its profile.
   // The screen opening and everything outside the body are transparent.
-  const tv = await tvOverlay();
-  for (const w of [1120, 560]) {
-    await save(join(WEB, `hd-tv-orange-${w}.webp`), sharp(tv.png).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 88, alphaQuality: 100, effort: 6 }));
+  for (const def of TVS) {
+    const tv = await tvOverlay(def);
+    for (const w of [1120, 560]) {
+      await save(join(WEB, `${def.id}-${w}.webp`), sharp(tv.png).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 88, alphaQuality: 100, effort: 6 }));
+    }
+    const profile = join(WEB, `${def.id}.profile.json`);
+    await writeFile(profile, JSON.stringify(tvProfile(def, tv), null, 2) + '\n');
+    outputs.push([relative(repo, profile), (await stat(profile)).size]);
   }
-  const profile = join(WEB, 'hd-tv-orange.profile.json');
-  await writeFile(profile, JSON.stringify(tvProfile(tv), null, 2) + '\n');
-  outputs.push([relative(repo, profile), (await stat(profile)).size]);
 
   // FLIPPER LAB BANNER: the full scene at 2x and 1x of its 800 px display width.
   for (const w of [1600, 800]) {
