@@ -191,6 +191,16 @@ export const BANNERS = {
 
 const outputs = [];
 
+/** A 2.5:1 banner as a 1200 x 630 share image, whole: see SLOGAN SHARE IMAGES. */
+async function shareFromBanner(file) {
+  const W = 1200, H = 630, IH = 480, PAD = (H - IH) / 2;
+  const inner = await sharp(file).resize(W, IH, { fit: 'fill', kernel: 'lanczos3' }).toBuffer();
+  const extended = await sharp(inner).extend({ top: PAD, bottom: PAD, extendWith: 'copy' }).toBuffer();
+  const fade = (id, y0, y1) => `<linearGradient id="${id}" x1="0" y1="${y0}" x2="0" y2="${y1}" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#080a12"/><stop offset="1" stop-color="#080a12" stop-opacity="0"/></linearGradient>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs>${fade('t', 0, PAD)}${fade('b', H, H - PAD)}</defs><rect width="${W}" height="${PAD}" fill="url(#t)"/><rect y="${H - PAD}" width="${W}" height="${PAD}" fill="url(#b)"/></svg>`;
+  return sharp(extended).composite([{ input: Buffer.from(svg) }]).jpeg({ quality: 88, mozjpeg: true, chromaSubsampling: '4:4:4' });
+}
+
 async function save(file, pipeline) {
   await mkdir(dirname(file), { recursive: true });
   await pipeline.toFile(file);
@@ -426,6 +436,11 @@ async function main() {
     join(PUBLIC, 'og', 'hardware-dog-1200x630.jpg'),
     sharp(LAUNCH_BANNER).resize(1200, 630, { fit: 'cover', position: 'centre', kernel: 'lanczos3' }).jpeg({ quality: 88, mozjpeg: true, chromaSubsampling: '4:4:4' }),
   );
+  // SLOGAN SHARE IMAGES: NO COOKIES. (the home) and YOUR DATA. YOUR MACHINE.
+  // (the tool). Their lettering runs to the right edge, so nothing is cropped:
+  // the banner fills the width (1200 x 480) and its edge rows continue 75 px
+  // above and below, fading to the banner's own dark.
+  for (const name of ['no-cookies', 'your-data']) await save(join(PUBLIC, 'og', `hardware-dog-${name}-1200x630.jpg`), await shareFromBanner(join(repo, BANNERS[name])));
 
   // THE TVS: each overlay at 2x and 1x of its 560 px display width, and its profile.
   // The screen opening and everything outside the body are transparent.
