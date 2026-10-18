@@ -74,6 +74,10 @@ const TV_REGIONS = {
 const BANNER = join(SRC, 'hd-flipper-lab-banner.png');
 /** Camera Sniffer banner: pixel-art living room seen through a lens, the dog with a camera, 1983 x 793. */
 const CAMERA_BANNER = join(SRC, 'hd-camera-sniffer-banner.png');
+// The owner's five Camera Sniffer posters (2400 x 3540), shown as a slideshow.
+const POSTERS_SRC = join(repo, 'assets/illustrations');
+const POSTERS_WEB = join(repo, 'assets/illustrations/web');
+export const POSTERS = ['01-Power-Connections', '02-Clocks-Media', '03-Everyday-Objects', '04-Room-Outdoor', '05-Personal-Portable'];
 
 const outputs = [];
 
@@ -284,6 +288,13 @@ async function main() {
   // CAMERA SNIFFER BANNER: same sizes as the Flipper Lab banner.
   for (const w of [1600, 800]) {
     await save(join(WEB, `hd-camera-sniffer-banner-${w}.webp`), sharp(CAMERA_BANNER).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 82, smartSubsample: true, effort: 6 }));
+  }
+
+  // Posters: small print on them, so a near-lossless WebP; 1200 for the page, 2400 for full screen.
+  for (const name of POSTERS) {
+    for (const w of [1200, 2400]) {
+      await save(join(POSTERS_WEB, `camera-sniffer-${name.toLowerCase()}-${w}.webp`), sharp(join(POSTERS_SRC, `Camera-Sniffer-${name}.png`)).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 86, smartSubsample: true, effort: 6 }));
+    }
   }
 
   const width = Math.max(...outputs.map(([f]) => f.length));
