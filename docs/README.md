@@ -38,6 +38,8 @@ HW TESTS       HARDWARE_TEST_CAMPAIGN.md  BLE and Camera Sniffer on real hardwar
 PROTOCOL       PROTOCOL.md             HDP v1 and the .hdlog format, compatibility
 ARCHITECTURE   ARCHITECTURE.md         how the pieces fit
 SECURITY       SECURITY.md             what is protected, what is not, reporting
+WEB APP        WEB_APP.md              install, offline, updates of hardwaredog.org
+LAUNCH         GOOGLE_LAUNCH_CHECKLIST.md  Search Console, sitemap, the checks to run live
 DESIGN         DESIGN_SPEC.md          the interface, and its revisions
 BRAND          BRAND.md                the logo and its files
 POSITIONING    MARKET_POSITIONING.md   who it is for, next to what exists
@@ -57,7 +59,7 @@ Links: [VISION](VISION.md) · [LAWS](LAWS.md) ·
 [DIAGNOSTICS](DIAGNOSTICS.md) · [FAULT LAB](FAULT_LAB.md) ·
 [IDENTITY](IDENTITY.md) · [LIBRARY](LIBRARY.md) ·
 [COMPANION](COMPANION.md) · [FLIPPER LAB](FLIPPER_LAB.md) · [BLUETOOTH LAB](BLUETOOTH_LAB.md) · [CAMERA SNIFFER](CAMERA_SNIFFER.md) · [HARDWARE TESTS](HARDWARE_TEST_CAMPAIGN.md) · [PROTOCOL](PROTOCOL.md) ·
-[ARCHITECTURE](ARCHITECTURE.md) · [SECURITY](SECURITY.md) ·
+[ARCHITECTURE](ARCHITECTURE.md) · [SECURITY](SECURITY.md) · [WEB APP](WEB_APP.md) · [LAUNCH](GOOGLE_LAUNCH_CHECKLIST.md) ·
 [DESIGN SPEC](DESIGN_SPEC.md) · [BRAND](BRAND.md) ·
 [POSITIONING](MARKET_POSITIONING.md) · [LICENSE](../LICENSE) ·
 [COMMERCIAL](../COMMERCIAL.md) · [TRADEMARK](../TRADEMARK.md)

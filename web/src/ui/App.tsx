@@ -58,6 +58,7 @@ import { BluetoothLab, type BleTool } from './lab/BluetoothLab';
 import { FlipperLab, type FlipperTool } from './lab/FlipperLab';
 import { TvDocked, TvFloating, TvPlacement, useTvPower } from './lab/TvHost';
 import { deviceLink } from '../core/lab/device';
+import { UpdateNote } from './Pwa';
 
 interface Session {
   system: System;
@@ -855,6 +856,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       </nav>
 
       <main class="work" id="workspace">
+        <UpdateNote lab={lab} recording={session.transport !== null && !(session.transport instanceof ReplayTransport) && !!session.writer && !session.writer.error} />
         {session.transport === null && screen !== 'STATUS' && !labScreen && <ConnectStrip onChoose={() => navigate('STATUS')} onDemo={() => void switchTransport('SIMULATOR')} />}
         {home && (
           <Home

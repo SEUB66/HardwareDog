@@ -38,6 +38,18 @@ source/hd-companion-dog-states.png  COMPANION  owner's sheet "HW DOG / COMPANION
                                                chat): SERIAL BLUETOOTH NETWORK CAMERA POWER EXPORT DONE
                                                DISCONNECTED PERMISSION TIMEOUT IDLE; the reference for those
                                                states, cut into web/hd-dog-scenes.webp by `npm run companion`
+source/hd-app-icon-rounded.png      LAUNCH     rounded app icon, the dog's head in a cyan frame, transparent
+                                               corners, 1254x1254 (uploaded 97A15BE3-....png): kept as a
+                                               source, not derived (the browser icons float, unframed)
+source/hd-icon-pixel-head.png       LAUNCH     the pixel head on its own dark ground, 1254x1254 (uploaded
+                                               B6070AE8-....png): floating (ground made transparent, its
+                                               black outline kept) for favicon-16/32.png, favicon.ico (the
+                                               face) and icon-192/512.png ("any"); on its ground for the
+                                               maskable 192/512 (safe zone) and apple-touch-icon.png
+source/hd-og-launch-banner.png      LAUNCH     launch banner: Camera Sniffer (fisheye), Bluetooth Lab,
+                                               Flipper Lab, USB / Network / Serial, 1733x907 (uploaded
+                                               F5A9EE44-....png): web/public/og/hardware-dog-1200x630.jpg
+                                               (og:image, twitter:image); all by `npm run assets`
 source/hd-flipper-lab-banner.png    FLIPPER LAB pixel-art lab banner: the dog and the dolphin, 1983x793
 source/hd-camera-sniffer-banner.png CAMERA      Camera Sniffer banner (pixel art, owner-supplied), 1983x793;
                                                web/hd-camera-sniffer-banner-800/1600.webp by `npm run assets`
