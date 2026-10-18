@@ -5,7 +5,7 @@ import { demoLanApi } from '../src/core/camera/demo';
 import { Inspections, priority, type Inspection, type PhotoRecord } from '../src/core/camera/inspection';
 import { classify, emptyNote, NetModel, type NetDevice } from '../src/core/camera/model';
 import { CameraNet, DOGD_HOWTO, type LanApi } from '../src/core/camera/net';
-import { buildReport, CONCLUSION, type ReportInput } from '../src/core/camera/report';
+import { buildReport, CONCLUSION, conclusionOpen, type ReportInput } from '../src/core/camera/report';
 import type { BleDevice } from '../src/core/ble/model';
 import type { DogdLanObservation, DogdLanStatus } from '../src/core/dogd';
 import { SCREENS } from '../src/core/commands';
@@ -191,6 +191,32 @@ describe('network discovery service', () => {
     expect(events.at(-1)!.code).toBe('CANCELLED');
   });
 
+  it('two quick clicks on START make one scan, and it is read to the end', async () => {
+    const { net, events } = make();
+    await net.refresh('DEMO');
+    await Promise.all([net.start(), net.start()]);
+    expect(events.filter((e) => e.type === 'op.start')).toHaveLength(1);
+    expect(net.error).toBeNull();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(net.state).toBe('DONE');
+    expect(net.model.devices.size).toBe(8);
+  });
+
+  it('a scan numbered from 1 again (a restarted engine) is not taken for a repeat, and simulated never mixes with physical', async () => {
+    const m = new NetModel();
+    expect(m.add(obs({ seq: 1, scan: 1, ip: '192.168.1.5', kind: 'neighbor', mac: 'aa:bb:cc:00:00:01' }), 'PHYSICAL', undefined, 1)).not.toBeNull();
+    const again = m.add(obs({ seq: 1, scan: 1, ip: '192.168.1.5', kind: 'service', port: 554, service: 'rtsp', fields: { rtsp_status: 'RTSP/1.0 200 OK' } }), 'PHYSICAL', undefined, 2);
+    expect(again).not.toBeNull();
+    expect(classify(again!).state).toBe('MEDIA_SERVICE');
+
+    const { net } = make();
+    net.model.add(obs({ ip: '10.0.0.9' }), 'PHYSICAL', undefined, 0);
+    await net.refresh('DEMO');
+    await net.start();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect([...net.model.devices.values()].every((d) => d.origin === 'SIMULATED')).toBe(true);
+  });
+
   it('without dogd it says how to start it, and nothing breaks', async () => {
     const broken: LanApi = {
       interfaces: () => Promise.reject(new Error('no dogd at 127.0.0.1:4782')),
@@ -356,6 +382,17 @@ describe('guided inspection', () => {
     return { bus, events, store, photos, insp: new Inspections(bus, store, photos) };
   };
 
+  it('"confirmed (documented)" needs what was seen written down', () => {
+    const { insp } = make();
+    insp.start('');
+    const r = insp.addRoom('bedroom');
+    const item = insp.addItem(r.id, 'usb-charger')!;
+    insp.update(item.id, { status: 'CONFIRMED_DOCUMENTED' });
+    expect(insp.find(item.id)!.item.status).toBe('TO_EXAMINE');
+    insp.update(item.id, { status: 'CONFIRMED_DOCUMENTED', observations: 'lens behind the grille, recording light on' });
+    expect(insp.find(item.id)!.item.status).toBe('CONFIRMED_DOCUMENTED');
+  });
+
   it('orders the visit by what was said, never by catalog membership', () => {
     const { insp } = make();
     insp.start('Rental, 3rd floor');
@@ -445,8 +482,91 @@ describe('report', () => {
     expect(open.text).toContain('opening on the left side');
   });
 
+  it('masks what hides inside other text: longer names, UUIDs, other MAC spellings, addresses someone typed', () => {
+    const m = new NetModel();
+    m.add(obs({ ip: '192.168.1.20', kind: 'mdns', method: 'mdns', service: '_http._tcp.local', name: 'Camera' }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.21', kind: 'mdns', method: 'mdns', service: '_http._tcp.local', name: 'Camera Bedroom Anna' }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.21', kind: 'ssdp', method: 'ssdp', service: 'uuid:2f402f80-da50-11e1-9b23-00178812abcd' }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.21', kind: 'neighbor', mac: '00:17:88:12:ab:cd' }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.22', kind: 'wsd', method: 'wsd', service: 'dn:NetworkVideoTransmitter', fields: { hardware: 'IPC-00-17-88-12-AB-CD' } }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.23', kind: 'upnp', method: 'ssdp', service: 'urn:x', fields: { manufacturer: 'Acme', model_name: 'CAM 001788aabbcc' } }), 'PHYSICAL');
+    const devices = [...m.devices.values()];
+    const notes = new Map([[devices[1]!.key, { ...emptyNote(), known: true, label: 'cam at 192.168.1.5 / aa:bb:cc:dd:ee:ff', confirmation: 'seen at 192.168.1.21' }]]);
+    const r = buildReport(base({ devices, notes }), { maskNetwork: true, hidePersonal: false });
+    for (const secret of ['Bedroom', 'Anna', '2f402f80', '00178812abcd', '00-17-88-12-AB-CD', '001788aabbcc', '192.168.1.5', 'aa:bb:cc:dd:ee:ff', '192.168.1.21']) expect(r.text, secret).not.toContain(secret);
+    expect(r.text).toMatch(/name-\d/);
+  });
+
+  it('a conclusion that says too much is never given while devices or objects are left to identify', () => {
+    const m = new NetModel();
+    m.add(obs({ ip: '192.168.1.40', kind: 'service', method: 'services', port: 554, service: 'rtsp', fields: { rtsp_status: 'RTSP/1.0 200 OK' } }), 'PHYSICAL');
+    const r = buildReport(base({ devices: [...m.devices.values()] }), { maskNetwork: false, hidePersonal: false });
+    expect(r.clues).toBe(0);
+    expect(r.conclusion).toBe(conclusionOpen(1, 'en'));
+    expect(conclusionOpen(2, 'fr')).toMatch(/^Aucun indice identifié pour l’instant avec les méthodes utilisées/);
+    const known = buildReport(base({ devices: [...m.devices.values()], notes: new Map([[[...m.devices.keys()][0]!, { ...emptyNote(), known: true }]]) }), { maskNetwork: false, hidePersonal: false });
+    expect(known.conclusion).toBe(CONCLUSION.none.en);
+  });
+
+  it('lists every answer an interpretation cites, and counts the ones it does not list', () => {
+    const m = new NetModel();
+    for (let i = 0; i < 20; i++) m.add(obs({ ip: '192.168.1.50', kind: 'mdns', method: 'mdns', service: `_svc${i}._tcp.local` }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.50', kind: 'wsd', method: 'wsd', service: 'dn:NetworkVideoTransmitter' }), 'PHYSICAL', 99);
+    const r = buildReport(base({ devices: [...m.devices.values()] }), { maskNetwork: false, hidePersonal: false });
+    const facts = r.text.slice(r.text.indexOf('## FACTS'), r.text.indexOf('## INTERPRETATIONS'));
+    expect(facts).toMatch(/NetworkVideoTransmitter.*\[#99\]/);
+    expect(facts).toMatch(/more answer\(s\)/);
+  });
+
+  it('a model reported on the network is never shown as a confirmed hidden camera', () => {
+    const m = new NetModel();
+    m.add(obs({ ip: '192.168.1.60', kind: 'wsd', method: 'wsd', service: 'dn:NetworkVideoTransmitter', fields: { hardware: 'IPC-X1' } }), 'PHYSICAL');
+    const d = [...m.devices.values()][0]!;
+    expect(classify(d).state).toBe('MODEL_IDENTIFIED');
+    const r = buildReport(base({ devices: [d] }), { maskNetwork: false, hidePersonal: false });
+    expect(r.text).toContain('Model reported by the device');
+    expect(r.text).toMatch(/not established: That it is a camera hidden here/);
+    const facts = r.text.slice(r.text.indexOf('## FACTS'), r.text.indexOf('## LIMITS'));
+    expect(facts).not.toMatch(/camera confirmed/i);
+    // only a person's documented verification confirms, and it reads as theirs
+    const notes = new Map([[d.key, { ...emptyNote(), confirmation: 'lens seen behind the smoke detector grille, bedroom ceiling' }]]);
+    const c = buildReport(base({ devices: [d], notes }), { maskNetwork: false, hidePersonal: false });
+    expect(c.text).toMatch(/camera confirmed by your verification: lens seen/);
+    expect(c.text).toMatch(/not established: Anything by the scan itself/);
+  });
+
   it('labels simulated data', () => {
     const r = buildReport(base({ network: { ...base().network, origin: 'SIMULATED' } }), { maskNetwork: false, hidePersonal: false });
     expect(r.text).toMatch(/SIMULATED DATA/);
   });
+});
+
+describe('the lab database upgrade', () => {
+  it('waits for a tab holding the older version, then works in memory and says why; this version never blocks a newer one', async () => {
+    const { IDBFactory } = await import('fake-indexeddb');
+    const { labStoreProblem, openLabStore, resetLabStore } = await import('../src/core/lab/store');
+    const factory = new IDBFactory();
+    // an old tab: version 1, no versionchange handler
+    const old = await new Promise<IDBDatabase>((res) => {
+      const r = factory.open('hwdog-lab', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('sessions');
+      r.onsuccess = () => res(r.result);
+    });
+    resetLabStore();
+    const kv = await openLabStore('camera', factory);
+    expect(kv.kind).toBe('MEMORY');
+    expect(labStoreProblem()).toMatch(/older version/);
+    old.close();
+    resetLabStore();
+    expect((await openLabStore('camera', factory)).kind).toBe('INDEXEDDB');
+    // a newer version (3) opened elsewhere is not blocked by this one
+    const newer = await new Promise<IDBDatabase>((res, rej) => {
+      const r = factory.open('hwdog-lab', 3);
+      r.onsuccess = () => res(r.result);
+      r.onblocked = () => rej(new Error('blocked'));
+    });
+    expect(newer.version).toBe(3);
+    newer.close();
+    resetLabStore();
+  }, 10_000);
 });

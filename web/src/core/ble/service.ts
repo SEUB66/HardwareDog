@@ -229,6 +229,7 @@ export class BleService {
   async replay(data: LabSessionData): Promise<number> {
     await this.stop();
     this.model.clear();
+    this.error = null;
     this.state = 'REPLAY';
     this.sourceKind = 'REPLAY';
     this.origin = 'REPLAY';
@@ -248,10 +249,10 @@ export class BleService {
   // ------------------------------------------------------------------ GATT
 
   async pickGatt(optionalServices: string[]): Promise<GattSession> {
-    this.gatt?.dispose();
-    this.gatt = null;
-    this.changed();
+    // The device in use stays until another one is actually picked: a
+    // cancelled chooser leaves everything as it was.
     const g = await GattSession.pick(this.bus, optionalServices);
+    this.gatt?.dispose();
     this.gatt = g;
     g.subscribe(() => this.changed());
     this.changed();

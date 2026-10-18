@@ -77,6 +77,13 @@ export class CameraNet {
   private op: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private fails = 0;
+  /** True between the START click and dogd's answer: a second click waits. */
+  starting = false;
+  /** Scans started by this page: with dogd's own numbers, what makes an observation unique
+   * (the demo and a restarted dogd both count from 1 again). */
+  private run = 0;
+  /** Reads of the observations, one after the other: two at once would read the same page twice. */
+  private reading: Promise<void> = Promise.resolve();
   private listeners = new Set<() => void>();
   private rev = 0;
 
@@ -103,10 +110,14 @@ export class CameraNet {
   get scanning(): boolean {
     return this.state === 'SCANNING';
   }
+  /** Scanning, or about to: START is not offered. */
+  get busy(): boolean {
+    return this.scanning || this.starting;
+  }
 
   /** Ask the engine which networks this computer is on (demo: the simulated one). */
   async refresh(source: 'DOGD' | 'DEMO' = this.source): Promise<void> {
-    if (this.scanning) return;
+    if (this.busy) return;
     this.source = source;
     this.api = source === 'DEMO' ? this.demoApi() : dogdLanApi;
     try {
@@ -128,7 +139,17 @@ export class CameraNet {
 
   /** Start a scan of the chosen interface. One at a time. */
   async start(): Promise<void> {
-    if (this.scanning) return;
+    if (this.busy) return;
+    this.starting = true;
+    try {
+      await this.begin();
+    } finally {
+      this.starting = false;
+      this.changed();
+    }
+  }
+
+  private async begin(): Promise<void> {
     const iface = this.interfaces.find((i) => i.name === this.iface);
     if (!iface || iface.refused) {
       this.error = { code: 'NO_IFACE', message: iface?.refused ?? 'Choose a network first.' };
@@ -141,6 +162,9 @@ export class CameraNet {
       return;
     }
     this.error = null;
+    // Simulated and physical devices never share a list (nor a report).
+    if ([...this.model.devices.values()].some((d) => d.origin !== this.origin)) this.model.clear();
+    this.run++;
     this.op = newOp('camera.net');
     this.bus.emit({ source: 'CAMERA', tool: 'camera.net', type: 'op.start', op: this.op, severity: 'INFO', message: `network discovery on ${iface.name} ${iface.network}`, origin: this.origin, params: { kind: 'search', iface: iface.name, network: iface.network, methods: this.methods.join(' '), say: 'cam.searching' } });
     try {
@@ -174,14 +198,14 @@ export class CameraNet {
 
   /** The network to scan (an allowed one only). */
   choose(iface: string): void {
-    if (this.scanning || !this.interfaces.some((i) => i.name === iface && !i.refused)) return;
+    if (this.busy || !this.interfaces.some((i) => i.name === iface && !i.refused)) return;
     this.iface = iface;
     this.changed();
   }
 
   /** The methods to use, kept in their running order. */
   setMethods(methods: LanMethod[]): void {
-    if (this.scanning) return;
+    if (this.busy) return;
     this.methods = LAN_METHODS.filter((m) => methods.includes(m));
     this.changed();
   }
@@ -200,8 +224,9 @@ export class CameraNet {
   }
 
   clear(): void {
-    if (this.scanning) return;
+    if (this.busy) return;
     this.model.clear();
+    this.lost = 0;
     this.status = null;
     this.state = 'IDLE';
     this.changed();
@@ -254,7 +279,13 @@ export class CameraNet {
   }
 
   /** Read every observation dogd has after `since`. */
-  private async drain(): Promise<void> {
+  private drain(): Promise<void> {
+    const next = this.reading.then(() => this.drainNow());
+    this.reading = next.catch(() => {});
+    return next;
+  }
+
+  private async drainNow(): Promise<void> {
     for (let guard = 0; guard < 50; guard++) {
       const page = await this.api.observations(this.since);
       this.lost += page.lost;
@@ -271,7 +302,7 @@ export class CameraNet {
           params: { kind: o.kind, method: o.method, ip: o.ip, mac: o.mac, port: o.port, service: o.service, name: o.name, vendor: o.vendor },
           ...(o.raw ? { decoded: { decoder: `dogd.lan.${o.kind}`, version: '1', fields: { ...o.fields } } } : {}),
         });
-        this.model.add(o, this.origin, ev.seq);
+        this.model.add(o, this.origin, ev.seq, this.run);
       }
       const done = page.observations.length === 0 || page.next === this.since;
       this.since = page.next;

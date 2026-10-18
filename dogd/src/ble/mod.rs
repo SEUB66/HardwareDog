@@ -134,6 +134,9 @@ pub struct BleScanner {
     probed: Mutex<Option<Instant>>,
     epoch: Instant,
     stop: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    /// The discovery task, kept so that a new start waits for the last one
+    /// to have called StopDiscovery and said so.
+    task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 pub fn wall_ms() -> u64 {
@@ -159,6 +162,7 @@ impl BleScanner {
             probed: Mutex::new(None),
             epoch: Instant::now(),
             stop: Mutex::new(None),
+            task: Mutex::new(None),
         })
     }
 
@@ -211,14 +215,25 @@ impl BleScanner {
             if self.scanning() {
                 return self.status.lock().unwrap().clone();
             }
+            // A stop that gave up waiting leaves the last task finishing:
+            // let it end first, or its last word ("ready") and its clean-up
+            // would land on this scan.
+            let last = self.task.lock().unwrap().take();
+            if let Some(last) = last {
+                let _ = tokio::time::timeout(Duration::from_secs(5), last).await;
+            }
+            if self.scanning() {
+                return self.status.lock().unwrap().clone();
+            }
             let (stop_tx, stop_rx) = tokio::sync::oneshot::channel();
             let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
             *self.stop.lock().unwrap() = Some(stop_tx);
             let me = self.clone();
-            tokio::spawn(async move {
+            let task = tokio::spawn(async move {
                 bluez::run(me.clone(), stop_rx, ready_tx).await;
                 me.stop.lock().unwrap().take();
             });
+            *self.task.lock().unwrap() = Some(task);
             let s = match tokio::time::timeout(Duration::from_secs(5), ready_rx).await {
                 Ok(Ok(s)) => s,
                 _ => Status::new("error", None, "BlueZ did not start discovery in 5 s"),

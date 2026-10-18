@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodePayload, loadNumbers, names } from '../src/core/ble/decode';
 import { BLE_LIMITS, BleScanModel, presence, shortUuid, viewDevices, type BleObservation } from '../src/core/ble/model';
 import { BleService, observationOf, payloadParams } from '../src/core/ble/service';
@@ -165,5 +165,86 @@ describe('BLE scan, session and replay', () => {
     expect(o.mono).toBe(10_000 - 100);
     expect(o.manufacturer[0]).toEqual({ company: 76, data: Uint8Array.of(2, 0x15) });
     expect(o.serviceData[0]!.uuid).toBe('FEAA');
+  });
+});
+
+describe('stopping and picking never leave anything running behind', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllGlobals();
+  });
+
+  it('STOP pressed while dogd is starting discovery: no poller survives, dogd is told to stop', async () => {
+    let release: (v: unknown) => void = () => {};
+    const bodies: string[] = [];
+    let polls = 0;
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/v1/ble/scan')) {
+        const body = String(init?.body ?? '');
+        bodies.push(body);
+        if (body.includes('start')) await new Promise((r) => (release = r));
+        return new Response(JSON.stringify({ supported: true, state: body.includes('start') ? 'scanning' : 'ready', adapter: 'hci0', detail: '' }));
+      }
+      polls++;
+      return new Response(JSON.stringify({ now_mono_ms: 1, next: polls, lost: 0, observations: [] }));
+    }) as unknown as typeof fetch;
+    const s = new BleService(new LabBus());
+    const started = s.start('DOGD');
+    await new Promise((r) => setTimeout(r, 5));
+    await s.stop();
+    release(null);
+    await started;
+    const before = polls;
+    await new Promise((r) => setTimeout(r, 900));
+    expect(s.state).toBe('STOPPED');
+    expect(polls).toBe(before);
+    // the late "scanning" answer is followed by one more stop
+    expect(bodies.filter((b) => !b.includes('start')).length).toBe(2);
+  });
+
+  it('dogd discovery ended by the system (adapter off): the scan says so instead of showing SCANNING', async () => {
+    let off = false;
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith('/v1/ble/scan')) return new Response(JSON.stringify({ supported: true, state: 'scanning', adapter: 'hci0', detail: '' }));
+      if (u.endsWith('/v1/ble/status')) return new Response(JSON.stringify({ supported: true, state: off ? 'error' : 'scanning', adapter: 'hci0', detail: off ? 'adapter hci0 was powered off: discovery ended' : '' }));
+      return new Response(JSON.stringify({ now_mono_ms: 1, next: 1, lost: 0, observations: [] }));
+    }) as unknown as typeof fetch;
+    const s = new BleService(new LabBus());
+    await s.start('DOGD');
+    off = true;
+    await new Promise((r) => setTimeout(r, 2600));
+    expect(s.state).toBe('ERROR');
+    expect(s.error?.message).toContain('powered off');
+  });
+
+  it('a cancelled device chooser keeps the device already in use', async () => {
+    let n = 0;
+    const device = () => Object.assign(new EventTarget(), { id: `dev${++n}`, gatt: { connected: false, connect: async () => { throw new Error('no'); }, disconnect: () => {}, getPrimaryServices: async () => [] } });
+    let cancel = false;
+    vi.stubGlobal('navigator', { bluetooth: Object.assign(new EventTarget(), { requestDevice: async () => { if (cancel) throw new DOMException('cancelled', 'NotFoundError'); return device(); } }) });
+    const s = new BleService(new LabBus());
+    const first = await s.pickGatt([]);
+    cancel = true;
+    await expect(s.pickGatt([])).rejects.toThrow();
+    expect(s.gatt).toBe(first);
+  });
+
+  it('a session closed while connecting lets the link go when it arrives', async () => {
+    let resolve: (v: unknown) => void = () => {};
+    const calls: string[] = [];
+    const server = { connected: true, connect: async () => server, disconnect: () => calls.push('server.disconnect'), getPrimaryServices: async () => [] };
+    const gatt = { connected: false, connect: () => new Promise((r) => (resolve = r)).then(() => server), disconnect: () => calls.push('gatt.disconnect'), getPrimaryServices: async () => [] };
+    vi.stubGlobal('navigator', { bluetooth: Object.assign(new EventTarget(), { requestDevice: async () => Object.assign(new EventTarget(), { id: 'd', gatt }) }) });
+    const s = new BleService(new LabBus());
+    const g = await s.pickGatt([]);
+    const connecting = g.connect();
+    s.closeGatt();
+    resolve(null);
+    await connecting;
+    expect(calls).toContain('gatt.disconnect');
+    expect(calls).toContain('server.disconnect');
+    expect(g.state).toBe('DISCONNECTED');
   });
 });

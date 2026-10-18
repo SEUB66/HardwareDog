@@ -206,7 +206,10 @@ name, alias, RSSI, TX power, UUIDs, manufacturer and service data (hex).
 Reports wait in a ring of 4096; a reader that was too slow is told how
 many it missed. States: `unsupported` (not Linux), `no_adapter`,
 `permission`, `ready`, `scanning`, `error` (no system D-Bus, bluetoothd not
-running), with BlueZ's own error names in the detail.
+running), with BlueZ's own error names in the detail. A scan the system
+ends (the adapter powered off, unplugged, bluetoothd gone) is not left
+showing `scanning`: the status says what happened, and the interface,
+which checks it every 2 s, stops and says so.
 
 Discovery listens: dogd connects to no Bluetooth device and sends nothing
 to one. Nothing starts before the interface asks. What a report is, and is
