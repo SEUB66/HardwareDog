@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><meta name="theme-color" content="#0b0d0f">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#101014">
 <title>Hardware Dog — Camera Sniffer &amp; Hardware Diagnostics</title>
 <meta name="description" content="Outil de diagnostic matériel local-first dans le navigateur : indices de caméras cachées sans app cloud, scanner Bluetooth LE, Flipper Zero par Web Serial. Sans compte, sans pistage.">
 <link rel="canonical" href="https://hardwaredog.org/">
@@ -15,35 +15,397 @@
 <meta name="twitter:image" content="https://hardwaredog.org/og/hardware-dog-no-cookies-1200x630.jpg"><meta name="twitter:image:alt" content="Hardware Dog : le chien robot boude un biscuit. NO COOKIES. No tracking. No account. No subscription. Sniff the hardware. Not the human.">
 <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png"><link rel="icon" type="image/png" sizes="16x16" href="./favicon-16.png"><link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png"><link rel="manifest" href="./manifest.webmanifest">
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://hardwaredog.org/#website","name":"Hardware Dog","url":"https://hardwaredog.org/","inLanguage":"fr"},{"@type":"SoftwareApplication","name":"Hardware Dog","url":"https://hardwaredog.org/diagnostic.html","applicationCategory":"DeveloperApplication","operatingSystem":"Web browser","description":"Outil de diagnostic matériel local-first dans le navigateur : indices de caméras cachées sans app cloud (Camera Sniffer), scanner Bluetooth LE (Bluetooth Lab), Flipper Zero par Web Serial (Flipper Lab), USB, réseau et console série. Sans compte. Sans abonnement.","offers":{"@type":"Offer","price":"0","priceCurrency":"CAD","description":"Gratuit pour usage personnel (PolyForm Noncommercial 1.0.0)"},"license":"https://github.com/SEUB66/HardwareDog/blob/main/LICENSE","author":{"@type":"Person","name":"Sebastien Germain"},"isAccessibleForFree":true}]}</script>
+<link rel="preload" href="./node_modules/@fontsource/silkscreen/files/silkscreen-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script type="module" src="./src/vitrine.ts"></script>
 </head>
 <body>
-<a class="skip" href="#main">Aller au contenu</a>
-<header class="wrap nav"><a class="brand" href="#"><img class="official-lockup" src="./brand/hd-lockup-horizontal-1200.webp" width="1200" height="400" alt="Hardware Dog — hardware companion"></a><nav aria-label="Navigation principale"><a href="#tools">Les outils</a><a href="#laws">Les lois</a><a href="#how">Le principe</a><a href="./engineering.html">Technique</a><a href="#who">WHO</a><button id="theme" aria-label="Activer le mode clair">☀ Clair</button><a class="nav-open" href="./diagnostic.html">Ouvrir l’outil ↗</a></nav></header>
+<a class="skip" href="#main" data-en="Skip to content">Aller au contenu</a>
+
+<!-- STATUS BAR: the instrument's header. Branding serves the instrument. -->
+<header class="bar">
+  <div class="wrap bar-in">
+    <a class="logo" href="./" aria-label="Hardware Dog — accueil" data-en-label="Hardware Dog — home"><img src="../assets/brand/web/hd-mark-1x.webp" srcset="../assets/brand/web/hd-mark-1x.webp 1x, ../assets/brand/web/hd-mark-2x.webp 2x, ../assets/brand/web/hd-mark-3x.webp 3x" width="22" height="22" alt=""><span class="logo-hw">HW</span><span class="logo-dog">DOG</span></a>
+    <nav class="bar-nav" aria-label="Navigation principale" data-en-label="Main navigation">
+      <a href="#manifesto">MANIFESTO</a><a href="#companion">COMPANION</a><a href="#timeline">TIMELINE</a><a href="#hdlog">.HDLOG</a><a href="#tools" data-en="TOOLS">OUTILS</a><a href="./engineering.html" data-en="ENGINEERING">TECHNIQUE</a>
+    </nav>
+    <span class="bar-state" aria-hidden="true"><i class="led led-green"></i>LOCAL</span>
+    <a class="bar-cta" href="./diagnostic.html">&gt;_ LAUNCH</a>
+  </div>
+</header>
+
 <main id="main">
-<section class="hero wrap"><div class="reveal"><p class="eyebrow"><i class="status-dot"></i> LOCAL FIRST / CLOUD OPTIONAL</p><h1>Votre matériel.<br>Vos données.<br><em>Vos règles.</em></h1><p class="intro">Un compagnon de diagnostic qui cherche ce qui s’est réellement passé. Pas votre adresse courriel.</p><div class="actions"><a class="button primary diagnostic-cta" href="./diagnostic.html">Ouvrir le diagnostic ↗</a><a class="button secondary" href="#laws">Lire les lois ↓</a></div><p class="free-badge">Gratuit pour usage personnel · Code public</p><p class="micro">Sans compte. Sans abonnement. Démo dans le navigateur.</p></div>
-<div class="hero-visual reveal"><div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div><span class="coordinate top">SYS.HWD / 001</span><img class="mascot" src="./brand/hd-og-1200x630.webp" width="1200" height="630" fetchpriority="high" alt="Bannière officielle Hardware Dog : chien robot, câble USB et SNIFF THE PROBLEM"><div class="glass terminal"><div class="terminal-bar"><span class="dots" aria-hidden="true">● ● ●</span><span>hardware-dog / manifesto</span><span>↗</span></div><div class="terminal-body"><p><span class="prompt">❯</span> dog check --freedom</p><p class="boot-line"><b>[ OK ]</b> compte requis <span>NON</span></p><p class="boot-line"><b>[ OK ]</b> abonnement <span>NON</span></p><p class="boot-line"><b>[ OK ]</b> données <span>LOCALES</span></p><p class="boot-line"><b>[ OK ]</b> contrôle <span>VOUS</span></p><p class="terminal-ready">READY TO INVESTIGATE <span class="cursor">▊</span></p></div></div><span class="coordinate bottom">SNIFF THE PROBLEM.</span></div></section>
-<section id="tools" class="laws wrap" aria-labelledby="tools-title"><div class="section-heading reveal"><p class="eyebrow">LES OUTILS / DANS LE NAVIGATEUR</p><h2 id="tools-title">Diagnostic matériel local-first.<br><span>Dans votre navigateur.</span></h2><p>Camera Sniffer, Bluetooth Lab, Flipper Lab, USB, réseau et série : ce que chaque outil fait vraiment, et ses limites. Une démo fonctionne dans tous les navigateurs.</p></div><div class="law-grid tools-grid">
-<article class="law glass featured reveal"><div class="law-meta"><span>CAMERA SNIFFER</span><span>◎</span></div><h3>Caméras cachées : des indices, sans app cloud.</h3><p>Repère des indices de caméras sur un réseau que vous choisissez (avec dogd), en Bluetooth et en USB, et guide une inspection physique objet par objet. Il dit ce qu’il observe : un scan sans indice ne prouve pas qu’il n’y a aucune caméra.</p><code>OBSERVED ≠ CONFIRMED</code></article>
-<article class="law glass reveal"><div class="law-meta"><span>BLUETOOTH LAB</span><span>ᛒ</span></div><h3>Un scanner Bluetooth LE dans le navigateur.</h3><p>Les appareils Bluetooth LE autour de vous, par Web Bluetooth quand le navigateur le permet, ou par dogd sous Linux.</p><code>BLE / GATT</code></article>
-<article class="law glass reveal"><div class="law-meta"><span>FLIPPER LAB</span><span>◇</span></div><h3>Flipper Zero par Web Serial, sans app à installer.</h3><p>Lire le stockage et les captures d’un Flipper Zero depuis un navigateur Chromium sur ordinateur (Web Serial).</p><code>READ, COMPARE, ARCHIVE</code></article>
-<article class="law glass reveal"><div class="law-meta"><span>USB · RÉSEAU · SÉRIE</span><span>⌁</span></div><h3>La console d’une carte, le réseau de cet ordinateur.</h3><p>La console série de n’importe quelle carte dans le navigateur ; le réseau et les périphériques USB de cet ordinateur par dogd, le daemon local optionnel. La sonde Hardware Dog est encore en développement.</p><code>WEB SERIAL / DOGD</code></article>
-</div></section>
-<div class="strip"><div class="wrap"><span>01 / AUCUN COMPTE</span><span>02 / AUCUN ABONNEMENT</span><span>03 / AUCUN CLOUD OBLIGATOIRE</span><span>04 / VOS PREUVES RESTENT À VOUS</span></div></div>
-<section id="laws" class="laws wrap"><div class="section-heading reveal"><p class="eyebrow">LE MANIFESTE / 05 LOIS</p><h2>Le logiciel vous sert.<br><span>Il ne vous retient pas.</span></h2><p>Des limites d’architecture, pas des promesses marketing. Les lois vérifiables sont testées dans le projet.</p></div><div class="law-grid">
-<article class="law glass reveal"><div class="law-meta"><span>LAW_01</span><span>↗</span></div><h3>Une seule chronologie.</h3><p>Le matériel, le simulateur et les enregistrements parlent le même langage. Un modèle d’événement, une horloge, une timeline pour comprendre l’incident.</p><code>ONE EVENT MODEL. ONE CLOCK.</code></article>
-<article class="law glass reveal"><div class="law-meta"><span>LAW_02</span><span>↻</span></div><h3>Une panne. Un test.</h3><p>Un incident enregistré peut devenir un test reproductible. Une panne rencontrée une fois aide à améliorer le diagnostic pour la suite.</p><code>INCIDENT → REPLAY → REGRESSION</code></article>
-<article class="law glass featured reveal"><div class="law-meta"><span>LAW_03 / ANTI-SAAS</span><span>⌁</span></div><h3>Local, par principe.</h3><p>Aucun compte. Aucun abonnement. Aucune télémétrie par défaut. Capturer, diagnostiquer, enregistrer, rejouer et exporter sans cloud obligatoire.</p><code>LOCAL IS THE SOURCE OF TRUTH.</code><div class="tags"><span>Pas de courriel</span><span>Pas de paywall à l’export</span><span>Pas de serveur de licence requis</span></div></article>
-<article class="law glass reveal"><div class="law-meta"><span>LAW_04</span><span>≠</span></div><h3>Pas de fausse certitude.</h3><p>Des faits observés, une corrélation, une cause possible et un prochain contrôle. Un diagnostic explique sa confiance et ses limites.</p><code>FACTS ≠ GUESSWORK</code></article>
-<article class="law glass reveal"><div class="law-meta"><span>LAW_05</span><span>◇</span></div><h3>Les preuves restent des preuves.</h3><p>Les enregistrements sont scellés par SHA-256. Une source simulée reste étiquetée SIMULATED. Un fichier altéré est signalé MODIFIED.</p><code>EVIDENCE STAYS EVIDENCE.</code></article>
-</div></section>
-<section id="how" class="how wrap reveal"><div><p class="eyebrow">BROWSER DIRECT / ZÉRO INSCRIPTION</p><h2>Ouvrez.<br>Explorez.<br><em>Comprenez.</em></h2><img class="official-dog" src="./brand/hd-official-full-art-840.webp" width="840" height="840" loading="lazy" alt="Illustration officielle du chien Hardware Dog"></div><div class="steps"><article><span>01</span><div><h3>Ouvrir la démo</h3><p>L’interface et ses scénarios simulés fonctionnent dans le navigateur. Aucun logiciel à installer pour les essayer.</p></div></article><article><span>02</span><div><h3>Suivre les événements</h3><p>Alimentation, USB, série et réseau : les événements se retrouvent sur une chronologie commune.</p></div></article><article><span>03</span><div><h3>Garder le contrôle</h3><p>Vos sessions restent locales. Le daemon Rust dogd est optionnel et local. Le matériel physique est encore en développement.</p></div></article><a class="text-link" href="./diagnostic.html?demo">Lancer les scénarios simulés →</a></div></section>
-<section id="who" class="who wrap reveal" aria-labelledby="who-title">
-<div class="who-heading"><p class="eyebrow">WHO / BEHIND THE DOG</p><h2 id="who-title">The hardware kid<span>.</span></h2><p>Seub · Sebastien Germain</p></div>
-<div class="creator-grid">
-<figure class="creator-photo"><img src="./creator/seub-desk.webp" width="1000" height="1000" loading="lazy" alt="Seub à son bureau avec son chien"><figcaption>BUILD. FIX. REPEAT.</figcaption></figure>
-<div class="creator-story glass"><img class="creator-avatar" src="./creator/dog-avatar.webp" width="1000" height="1000" loading="lazy" alt="Avatar officiel du chien Hardware Dog"><p class="eyebrow">HARDWARE DOG / BY SEUB</p><h3>Du code.<br>Des circuits.<br><em>Du concret.</em></h3><p>Créateur de Hardware Dog. Une idée simple : comprendre les machines avec des outils qui restent entre vos mains.</p><a class="button coffee-link" href="https://buymeacoffee.com/sebastiengo" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span><span>Offrir un café à Seub</span><span aria-hidden="true">↗</span></a><a class="button creator-link" href="https://seub.net" target="_blank" rel="noopener noreferrer">Découvrir seub.net <span>↗</span></a><a class="button github-button" href="https://github.com/SEUB66/HardwareDog" target="_blank" rel="noopener noreferrer"><svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.5 21.6c.55.1.75-.24.75-.53v-2.06c-3.06.66-3.71-1.3-3.71-1.3-.5-1.28-1.23-1.62-1.23-1.62-1-.68.08-.67.08-.67 1.1.08 1.68 1.13 1.68 1.13.98 1.68 2.57 1.2 3.2.92.1-.71.38-1.2.7-1.48-2.44-.28-5.01-1.22-5.01-5.44 0-1.2.43-2.18 1.13-2.94-.11-.28-.49-1.4.11-2.91 0 0 .93-.3 3.05 1.12a10.6 10.6 0 0 1 5.55 0c2.12-1.43 3.05-1.12 3.05-1.12.6 1.52.22 2.63.1 2.91.7.76 1.14 1.74 1.14 2.94 0 4.23-2.57 5.16-5.02 5.43.4.35.75 1.02.75 2.06v3.03c0 .29.2.64.76.53A11.1 11.1 0 0 0 12 .9Z"/></svg><span>Hardware Dog sur GitHub</span></a></div>
-<figure class="creator-photo workshop"><img src="./creator/seub-workshop.webp" width="1000" height="1250" loading="lazy" alt="Seub dans son atelier, devant un projet mécanique"><figcaption>JUST ONE MORE UPGRADE.</figcaption></figure>
-</div></section><section class="closing wrap reveal"><div class="glass signal-panel"><svg class="signal-flow" viewBox="0 0 1672 941" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path class="cyan-trace" pathLength="1000" d="M1155.5 0 V122 L1213 179 V241"/><path class="cyan-trace" pathLength="1000" d="M0 608 H195 L256 669 H308"/><path class="pink-trace" pathLength="1000" d="M0 650 H168 L216 698"/></svg>
-<p class="eyebrow">THE CLOUD IS NEVER REQUIRED.</p><h2>Un outil.<br><em>Pas une dépendance.</em></h2><a class="button primary diagnostic-cta" href="./diagnostic.html">Entrer dans Hardware Dog ↗</a><p>Code public · Licence PolyForm Noncommercial 1.0.0</p><a class="button github-button" href="https://github.com/SEUB66/HardwareDog" target="_blank" rel="noopener noreferrer"><svg class="github-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.5 21.6c.55.1.75-.24.75-.53v-2.06c-3.06.66-3.71-1.3-3.71-1.3-.5-1.28-1.23-1.62-1.23-1.62-1-.68.08-.67.08-.67 1.1.08 1.68 1.13 1.68 1.13.98 1.68 2.57 1.2 3.2.92.1-.71.38-1.2.7-1.48-2.44-.28-5.01-1.22-5.01-5.44 0-1.2.43-2.18 1.13-2.94-.11-.28-.49-1.4.11-2.91 0 0 .93-.3 3.05 1.12a10.6 10.6 0 0 1 5.55 0c2.12-1.43 3.05-1.12 3.05-1.12.6 1.52.22 2.63.1 2.91.7.76 1.14 1.74 1.14 2.94 0 4.23-2.57 5.16-5.02 5.43.4.35.75 1.02.75 2.06v3.03c0 .29.2.64.76.53A11.1 11.1 0 0 0 12 .9Z"/></svg><span>Explorer le repo GitHub ↗</span></a></div></section>
-</main><footer class="wrap"><a class="brand" href="#">HW <span>DOG</span></a><p>© 2026 Sebastien Germain · SNIFF THE PROBLEM.</p><a href="#laws">Les lois ↑</a></footer><script type="module" src="./src/landing.ts"></script>
-</body></html>
+
+<!-- 01 HERO: one instrument panel. The banner and the boot terminal are screens set into it; the title and the launch key sit on its face. -->
+<section class="hero wrap" aria-labelledby="hero-title">
+  <div class="dio" id="diorama">
+    <div class="dio-rail" aria-hidden="true">
+      <span>SYS.HWD / 001</span>
+      <span class="dio-rail-mid">VIEWPORT A // hardwaredog.org</span>
+      <span class="dio-count">COOKIES <b>0</b> · TRACKERS <b>0</b> · ACCOUNTS <b>0</b></span>
+    </div>
+    <div class="hero-grid">
+      <div class="dio-well hero-banner">
+        <div class="dio-stage">
+          <img class="dio-img" src="../assets/brand/web/banners/hd-banner-no-cookies-1200.webp" srcset="../assets/brand/web/banners/hd-banner-no-cookies-800.webp 800w, ../assets/brand/web/banners/hd-banner-no-cookies-1200.webp 1200w, ../assets/brand/web/banners/hd-banner-no-cookies-1983.webp 1983w" sizes="(min-width: 1290px) 750px, (min-width: 960px) 58vw, calc(100vw - 42px)" width="1983" height="793" fetchpriority="high" alt="Bannière Hardware Dog : le chien robot boude un biscuit posé sur un établi. NO COOKIES. No tracking. No account. No subscription. Sniff the hardware. Not the human." data-en-alt="Hardware Dog banner: the robot dog frowns at a cookie on a bench. NO COOKIES. No tracking. No account. No subscription. Sniff the hardware. Not the human.">
+        </div>
+      </div>
+
+      <div class="hero-copy">
+        <p class="tag"><i class="led led-cyan"></i>LOCAL HARDWARE DIAGNOSTIC SYSTEM</p>
+        <h1 id="hero-title"><span class="h1-pre">Hardware Dog //</span> SNIFF THE PROBLEM.</h1>
+        <p class="lead" data-en="Power, USB, serial, buses and network on one timeline. A local-first diagnostic instrument that looks for what actually happened. Not for your email address.">Alimentation, USB, série, bus et réseau sur une seule chronologie. Un instrument de diagnostic local-first qui cherche ce qui s’est réellement passé. Pas votre adresse courriel.</p>
+        <div class="launch">
+          <a class="cta" href="./diagnostic.html"><span class="cta-key">[ &gt;<span class="cta-caret">_</span> LAUNCH LOCAL TOOL ]</span></a>
+          <a class="cta-alt" href="./diagnostic.html?demo">▶ DEMO <small data-en="SIMULATOR">SIMULATEUR</small></a>
+        </div>
+      </div>
+
+      <div class="crt">
+        <p class="crt-bar" aria-hidden="true"><span>tty0 — hwdog</span><span>MODE: LOCAL</span></p>
+        <div class="crt-text">
+<pre class="crt-logo" aria-hidden="true">██╗  ██╗██╗    ██╗    ██████╗  ██████╗  ██████╗
+██║  ██║██║    ██║    ██╔══██╗██╔═══██╗██╔════╝
+███████║██║ █╗ ██║    ██║  ██║██║   ██║██║  ███╗
+██╔══██║██║███╗██║    ██║  ██║██║   ██║██║   ██║
+██║  ██║╚███╔███╔╝    ██████╔╝╚██████╔╝╚██████╔╝
+╚═╝  ╚═╝ ╚══╝╚══╝     ╚═════╝  ╚═════╝  ╚═════╝
+<span class="crt-dog">
+           / \__
+          (    @\___
+          /         O================[ USB ]
+         /   (_____/
+        /_____/   \</span></pre>
+<p class="crt-motto">hardware companion // <b>SNIFF THE PROBLEM.</b></p>
+<pre class="crt-boot"><span>Booting core systems...</span><span><b>[ OK ]</b> power monitor</span><span><b>[ OK ]</b> usb interface</span><span><b>[ OK ]</b> serial interface</span><span><b>[ OK ]</b> network probe</span><span><b>[ OK ]</b> event pipeline</span><span><b>[ OK ]</b> trace engine</span><span><b>[ OK ]</b> diagnostics rules</span><span class="crt-gap">Device ID : HD-001    Firmware : 0.1.0</span><span>Mode      : LOCAL     Session  : READY</span><span class="crt-prompt">Type HELP for commands <i class="cursor"></i></span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="dio-rail dio-rail-low">
+      <ul class="specs">
+        <li data-en="FREE FOR PERSONAL USE">GRATUIT POUR USAGE PERSONNEL</li>
+        <li>SOURCE-AVAILABLE</li>
+        <li data-en="WORKS OFFLINE">FONCTIONNE HORS LIGNE</li>
+      </ul>
+      <span class="dio-rail-end" aria-hidden="true">SNIFF THE HARDWARE. NOT THE HUMAN.</span>
+    </div>
+  </div>
+</section>
+
+<!-- 02 MANIFESTO: the README's principles, each module showing its own proof -->
+<section id="manifesto" class="sec wrap" aria-labelledby="manifesto-title">
+  <header class="sec-head">
+    <p class="sec-idx">02 // <span data-en="PRINCIPLES">PRINCIPES</span></p>
+    <h2 id="manifesto-title">THE CORE MANIFESTO</h2>
+    <p class="sec-lead" data-en="Architecture boundaries, not marketing promises. The laws that can be verified are tested in the repository.">Des limites d’architecture, pas des promesses marketing. Les lois vérifiables sont testées dans le dépôt.</p>
+  </header>
+  <div class="mods">
+    <article class="mod a-cyan">
+      <div class="mod-top"><span class="mod-num">01</span><i class="led"></i></div>
+      <h3>LOCAL FIRST</h3>
+      <p data-en="No account, no subscription, no telemetry. Works 100 % offline: the cloud is never required.">Aucun compte, aucun abonnement, aucune télémétrie. Fonctionne 100 % hors ligne : le cloud n’est jamais requis.</p>
+      <dl class="mod-screen kv">
+        <div><dt>ACCOUNT</dt><dd>NONE</dd></div>
+        <div><dt>SUBSCRIPTION</dt><dd>NONE</dd></div>
+        <div><dt>TELEMETRY</dt><dd>OFF</dd></div>
+        <div><dt>CLOUD</dt><dd>NEVER REQUIRED</dd></div>
+      </dl>
+    </article>
+    <article class="mod a-magenta">
+      <div class="mod-top"><span class="mod-num">02</span><i class="led"></i></div>
+      <h3>NO FAKE CERTAINTY</h3>
+      <p data-en="Observation, correlation and hypothesis are kept apart. A diagnosis states its confidence and its limits.">Observation, corrélation et hypothèse restent séparées. Un diagnostic dit sa confiance et ses limites.</p>
+      <dl class="mod-screen report">
+        <div><dt>OBSERVED</dt><dd>USB disconnected 12:42:02.088</dd></div>
+        <div><dt>OBSERVED</dt><dd>4.61 V at 12:42:02.011</dd></div>
+        <div><dt class="t-orange">CORRELATION</dt><dd>4 of 5 disconnects after a drop</dd></div>
+        <div><dt class="t-magenta">POSSIBLE</dt><dd>power instability</dd></div>
+      </dl>
+    </article>
+    <article class="mod a-orange">
+      <div class="mod-top"><span class="mod-num">03</span><i class="led"></i></div>
+      <h3>TOOL FIRST</h3>
+      <p data-en="Looks like an instrument before it looks like software. Keyboard first, states always visible.">Ressemble à un instrument avant de ressembler à un logiciel. Clavier d’abord, états toujours visibles.</p>
+      <ul class="mod-screen keys" aria-label="Raccourcis clavier" data-en-label="Keyboard shortcuts">
+        <li><kbd>F1</kbd>HELP</li><li><kbd>F2</kbd>TRACE</li><li><kbd>F3</kbd>PROBE</li><li><kbd>F4</kbd>REPORT</li><li><kbd>1-7</kbd>SCREENS</li><li><kbd>CTRL K</kbd>COMMAND</li>
+      </ul>
+    </article>
+    <article class="mod a-green">
+      <div class="mod-top"><span class="mod-num">04</span><i class="led"></i></div>
+      <h3>DENSE, NOT NOISY</h3>
+      <p data-en="Maximum relevant information, minimum confusion. Eight readings, one glance.">Le maximum d’information utile, le minimum de confusion. Huit mesures, un coup d’œil.</p>
+      <div class="mod-screen gauges">
+        <dl>
+          <div><dt>VBUS</dt><dd>5.038 V</dd></div>
+          <div><dt>IBUS</dt><dd>0.289 A</dd></div>
+          <div><dt>USB</dt><dd>ATTACHED</dd></div>
+          <div><dt>LINK</dt><dd>1000 FULL</dd></div>
+          <div><dt>DHCP</dt><dd>PASS</dd></div>
+          <div><dt>DNS</dt><dd>PASS</dd></div>
+          <div><dt>RTT</dt><dd>10 ms</dd></div>
+          <div><dt>LOSS</dt><dd>0 %</dd></div>
+        </dl>
+        <p class="gauges-src">HD-C017 · t+9.100 s · SIMULATED</p>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- 03 COMPANION + TIMELINE: the TV showroom (radio + :has, no script needed), then one real incident on one clock -->
+<section id="companion" class="sec wrap" aria-labelledby="companion-title">
+  <header class="sec-head">
+    <p class="sec-idx">03 // COMPANION TV</p>
+    <h2 id="companion-title">ONE TIMELINE. ONE INCIDENT.</h2>
+    <blockquote class="pull"><p>Specialized tools investigate a layer.<br><strong>Hardware Dog investigates the incident.</strong></p></blockquote>
+    <p class="sec-lead" data-en="It does not replace a power profiler, a logic analyzer or a USB analyzer: they go deeper, Hardware Dog goes wider. One dog follows every layer, with real events only. Pick a channel.">Il ne remplace pas un profileur d’alimentation, un analyseur logique ou un analyseur USB : eux vont plus profond, Hardware Dog va plus large. Un seul chien suit chaque couche, avec de vrais événements. Choisissez une chaîne.</p>
+  </header>
+
+  <div class="showroom" id="showroom">
+    <div class="tv-bay">
+      <div class="tv" id="tv">
+        <div class="tv-screen">
+          <div class="tv-tube">
+            <div class="tv-pic"><img class="tv-sprite" src="../assets/brand/web/hd-home-scenes.webp" width="544" height="1300" loading="lazy" decoding="async" alt=""></div>
+            <span class="tv-osd" aria-hidden="true"></span>
+            <span class="tv-noise" aria-hidden="true"></span>
+          </div>
+        </div>
+        <img class="tv-frame" src="../assets/brand/web/hd-tv-turquoise-1120.webp" srcset="../assets/brand/web/hd-tv-turquoise-560.webp 560w, ../assets/brand/web/hd-tv-turquoise-1120.webp 1120w" sizes="(min-width: 1040px) 640px, calc(100vw - 72px)" width="1120" height="747" loading="lazy" decoding="async" alt="La TV turquoise de Hardware Dog : le chien robot en pixel art, à l’écran, dans l’état choisi." data-en-alt="Hardware Dog’s turquoise TV: the pixel-art robot dog on screen, in the chosen state.">
+        <button class="tv-dial" type="button" hidden aria-label="Chaîne suivante" data-en-label="Next channel"></button>
+        <button class="tv-power" type="button" hidden aria-pressed="true" aria-label="Écran" data-en-label="Screen"></button>
+      </div>
+      <p class="tv-hint" hidden data-en="DIAL: next channel · POWER: screen on / off">CADRAN : chaîne suivante · POWER : écran allumé / éteint</p>
+    </div>
+
+    <div class="console">
+      <div class="readout">
+        <div class="say a-cream say-idle" id="say-idle"><p class="say-tag">CH 01 // IDLE / READY</p><p class="say-text" data-en="Nothing plugged in, nothing measured. Hardware Dog opens NOT CONNECTED and waits for you to pick a source.">Rien de branché, rien de mesuré. Hardware Dog s’ouvre NOT CONNECTED et attend que vous choisissiez une source.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN THE TOOL ↗">OUVRIR L’OUTIL ↗</a></div>
+        <div class="say a-cyan say-usb" id="say-usb"><p class="say-tag">CH 02 // USB / ENUMERATE</p><p class="say-text" data-en="Enumeration, descriptors, VID/PID, speed. Every connect and disconnect lands on the timeline, timestamped.">Énumération, descripteurs, VID/PID, vitesse. Chaque branchement et chaque débranchement arrive sur la chronologie, horodaté.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T005">DEMO // HD-T005 INTERMITTENT USB ↗</a></div>
+        <div class="say a-cyan say-serial" id="say-serial"><p class="say-tag">CH 03 // SERIAL / LIVE</p><p class="say-text" data-en="Any board’s serial console in the browser: every line timestamped, target resets, wrong baud rates. No probe needed.">La console série de n’importe quelle carte dans le navigateur : chaque ligne horodatée, les resets de la cible, les mauvais débits. Sans sonde.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T004">DEMO // HD-T004 SERIAL FRAMING ↗</a></div>
+        <div class="say a-orange say-bluetooth" id="say-bluetooth"><p class="say-tag">CH 04 // BLUETOOTH / SCAN</p><p class="say-text" data-en="Our own BLE scanner: the devices around you and their GATT services, decoded locally. Web Bluetooth, or dogd on Linux.">Notre propre scanner BLE : les appareils autour de vous et leurs services GATT, décodés en local. Web Bluetooth, ou dogd sous Linux.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN BLUETOOTH LAB ↗">OUVRIR BLUETOOTH LAB ↗</a></div>
+        <div class="say a-cyan say-network" id="say-network"><p class="say-tag">CH 05 // NETWORK / TEST</p><p class="say-text" data-en="Link, DHCP, gateway, DNS, internet, latency, loss: checked in order, so the step that fails has a name.">Lien, DHCP, passerelle, DNS, internet, latence, pertes : vérifiés dans l’ordre, pour que l’étape qui casse ait un nom.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T002">DEMO // HD-T002 DHCP FAILURE ↗</a></div>
+        <div class="say a-cyan say-camera" id="say-camera"><p class="say-tag">CH 06 // CAMERA SNIFFER / INSPECT</p><p class="say-text" data-en="Clues of hidden cameras on a network you choose, over Bluetooth and USB, then a guided inspection. A scan with no clue proves nothing, and it says so.">Des indices de caméras cachées sur un réseau que vous choisissez, en Bluetooth et en USB, puis une inspection guidée. Un scan sans indice ne prouve rien, et il le dit.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN CAMERA SNIFFER ↗">OUVRIR CAMERA SNIFFER ↗</a></div>
+        <div class="say a-orange say-analyze" id="say-analyze"><p class="say-tag">CH 07 // TRACE / CORRELATE</p><p class="say-text" data-en="Deterministic rules read the timeline. Observation, correlation and hypothesis stay apart.">Des règles déterministes lisent la chronologie. Observation, corrélation et hypothèse restent séparées.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T016">DEMO // HD-T016 ROUTER LOSES POWER ↗</a></div>
+        <div class="say a-green say-success" id="say-success"><p class="say-tag">CH 08 // DIAGNOSIS / PASS</p><p class="say-text" data-en="A healthy baseline must stay healthy: no false positive is allowed on the reference scenario.">Une référence saine doit rester saine : aucun faux positif n’est toléré sur le scénario de base.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T000">DEMO // HD-T000 HEALTHY BASELINE ↗</a></div>
+        <div class="say a-magenta say-error" id="say-error"><p class="say-tag">CH 09 // ERROR / FAULT</p><p class="say-text" data-en="A real failure is shown as one: what was observed, when, and what to check next.">Une vraie panne est montrée comme telle : ce qui a été observé, quand, et quoi vérifier ensuite.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T010">DEMO // HD-T010 USB NOT ENUMERATED ↗</a></div>
+        <div class="say a-magenta say-disconnected" id="say-disconnected"><p class="say-tag">CH 10 // ERROR / DISCONNECTED</p><p class="say-text" data-en="The link dropped. Hardware Dog says which one: the device, dogd or the browser’s network. Never a vague OFFLINE.">Le lien est tombé. Hardware Dog dit lequel : l’appareil, dogd ou le réseau du navigateur. Jamais un vague OFFLINE.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T011">DEMO // HD-T011 NO NETWORK LINK ↗</a></div>
+        <div class="say a-cyan say-replay" id="say-replay"><p class="say-tag">CH 11 // SESSION / REPLAY</p><p class="say-text" data-en="Open an .hdlog: the incident plays again through the same decoder and the same rules. Without the hardware.">Ouvrez un .hdlog : l’incident rejoue dans le même décodeur, avec les mêmes règles. Sans le matériel.</p><a class="say-go" href="#hdlog">.HDLOG ↓</a></div>
+        <div class="say a-green say-export" id="say-export"><p class="say-tag">CH 12 // EXPORT / DONE</p><p class="say-text" data-en="TXT, JSON, HTML and PDF reports, built on your machine. You decide what leaves it, and when.">Rapports TXT, JSON, HTML et PDF, générés sur votre machine. Vous décidez de ce qui en sort, et quand.</p><a class="say-go" href="./diagnostic.html?demo" data-en="TRY THE DEMO ↗">ESSAYER LA DÉMO ↗</a></div>
+        <div class="say a-cyan say-power" id="say-power"><p class="say-tag">CH 13 // POWER / ANALYZE</p><p class="say-text" data-en="Voltage, current, peaks and drops, measured by the probe’s INA226 (still in development) or played by the simulator.">Tension, courant, pics et chutes, mesurés par l’INA226 de la sonde (encore en développement) ou joués par le simulateur.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T001">DEMO // HD-T001 USB UNDERVOLTAGE ↗</a></div>
+      </div>
+
+      <fieldset class="chans">
+        <legend>CHANNELS // <span data-en="pick a state">choisir un état</span></legend>
+        <div class="chans-grid">
+        <label class="chan a-cream"><input type="radio" name="ch" value="idle" id="ch-idle" aria-describedby="say-idle" checked><span class="chan-bg"></span><span class="chan-n">01</span><span class="chan-name">IDLE</span><i class="chan-led"></i></label>
+        <label class="chan a-cyan"><input type="radio" name="ch" value="usb" id="ch-usb" aria-describedby="say-usb"><span class="chan-bg"></span><span class="chan-n">02</span><span class="chan-name">USB</span><i class="chan-led"></i></label>
+        <label class="chan a-cyan"><input type="radio" name="ch" value="serial" id="ch-serial" aria-describedby="say-serial"><span class="chan-bg"></span><span class="chan-n">03</span><span class="chan-name">SERIAL</span><i class="chan-led"></i></label>
+        <label class="chan a-orange"><input type="radio" name="ch" value="bluetooth" id="ch-bluetooth" aria-describedby="say-bluetooth"><span class="chan-bg"></span><span class="chan-n">04</span><span class="chan-name">BLUETOOTH</span><i class="chan-led"></i></label>
+        <label class="chan a-cyan"><input type="radio" name="ch" value="network" id="ch-network" aria-describedby="say-network"><span class="chan-bg"></span><span class="chan-n">05</span><span class="chan-name">NETWORK</span><i class="chan-led"></i></label>
+        <label class="chan a-cyan"><input type="radio" name="ch" value="camera" id="ch-camera" aria-describedby="say-camera"><span class="chan-bg"></span><span class="chan-n">06</span><span class="chan-name">CAMERA SNIFFER</span><i class="chan-led"></i></label>
+        <label class="chan a-orange"><input type="radio" name="ch" value="analyze" id="ch-analyze" aria-describedby="say-analyze"><span class="chan-bg"></span><span class="chan-n">07</span><span class="chan-name">ANALYZING</span><i class="chan-led"></i></label>
+        <label class="chan a-green"><input type="radio" name="ch" value="success" id="ch-success" aria-describedby="say-success"><span class="chan-bg"></span><span class="chan-n">08</span><span class="chan-name">SUCCESS</span><i class="chan-led"></i></label>
+        <label class="chan a-magenta"><input type="radio" name="ch" value="error" id="ch-error" aria-describedby="say-error"><span class="chan-bg"></span><span class="chan-n">09</span><span class="chan-name">ERROR</span><i class="chan-led"></i></label>
+        <label class="chan a-magenta"><input type="radio" name="ch" value="disconnected" id="ch-disconnected" aria-describedby="say-disconnected"><span class="chan-bg"></span><span class="chan-n">10</span><span class="chan-name">DISCONNECTED</span><i class="chan-led"></i></label>
+        <label class="chan a-cyan"><input type="radio" name="ch" value="replay" id="ch-replay" aria-describedby="say-replay"><span class="chan-bg"></span><span class="chan-n">11</span><span class="chan-name">REPLAY</span><i class="chan-led"></i></label>
+        <label class="chan a-green"><input type="radio" name="ch" value="export" id="ch-export" aria-describedby="say-export"><span class="chan-bg"></span><span class="chan-n">12</span><span class="chan-name">EXPORT</span><i class="chan-led"></i></label>
+        <label class="chan a-cyan"><input type="radio" name="ch" value="power" id="ch-power" aria-describedby="say-power"><span class="chan-bg"></span><span class="chan-n">13</span><span class="chan-name">POWER</span><i class="chan-led"></i></label>
+        </div>
+      </fieldset>
+    </div>
+  </div>
+
+  <div class="incident" id="timeline">
+    <header class="incident-head">
+      <div>
+        <h3>ONE EVENT MODEL. ONE CLOCK.</h3>
+        <p class="incident-lead" data-en="A real file from the repository, replayed: the voltage drops, USB lets go 84 ms later, the network falls at 335 ms. Three layers, one clock.">Un vrai fichier du dépôt, rejoué : la tension chute, l’USB décroche 84 ms plus tard, le réseau tombe à 335 ms. Trois couches, une seule horloge.</p>
+      </div>
+      <p class="incident-meta"><a href="https://github.com/SEUB66/HardwareDog/blob/main/cases/power/HD-C017.case.json" target="_blank" rel="noopener noreferrer">CASE HD-C017 ↗</a><span>ROUTER LOSES POWER</span><span class="flag flag-orange">ORIGIN: SIMULATED</span></p>
+    </header>
+
+    <div class="lanes">
+      <div class="lane a-cyan">
+        <p class="lane-id"><b>POWER</b><span data-en="voltage, current, peaks, drops, USB power negotiation">tension, courant, pics, chutes, négociation d’alimentation USB</span></p>
+        <div class="track">
+          <svg class="spark" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true"><path class="spark-thr" d="M0 61.5H1000"/><path class="spark-v" d="M0 16 8 17 17 17 25 16 33 16 42 17 50 84 58 85 67 85 75 84 83 85 92 85 100 84 108 84 117 84 125 85 133 86 142 85 150 84 158 85 167 85 175 85 183 85 192 12 200 13 208 13 217 12 225 12 233 13 242 12 250 12 258 13 267 12 275 12 283 12 292 12 300 13 308 13 317 11 325 12 333 13 342 12 350 12 358 12 367 13 375 12 383 13 392 12 400 13 408 13 417 12 425 13 433 13 442 13 450 12 458 13 467 12 475 12 483 13 492 13 500 12 508 13 517 12 525 13 533 12 542 13 550 12 558 12 567 13 575 12 583 12 592 12 600 13 608 13 617 12 625 12 633 12 642 12 650 13 658 12 667 13 675 15 683 14 692 13 700 14 708 14 717 14 725 14 733 14 742 15 750 13 758 14 767 14 775 14 783 14 792 14 800 13 808 14 817 15 825 15 833 14 842 15 850 15 858 15 867 13 875 14 883 14 892 13 900 14 908 13 917 15 925 14 933 14 942 13 950 14 958 13 967 17 975 16 983 16 992 17 1000 16"/><path class="spark-dip" d="M42 17 50 84 58 85 67 85 75 84 83 85 92 85 100 84 108 84 117 84 125 85 133 86 142 85 150 84 158 85 167 85 175 85 183 85 192 12"/></svg>
+          <span class="spark-label t-dip-label">▼ 4.603 V · 0.726 A</span>
+          <span class="thr-label">4.75 V</span>
+        </div>
+      </div>
+      <div class="lane a-cyan">
+        <p class="lane-id"><b>USB</b><span data-en="enumeration, descriptors, VID/PID, speed, connect / disconnect">énumération, descripteurs, VID/PID, vitesse, branchement / débranchement</span></p>
+        <div class="track">
+          <span class="seg seg-gone t-detach-attach"></span>
+          <span class="ev ev-bad t-detach"><em>DETACH +84 ms</em></span>
+          <span class="ev ev-ok t-attach"><em>ATTACH</em></span>
+        </div>
+      </div>
+      <div class="lane a-cyan">
+        <p class="lane-id"><b>SERIAL</b><span data-en="UART monitor, baud detection, RX/TX counters">moniteur UART, détection du débit, compteurs RX/TX</span></p>
+        <div class="track">
+          <span class="ev ev-tick t-rom"></span><span class="ev ev-tick ev-left t-rst"><em>rst:0x1 (POWERON)</em></span><span class="ev ev-tick t-boot1"></span><span class="ev ev-tick t-boot2"></span><span class="ev ev-tick t-boot3"></span><span class="ev ev-tick t-ready"></span>
+        </div>
+      </div>
+      <div class="lane a-cyan">
+        <p class="lane-id"><b>BUS</b><span data-en="I2C scan (SPI / CAN later)">scan I2C (SPI / CAN plus tard)</span></p>
+        <div class="track track-quiet"><span class="quiet" data-en="no event">aucun événement</span></div>
+      </div>
+      <div class="lane a-cyan">
+        <p class="lane-id"><b>NET</b><span data-en="link, DHCP, gateway, DNS, internet, latency, packet loss">lien, DHCP, passerelle, DNS, internet, latence, pertes</span></p>
+        <div class="track">
+          <span class="seg seg-down t-netdown-end"></span>
+          <span class="ev ev-bad t-netdown"><em>LINK DOWN +335 ms</em></span>
+        </div>
+      </div>
+      <div class="lane a-orange">
+        <p class="lane-id"><b>TRACE</b><span data-en="every event from every source on one clock">chaque événement de chaque source sur une seule horloge</span></p>
+        <div class="track">
+          <span class="bracket t-drop-netdown"><em>POWER → USB → NET · 335 ms</em></span>
+          <span class="diag">POWER_INSTABILITY · NETWORK_POWER_LOSS</span>
+        </div>
+      </div>
+      <div class="lane lane-axis" aria-hidden="true">
+        <p class="lane-id"></p>
+        <div class="axis"><span>t+9.0 s</span><span>9.6</span><span>10.2</span><span>10.8</span><span>11.4</span></div>
+      </div>
+    </div>
+
+    <dl class="verdict">
+      <div><dt>OBSERVED</dt><dd>voltage 4.603 V at t+9.120 s, under the 4.75 V threshold <span class="ref">#474</span></dd></div>
+      <div><dt>OBSERVED</dt><dd>USB detached at t+9.204 s, network link down at t+9.455 s <span class="ref">#479 #492</span></dd></div>
+      <div><dt class="t-orange">CORRELATION</dt><dd>4 of 4 USB disconnects followed a voltage drop.</dd></div>
+      <div><dt class="t-magenta">POSSIBLE CAUSE</dt><dd>power instability: the router loses power. <span class="conf">CONFIDENCE HIGH</span></dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- 04 THE .HDLOG STANDARD: record, seal, replay; the real file, sealed -->
+<section id="hdlog" class="sec wrap" aria-labelledby="hdlog-title">
+  <header class="sec-head">
+    <p class="sec-idx">04 // THE .HDLOG STANDARD</p>
+    <h2 id="hdlog-title">DON'T SEND A SCREENSHOT. <span class="t-cyan">SEND THE .HDLOG.</span></h2>
+    <p class="sec-lead" data-en="Every session is recorded in your browser as it happens, sealed with SHA-256, and replayed exactly, without the hardware. A repair shop can send a customer’s failure to someone who knows the board.">Chaque session est enregistrée dans votre navigateur pendant qu’elle se produit, scellée par SHA-256, et rejouée à l’identique, sans le matériel. Un atelier peut envoyer la panne d’un client à quelqu’un qui connaît la carte.</p>
+  </header>
+
+  <div class="hdlog">
+    <div class="steps-wrap">
+    <span class="cable" aria-hidden="true"></span>
+    <ol class="steps">
+      <li class="step a-cyan">
+        <span class="step-n">01</span>
+        <div><h3>RECORD</h3><p data-en="Recorded locally, as it happens: every frame, every reject, every command, on the probe’s clock.">Enregistré en local, pendant que ça se passe : chaque trame, chaque rejet, chaque commande, sur l’horloge de la sonde.</p><p class="chips"><span data-en="IndexedDB · this browser">IndexedDB · ce navigateur</span></p></div>
+      </li>
+      <li class="step a-green">
+        <span class="step-n">02</span>
+        <div><h3>SEAL</h3><p data-en="Hashed with SHA-256. Hardware Dog says whether it is the session as recorded, or whether bytes changed since.">Haché par SHA-256. Hardware Dog dit si c’est la session telle qu’enregistrée, ou si des octets ont changé depuis.</p><p class="chips"><span class="chip-ok">VERIFIED</span><span class="chip-bad">MODIFIED</span><span class="chip-warn">SIMULATED</span></p></div>
+      </li>
+      <li class="step a-orange">
+        <span class="step-n">03</span>
+        <div><h3>REPLAY</h3><p data-en="Replayed exactly, through the same decoder and the same rules. An interesting fault becomes a case: a regression test the engine must keep explaining.">Rejoué à l’identique, dans le même décodeur et avec les mêmes règles. Une panne intéressante devient un cas : un test de régression que le moteur doit continuer d’expliquer.</p><p class="chips"><span>cases/ · 18 CASES</span><span>hwdog test ../cases</span></p></div>
+      </li>
+    </ol>
+    </div>
+
+    <figure class="file">
+      <figcaption class="file-head">
+        <span class="file-name">HD-C017.hdlog</span>
+        <span class="file-meta">185 KB · 2343 FRAMES · 44.9 s</span>
+        <span class="file-flags"><span class="chip-ok">✓ VERIFIED</span><span class="chip-warn">SIMULATED</span></span>
+      </figcaption>
+      <ol class="file-body" aria-label="Extrait du fichier HD-C017.hdlog" data-en-label="Excerpt of the file HD-C017.hdlog">
+        <li><span class="ln" aria-hidden="true">1</span><code>{"hdlog":2,"proto":1,"id":"HD-20260930-1421","origin":"<mark class="t-orange">SIMULATED</mark>","scenario":"HD-T016",…}</code></li>
+        <li><span class="ln" aria-hidden="true">2</span><code>{"frame":{"type":"hello","device":"HD-001","fw":"0.1.0","caps":["power","usb","uart","i2c","net","probe"]}}</code></li>
+        <li class="file-skip"><span class="ln" aria-hidden="true"></span><code>⋮</code></li>
+        <li class="hot"><span class="ln" aria-hidden="true">475</span><code>{"frame":{"type":"power","t":9120,"v":<mark class="t-magenta">4.603</mark>,"i":0.7261}}</code></li>
+        <li class="hot"><span class="ln" aria-hidden="true">480</span><code>{"frame":{"type":"<mark class="t-magenta">usb.detach</mark>","t":9204}}</code></li>
+        <li class="hot"><span class="ln" aria-hidden="true">493</span><code>{"frame":{"type":"net.status","t":9455,"link":{"up":<mark class="t-magenta">false</mark>,…}}}</code></li>
+        <li class="file-skip"><span class="ln" aria-hidden="true"></span><code>⋮</code></li>
+        <li><span class="ln" aria-hidden="true">2345</span><code>{"<mark class="t-green">seal</mark>":{"n":1,"lines":2343,"sha256":"ffdbf897bc415985b0c440a7dfa7dff9ef30c7b971214d77c9a902e58bccd3b4"}}</code></li>
+        <li><span class="ln" aria-hidden="true">2346</span><code>{"end":{"closed":"NORMAL","frames":2343,"rejects":0,"lost":0,"seals":1,…}}</code></li>
+      </ol>
+      <div class="file-foot"><span>SHA-256 (FILE)</span><code>75a2ae64a065c15269914c58ecb368b59a25a5dedb935fd7650ecc383c3af059</code></div>
+    </figure>
+  </div>
+
+  <div class="launch launch-center">
+    <a class="cta cta-sm" href="./diagnostic.html"><span class="cta-key" data-en="[ OPEN AN .HDLOG ]">[ OUVRIR UN .HDLOG ]</span></a>
+    <a class="cta-alt" href="https://github.com/SEUB66/HardwareDog/tree/main/cases" target="_blank" rel="noopener noreferrer" data-en="BROWSE THE CASES ↗">PARCOURIR LES CAS ↗</a>
+  </div>
+</section>
+
+<!-- 05 TOOLS: what each tool really does, and its limits -->
+<section id="tools" class="sec wrap" aria-labelledby="tools-title">
+  <header class="sec-head">
+    <p class="sec-idx">05 // <span data-en="THE TOOLS / IN YOUR BROWSER">LES OUTILS / DANS LE NAVIGATEUR</span></p>
+    <h2 id="tools-title" data-en="Local-first hardware diagnostics. In your browser.">Diagnostic matériel local-first. Dans votre navigateur.</h2>
+    <p class="sec-lead" data-en="Camera Sniffer, Bluetooth Lab, Flipper Lab, USB, network and serial: what each tool really does, and its limits. A demo works in every browser.">Camera Sniffer, Bluetooth Lab, Flipper Lab, USB, réseau et série : ce que chaque outil fait vraiment, et ses limites. Une démo fonctionne dans tous les navigateurs.</p>
+  </header>
+  <div class="tools">
+    <article class="tool a-cyan">
+      <p class="tool-id">CAMERA SNIFFER <i class="led"></i></p>
+      <h3 data-en="Hidden cameras: clues, without a cloud app.">Caméras cachées : des indices, sans app cloud.</h3>
+      <p data-en="Looks for camera clues on a network you choose (with dogd), over Bluetooth and USB, and guides a physical inspection object by object. It says what it observes: a scan with no clue does not prove there is no camera.">Repère des indices de caméras sur un réseau que vous choisissez (avec dogd), en Bluetooth et en USB, et guide une inspection physique objet par objet. Il dit ce qu’il observe : un scan sans indice ne prouve pas qu’il n’y a aucune caméra.</p>
+      <code>OBSERVED ≠ CONFIRMED</code>
+    </article>
+    <article class="tool a-orange">
+      <p class="tool-id">BLUETOOTH LAB <i class="led"></i></p>
+      <h3 data-en="A Bluetooth LE scanner in your browser.">Un scanner Bluetooth LE dans le navigateur.</h3>
+      <p data-en="The Bluetooth LE devices around you, through Web Bluetooth where the browser allows it, or dogd on Linux.">Les appareils Bluetooth LE autour de vous, par Web Bluetooth quand le navigateur le permet, ou par dogd sous Linux.</p>
+      <code>BLE / GATT</code>
+    </article>
+    <article class="tool a-magenta">
+      <p class="tool-id">FLIPPER LAB <i class="led"></i></p>
+      <h3 data-en="Flipper Zero over Web Serial, no app to install.">Flipper Zero par Web Serial, sans app à installer.</h3>
+      <p data-en="Read a Flipper Zero’s storage and captures from a Chromium browser on a computer (Web Serial).">Lire le stockage et les captures d’un Flipper Zero depuis un navigateur Chromium sur ordinateur (Web Serial).</p>
+      <code>READ, COMPARE, ARCHIVE</code>
+    </article>
+    <article class="tool a-green">
+      <p class="tool-id"><span data-en="USB · NETWORK · SERIAL">USB · RÉSEAU · SÉRIE</span> <i class="led"></i></p>
+      <h3 data-en="A board’s console, this computer’s network.">La console d’une carte, le réseau de cet ordinateur.</h3>
+      <p data-en="Any board’s serial console in the browser; this computer’s network and USB devices through dogd, the optional local daemon. The Hardware Dog probe is still in development.">La console série de n’importe quelle carte dans le navigateur ; le réseau et les périphériques USB de cet ordinateur par dogd, le daemon local optionnel. La sonde Hardware Dog est encore en développement.</p>
+      <code>WEB SERIAL / DOGD</code>
+    </article>
+  </div>
+</section>
+
+<!-- 06 WHO: the person behind the dog -->
+<section id="who" class="sec wrap" aria-labelledby="who-title">
+  <header class="sec-head">
+    <p class="sec-idx">06 // WHO / BEHIND THE DOG</p>
+    <h2 id="who-title">THE HARDWARE KID.</h2>
+    <p class="sec-lead">Seub · Sebastien Germain</p>
+  </header>
+  <div class="who">
+    <figure class="photo"><img src="./creator/seub-desk.webp" width="1000" height="1000" loading="lazy" decoding="async" alt="Seub à son bureau avec son chien" data-en-alt="Seub at his desk with his dog"><figcaption>BUILD. FIX. REPEAT.</figcaption></figure>
+    <div class="story">
+      <img class="story-avatar" src="./creator/dog-avatar.webp" width="1000" height="1000" loading="lazy" decoding="async" alt="Avatar officiel du chien Hardware Dog" data-en-alt="Official Hardware Dog avatar">
+      <p class="sec-idx">HARDWARE DOG / BY SEUB</p>
+      <h3><span data-en="Code.">Du code.</span> <span data-en="Circuits.">Des circuits.</span> <em data-en="Real things.">Du concret.</em></h3>
+      <p data-en="Creator of Hardware Dog. One simple idea: understand machines with tools that stay in your hands.">Créateur de Hardware Dog. Une idée simple : comprendre les machines avec des outils qui restent entre vos mains.</p>
+      <div class="story-links">
+        <a class="cta-alt" href="https://buymeacoffee.com/sebastiengo" target="_blank" rel="noopener noreferrer"><span aria-hidden="true">☕</span> <span data-en="Buy Seub a coffee ↗">Offrir un café à Seub ↗</span></a>
+        <a class="cta-alt" href="https://seub.net" target="_blank" rel="noopener noreferrer" data-en="Discover seub.net ↗">Découvrir seub.net ↗</a>
+        <a class="cta-alt" href="https://github.com/SEUB66/HardwareDog" target="_blank" rel="noopener noreferrer"><svg class="gh" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .9a11.1 11.1 0 0 0-3.5 21.6c.55.1.75-.24.75-.53v-2.06c-3.06.66-3.71-1.3-3.71-1.3-.5-1.28-1.23-1.62-1.23-1.62-1-.68.08-.67.08-.67 1.1.08 1.68 1.13 1.68 1.13.98 1.68 2.57 1.2 3.2.92.1-.71.38-1.2.7-1.48-2.44-.28-5.01-1.22-5.01-5.44 0-1.2.43-2.18 1.13-2.94-.11-.28-.49-1.4.11-2.91 0 0 .93-.3 3.05 1.12a10.6 10.6 0 0 1 5.55 0c2.12-1.43 3.05-1.12 3.05-1.12.6 1.52.22 2.63.1 2.91.7.76 1.14 1.74 1.14 2.94 0 4.23-2.57 5.16-5.02 5.43.4.35.75 1.02.75 2.06v3.03c0 .29.2.64.76.53A11.1 11.1 0 0 0 12 .9Z"/></svg> <span data-en="Hardware Dog on GitHub ↗">Hardware Dog sur GitHub ↗</span></a>
+      </div>
+    </div>
+    <figure class="photo photo-tall"><img src="./creator/seub-workshop.webp" width="1000" height="1250" loading="lazy" decoding="async" alt="Seub dans son atelier, devant un projet mécanique" data-en-alt="Seub in his workshop with a mechanical project"><figcaption>JUST ONE MORE UPGRADE.</figcaption></figure>
+  </div>
+</section>
+
+<section class="outro wrap" aria-labelledby="outro-title">
+  <div class="outro-plate">
+    <p class="sec-idx">THE CLOUD IS NEVER REQUIRED.</p>
+    <h2 id="outro-title"><span data-en="A tool.">Un outil.</span> <em data-en="Not a dependency.">Pas une dépendance.</em></h2>
+    <a class="cta" href="./diagnostic.html"><span class="cta-key">[ &gt;<span class="cta-caret">_</span> LAUNCH LOCAL TOOL ]</span></a>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot wrap">
+  <a class="logo" href="#main" aria-label="Haut de page" data-en-label="Back to top"><span class="logo-hw">HW</span><span class="logo-dog">DOG</span></a>
+  <p><span data-en="Source-available · PolyForm Noncommercial 1.0.0">Code public · Licence PolyForm Noncommercial 1.0.0</span> · © 2026 Sebastien Germain · SNIFF THE PROBLEM.</p>
+  <nav aria-label="Pied de page" data-en-label="Footer"><a href="./diagnostic.html" data-en="Tool">Outil</a><a href="./engineering.html" data-en="Engineering">Technique</a><a href="https://github.com/SEUB66/HardwareDog" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav>
+</footer>
+</body>
+</html>

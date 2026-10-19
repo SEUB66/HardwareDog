@@ -131,6 +131,40 @@ CONTRAST     WCAG AA checked: text 4.5:1 or more, control edges 3:1
 Code: `web/src/styles/home.css`, `web/src/ui/home/Home.tsx`,
 `web/src/ui/brand/BannerCarousel.tsx`, `web/src/core/carousel.ts`.
 
+### Revision: the public home page as an instrument (hardwaredog.org)
+
+The landing page (`web/index.html`) is dressed like the tool it sells:
+an instrument panel on a bench, never a SaaS page.
+
+```text
+DIORAMA      plates are screwed onto the bench and stand out of it (a
+             light top edge, a shadow under them); screens, the banner
+             and readouts are cut into the plates and sit below their
+             surface (shadow from the upper lip, a light lower lip)
+HERO         one panel: the NO COOKIES banner behind a window, the boot
+             terminal (the README's ASCII, green phosphor) as a second
+             screen, the title and the launch key on the panel's face;
+             under the pointer the banner moves, its window does not
+COLOR        cyan live / scan, magenta fault / alert, orange waiting /
+             Bluetooth, green pass; the cream and magenta drop shadow of
+             the titles come from the banners' own lettering
+TYPE         Silkscreen for titles, Plex Mono for labels and readings,
+             the system sans for reading at length
+COMPANION    the turquoise TV as a showroom: 13 channels (the owner's
+             sheet 01-12, then POWER), radio buttons and CSS pick the
+             picture and its description, no script needed; the script
+             adds the dial, the power button, the static and a loop that
+             stops at the first touch
+PROOF        the timeline and the .hdlog shown are a real case file
+             (cases/power/HD-C017), labeled SIMULATED, its real hashes
+SPEED        one stylesheet, a 1 KB script after the first paint, the
+             banner as the only early image, everything below loads late
+```
+
+Code: `web/index.html`, `web/src/styles/vitrine.css`, `web/src/vitrine.ts`,
+`web/scripts/build-home-scenes.mjs`. `engineering.html` keeps
+`landing.css` / `landing.ts`.
+
 ---
 
 ## 02 — PRODUCT PERSONALITY

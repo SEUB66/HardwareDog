@@ -170,7 +170,7 @@ describe('what a crawler and a share preview read (raw HTML, no JavaScript)', ()
     expect(tool).toMatch(/<h1>[^<]*local-first hardware diagnostic tool/i);
     for (const heading of [/<h2>[^<]*hidden camera[^<]*without a cloud app/i, /<h2>[^<]*Bluetooth LE scanner in the browser/i, /<h2>[^<]*Flipper Zero over Web Serial/i]) expect(tool).toMatch(heading);
     const home = pages['../index.html']!;
-    expect(home).toMatch(/<h2 id="tools-title">Diagnostic matériel local-first/);
+    expect(home).toMatch(/<h2 id="tools-title"[^>]*>Diagnostic matériel local-first/);
     for (const html of [tool, home]) {
       // the license is PolyForm Noncommercial: source-available, not open source
       expect(html).not.toMatch(/open[ -]source/i);
