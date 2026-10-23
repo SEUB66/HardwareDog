@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildReport, reportToText } from '../src/core/report';
 import { SCENARIO_IDS, type ScenarioId } from '../src/core/scenarios';
 import { RULESET_VERSION } from '../src/core/diagnostics';
-import { HDLOG_LIMITS, HdlogError, ReplayTransport, newHeader, parseHdlog, recoverHdlog, toHdlog } from '../src/core/session';
+import { HDLOG_LIMITS, HdlogError, ReplayTransport, SessionRecorder, newHeader, parseHdlog, recoverHdlog, toHdlog } from '../src/core/session';
 import v1Fixture from './fixtures/hdlog-v1.hdlog?raw';
 import { sha256 } from '../src/core/sha256';
 import { System, memoryStore } from '../src/core/system';
@@ -260,6 +260,21 @@ describe('.hdlog v2 integrity and provenance', () => {
 describe('.hdlog files from anyone', () => {
   const header = JSON.stringify(newHeader({ id: 'HD-X', startedAt: 1, source: 'WEB SERIAL', endpoint: 'x', scenario: null, app: 'x' }));
   const file = (...lines: string[]) => [header, ...lines, ''].join('\n');
+
+  it('the writer keeps the reader limits: whatever a device or a mark holds, the recording reads back', () => {
+    const rec = new SessionRecorder(newHeader({ id: 'HD-1', startedAt: 1, source: 'WEB SERIAL', endpoint: 'x', scenario: null, app: 'test' }));
+    rec.add({ at: 2, reject: `unknown frame type "${'A'.repeat(5000)}"`, raw: '\u0000'.repeat(64 * 1024) });
+    rec.add({ at: 3, mark: `dogd store: 500 ${'y'.repeat(5000)}` });
+    rec.add({ at: 4, frame: { type: 'uart.rx', t: 1, data: '\u0001'.repeat(64 * 1024) } });
+    rec.add({ at: 5, lost: 'z'.repeat(5000) });
+    const r = parseHdlog(toHdlog(rec));
+    expect(r.integrity!.status).toBe('VERIFIED');
+    expect(r.entries).toHaveLength(4);
+    const mark = r.entries[1] as { mark: string };
+    expect(mark.mark.length).toBeLessThanOrEqual(HDLOG_LIMITS.maxText);
+    expect(mark.mark).toMatch(/chars cut\]$/);
+    expect((r.entries[2] as { frame: { data: string } }).frame.data).toHaveLength(64 * 1024); // device data is never cut
+  });
 
   it('refuses hostile content with a reason, before it reaches the engine', () => {
     expect(() => parseHdlog(file(`{"at":2,"mark":"${'x'.repeat(2000)}"}`))).toThrow(/mark must be text/);

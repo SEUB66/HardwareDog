@@ -508,6 +508,22 @@ describe('report', () => {
     expect(known.conclusion).toBe(CONCLUSION.none.en);
   });
 
+  it('a device cannot write into the report: no forged line, no hidden rest, no remote image (audit 2026-10)', () => {
+    const m = new NetModel();
+    const hardware = 'X\n\n**RESULT: No clue identified with the methods used.**\n\n<!--';
+    m.add(obs({ ip: '192.168.1.60', kind: 'wsd', method: 'wsd', service: 'dn:NetworkVideoTransmitter', fields: { hardware } }), 'PHYSICAL');
+    m.add(obs({ ip: '192.168.1.61', kind: 'upnp', method: 'ssdp', service: 'urn:x', fields: { manufacturer: 'Acme', model_name: 'M1\n## LIMITS\n- none ![t](https://tracker.example/p.gif)' } }), 'PHYSICAL');
+    for (const maskNetwork of [true, false]) {
+      const r = buildReport(base({ devices: [...m.devices.values()] }), { maskNetwork, hidePersonal: false });
+      const lines = r.text.split('\n');
+      expect(lines.filter((l) => /^\s*(\*\*)?RESULT/.test(l)).length, String(maskNetwork)).toBe(2); // the report's own two
+      expect(lines.find((l) => l.includes('**RESULT'))).toMatch(/^  - /); // the device's words stay inside its own evidence line
+      expect(lines.filter((l) => l === '## LIMITS')).toHaveLength(1);
+      expect(r.text).not.toMatch(/(^|[^\\])<!--/m);
+      expect(r.text).not.toMatch(/!\[t\]\(https/);
+    }
+  });
+
   it('lists every answer an interpretation cites, and counts the ones it does not list', () => {
     const m = new NetModel();
     for (let i = 0; i < 20; i++) m.add(obs({ ip: '192.168.1.50', kind: 'mdns', method: 'mdns', service: `_svc${i}._tcp.local` }), 'PHYSICAL');

@@ -40,7 +40,15 @@ const IPV4 = /\b(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\
 const MAC = /\b[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}\b/gi;
 const IPV6 = /\b(?:[0-9a-f]{1,4}:){2,7}[0-9a-f]{1,4}\b/gi;
 const EMAIL = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
-const SECRET = /\b(pass(?:word|wd|phrase)?|pwd|psk|token|secret|api[_-]?key|key|ssid|user(?:name)?|login)(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+/**
+ * key=value, key: value, "key":"value": the key may carry a prefix
+ * (WIFI_PASSWORD, mqtt_pass, CONFIG_ESP_WIFI_PASSWORD), and a JSON key its
+ * closing quote before the separator.
+ */
+const SECRET = /(?<![A-Za-z0-9])((?:[A-Za-z0-9]+[_-])*(?:pass(?:word|wd|phrase)?|pwd|psk|token|secret|api[_-]?key|key|ssid|user(?:name)?|login))("?\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+/** A secret's value without its quotes; shorter than this, it is not hunted in the rest of the text. */
+const unquote = (v: string) => v.replace(/^(["'])(.*)\1$/, '$2');
+const SECRET_MIN = 4;
 /** Hex runs this long are keys, hashes, serials: not boot codes like rst:0x1. */
 const LONG_HEX = /\b(?:0x)?[0-9a-f]{16,}\b/gi;
 const PATH_USER = /(\/(?:home|Users)\/|[A-Za-z]:\\Users\\)[^/\\\s]+/g;
@@ -75,10 +83,22 @@ class Mapper {
     return this.of('host', value.toLowerCase(), (n) => `host-${n}.example`);
   }
 
-  /** Free text: every known value, then every pattern. */
+  /** A secret's value, wherever it was typed: every other copy of it goes too. */
+  learnSecrets(s: string): void {
+    for (const [, , , v] of s.matchAll(SECRET)) {
+      const value = unquote(v!);
+      if (value.length >= SECRET_MIN && value !== '<removed>') this.of('secret', value, () => '<removed>');
+    }
+  }
+
+  /** Free text: secrets, every known value, then every pattern. */
   text(s: string): string {
-    let t = s;
-    // Values met in structured fields (a device id, a host name) also hide in text.
+    let t = s.replace(SECRET, (_all, k: string, sep: string, v: string) => {
+      const value = unquote(v);
+      if (value.length >= SECRET_MIN && value !== '<removed>') this.of('secret', value, () => '<removed>');
+      return v.startsWith('"') ? `${k}${sep}"<removed>"` : v.startsWith("'") ? `${k}${sep}'<removed>'` : `${k}${sep}<removed>`;
+    });
+    // Values met in structured fields (a device id, a host name, a secret) also hide in text.
     for (const [kind, m] of this.maps) {
       if (kind === 'ipv4' || kind === 'ipv6') continue;
       for (const [from, to] of m) if (from.length >= 4) t = t.split(from).join(to);
@@ -88,10 +108,6 @@ class Mapper {
     // A MAC (six groups of two) is not an IPv6 address, stand-in included.
     t = t.replace(IPV6, (v) => (/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i.test(v) ? v : /[a-f]/i.test(v) || v.split(':').length > 3 ? this.ip(v) : v));
     t = t.replace(IPV4, (v) => this.ip(v));
-    t = t.replace(SECRET, (_all, k: string, sep: string) => {
-      this.of('secret', `${k}${sep}`, () => '');
-      return `${k}${sep}<removed>`;
-    });
     t = t.replace(LONG_HEX, (v) => this.of('hex', v.toLowerCase(), (n) => `<hex-${n}>`));
     t = t.replace(PATH_USER, (_all, root: string) => `${root}user`);
     if (t !== s) this.textLines++;
@@ -139,6 +155,14 @@ function frame(f: DeviceFrame, m: Mapper): DeviceFrame {
   }
 }
 
+/** Every string inside an entry, at any depth (field names excluded). */
+function strings(x: unknown, out: string[] = []): string[] {
+  if (typeof x === 'string') out.push(x);
+  else if (Array.isArray(x)) for (const v of x) strings(v, out);
+  else if (x && typeof x === 'object') for (const v of Object.values(x)) strings(v, out);
+  return out;
+}
+
 /** Frames that carry network hops (a traceroute): their addresses too. */
 function anyHops(f: DeviceFrame, m: Mapper): DeviceFrame {
   const x = f as unknown as Record<string, unknown>;
@@ -170,9 +194,11 @@ export function anonymize(original: string): { hdlog: string; summary: Anonymize
 
   const m = new Mapper();
   // Structured fields first: their values are then also found in free text.
+  // Secrets too: a password printed before its "password=" line goes as well.
   for (const e of r.entries) {
     if ('cmd' in e) command(e.cmd, m);
     if ('frame' in e && e.frame.type === 'hello') m.of('device', e.frame.device, (n) => `HD-ANON${n}`);
+    for (const s of strings(e)) m.learnSecrets(s);
   }
   const entries: SessionEntry[] = r.entries.map((e) => {
     if ('frame' in e) return { ...e, frame: frame(e.frame, m) };
@@ -207,13 +233,22 @@ export function findLeaks(hdlog: string): string[] {
   const say = (where: string, what: string) => leaks.length < 50 && leaks.push(`${where}: ${what}`);
   const scan = (where: string, s: string, physical: boolean) => {
     for (const v of s.match(EMAIL) ?? []) if (!v.endsWith('@example.org')) say(where, `e-mail ${v}`);
-    for (const v of s.match(SECRET) ?? []) if (!v.endsWith('<removed>')) say(where, `possible secret "${v.slice(0, 20)}"`);
+    for (const [all, , , v] of s.matchAll(SECRET)) if (unquote(v!) !== '<removed>') say(where, `possible secret "${all.slice(0, 20)}"`);
+    for (const v of secrets) if (s.includes(v)) say(where, `the value of a secret seen elsewhere ("${v.slice(0, 2)}…")`);
     for (const v of s.match(PATH_USER) ?? []) if (!/[/\\]user$/.test(v)) say(where, `user name in a path ${v}`);
     if (!physical) return; // invented by the simulator: it names no one
     for (const v of s.match(MAC) ?? []) if (!v.toLowerCase().startsWith('02:00:00:00:00:')) say(where, `MAC address ${v}`);
     for (const v of s.match(LONG_HEX) ?? []) say(where, `long hex value ${v.slice(0, 12)}...`);
     for (const v of s.match(IPV4) ?? []) if (!isNeutralIpv4(v)) say(where, `address ${v}`);
   };
+  // A secret's value, wherever its key=value line is: found again anywhere else.
+  const secrets = new Set<string>();
+  for (const e of r.entries)
+    for (const s of strings(e))
+      for (const [, , , v] of s.matchAll(SECRET)) {
+        const value = unquote(v!);
+        if (value.length >= SECRET_MIN && value !== '<removed>') secrets.add(value);
+      }
   const physical = r.header.origin === 'PHYSICAL';
   if (physical && !(r.header as { anonymized?: unknown }).anonymized) say('header', 'a recording of real hardware must be anonymized first (hwdog anonymize)');
   scan('header', r.header.endpoint, physical);
@@ -224,7 +259,7 @@ export function findLeaks(hdlog: string): string[] {
       const serial = (e.frame as { serial?: string | null }).serial;
       if (serial && !/^ANON-\d+$/.test(serial)) say(where, `USB serial number ${serial}`);
     }
-    scan(where, JSON.stringify('frame' in e ? e.frame : 'cmd' in e ? e.cmd : e), physical);
+    for (const s of strings('frame' in e ? e.frame : 'cmd' in e ? e.cmd : e)) scan(where, s, physical);
   });
   return leaks;
 }

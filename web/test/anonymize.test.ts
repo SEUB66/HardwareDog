@@ -93,3 +93,36 @@ describe('anonymize: who and where are gone', () => {
     expect(() => anonymize(text)).not.toThrow();
   });
 });
+
+/** A session whose console prints secrets the way real boards do (audit 2026-10). */
+function leakySession(lines: string[]): string {
+  const rec = new SessionRecorder(newHeader({ id: 'HD-20261001-0931', startedAt: T0, source: 'WEB SERIAL', endpoint: 'USB CDC', scenario: null, app: 'test', recording: 'bb'.repeat(16) }));
+  let t = 0;
+  rec.add({ at: T0, frame: { type: 'hello', t: 0, proto: 1, device: 'HD-3A1F2C', rev: 'A', fw: '0.1.0', caps: ['uart'] } as never });
+  for (const data of lines) rec.add({ at: T0 + (t += 10), frame: { type: 'uart.rx', t, data } });
+  return toHdlog(rec);
+}
+
+describe('anonymize: a secret never survives, wherever and however it is printed', () => {
+  const cases: [string, string[], string[]][] = [
+    ['a reconnect loop prints the same key twice', ['wifi: password=hunter22 rc=1', 'wifi: password=hunter22 rc=2', 'end password=zzzz9'], ['hunter22', 'zzzz9']],
+    ['prefixed and snake_case keys', ['WIFI_PASSWORD=abc12345', 'wifi_pass=hunter23', 'mqtt_password: s3cr3t!x', 'CONFIG_ESP_WIFI_PASSWORD="hunter24"'], ['abc12345', 'hunter23', 's3cr3t!x', 'hunter24']],
+    ['a JSON config printed on the console', ['cfg {"ssid":"MaisonSeb","pass":"hunter25"}'], ['MaisonSeb', 'hunter25']],
+    ['the value printed before its key line', ['connecting with hunter26...', 'psk=hunter26'], ['hunter26']],
+  ];
+  for (const [name, lines, secrets] of cases) {
+    it(name, () => {
+      const text = leakySession(lines);
+      expect(findLeaks(text).length).toBeGreaterThan(0);
+      const { hdlog } = anonymize(text);
+      for (const s of secrets) expect(hdlog, s).not.toContain(s);
+      expect(findLeaks(hdlog)).toEqual([]);
+    });
+  }
+
+  it('a removed secret at the end of a line is not reported as a leak', () => {
+    const { hdlog } = anonymize(leakySession(['join password=xyz123']));
+    expect(hdlog).toContain('join password=<removed>');
+    expect(findLeaks(hdlog)).toEqual([]);
+  });
+});
