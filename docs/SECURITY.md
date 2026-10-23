@@ -49,11 +49,19 @@ DOGD: LOCAL      listens on 127.0.0.1 only; refuses another address unless
 DOGD: REBINDING  every request must name a loopback host (with
                  --listen-lan, an IP address): a page that resolves its
                  name to 127.0.0.1 is refused, in LAN mode too
-DOGD: PAGES      a browser request is served only for localhost pages,
-                 https://hardwaredog.org (the interface dogd is installed
-                 from; --no-site-origin refuses it) and the origins given
-                 with --allow-origin; any other site on the Internet cannot
-                 read sessions or drive the device
+DOGD: PAGES      a browser request is served only for localhost pages
+                 (with a port), https://hardwaredog.org (the interface dogd
+                 is installed from; --no-site-origin refuses it) and the
+                 origins given with --allow-origin; any other site on the
+                 Internet cannot read sessions or drive the device. An
+                 Origin header that cannot be read, or two of them, is
+                 refused. --allow-origin takes scheme://host[:port] only:
+                 "null" and "*" are refused, plain http only for this
+                 machine; the start banner lists the allowed pages (PAGES)
+DOGD: LIMITS     64 connections at a time; 10 s to send a request's
+                 headers; a refused request closes its connection: a peer
+                 cannot hold dogd's file descriptors before showing who it
+                 is (dogd/src/api/listen.rs)
 DOGD: NETWORK    with --listen-lan, a request from another machine must show
                  the token dogd prints at start (128 random bits;
                  Authorization: Bearer, or ?token= for a WebSocket),
@@ -77,7 +85,13 @@ CAMERA SNIFFER   photos and notes stay in the browser; the report export is
                  claimed or written to
 DOGD: STORAGE    a stored file is named by its recording id (32 hex), never
                  by anything a client chooses; size limited; a finalized
-                 recording is never overwritten
+                 recording is never overwritten; recordings, the index and
+                 the sessions folder are the user's own (0600 / 0700),
+                 tightened at start if an older dogd made them otherwise
+DOGD: SERVICE    the systemd user unit gains no privilege (setuid, file
+                 capabilities), creates no setuid file, keeps native system
+                 calls, no writable-and-executable memory, and only the
+                 socket families it uses (packaging/deb/dogd.service)
 FILES            a .hdlog from anyone is refused, with a reason and a line,
                  before it can exhaust the browser or reach the engine
                  malformed: 256 MiB, 512 KiB lines, bounded text, every

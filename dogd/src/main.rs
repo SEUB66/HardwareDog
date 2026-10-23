@@ -161,6 +161,13 @@ async fn serve(mut cfg: Config) -> i32 {
             }
         }
     }
+    // The pages that may drive this dogd, said at start: no surprise in the list.
+    let mut pages = vec!["localhost pages".to_string()];
+    if cfg.site_origin {
+        pages.push(config::SITE_ORIGIN.to_string());
+    }
+    pages.extend(cfg.allow_origins.iter().cloned());
+    row("PAGES", pages.join(", "));
     row("DATA", cfg.data_dir.display());
     row("SESSIONS", store.sessions().len());
     row("STATE", "READY");
@@ -178,7 +185,15 @@ async fn serve(mut cfg: Config) -> i32 {
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
     };
-    // The peer address: the LAN guard tells this machine from the others.
+    // At most 64 connections, 10 s for a request's headers (api/listen.rs);
+    // tap_io keeps the peer address: the LAN guard tells this machine from the others.
+    use axum::serve::ListenerExt;
+    let listener = api::listen::Bounded::new(
+        listener,
+        api::listen::MAX_CONNECTIONS,
+        api::listen::HEADER_DEADLINE,
+    )
+    .tap_io(|_| {});
     match axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
