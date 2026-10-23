@@ -30,6 +30,7 @@ import { SCREEN_H, SCREEN_W, COMPANION, type SpriteSet } from './sprites';
 import { ORANGE_TV, TURQUOISE_TV, boxStyle, ellipseStyle, screenClip, screenPath, skinFor, type TvSkin } from './tvSkin';
 import { tvSound } from './tvSound';
 import { useRev } from './useRev';
+import { track, warmLater } from '../../core/net';
 
 const DIAL_LABEL: Record<DialMode, string> = { COMPANION: 'CH 1 · COMPANION', TOOL: 'CH 2 · TOOL STATE', EVENT: 'CH 3 · LAST EVENT' };
 
@@ -262,19 +263,48 @@ export interface RetroTvProps {
   handleLabel?: string;
 }
 
+/** How wide the TV frame is shown: its srcset picks the picture from this. */
+const FRAME_SIZES = '(max-width: 600px) 90vw, 560px';
+
+/** Ask for a TV frame at the size this screen will show it (the same srcset choice as the TV itself). */
+function warmFrame(skin: TvSkin): HTMLImageElement {
+  const img = new Image();
+  img.sizes = FRAME_SIZES;
+  img.srcset = skin.frame.srcset;
+  img.src = skin.frame.src;
+  return img;
+}
+
+/**
+ * The TV of a profile, asked for before it is shown (during the boot
+ * screen, when the network has nothing else to do): its frame and scenes.
+ */
+export function preloadTv(profile: Companion['profile']): void {
+  if (typeof Image === 'undefined') return;
+  track(warmFrame(skinFor(profile)));
+  (profile === 'flipper' ? COMPANION : DOG).preload?.();
+}
+
 export function RetroTv({ companion, registry, skin: skinProp, sprites: spritesProp, dev = false, sound = false, reducedMotion = false, onHandleDown, handleLabel }: RetroTvProps) {
   useRev(companion);
   // Who lives in the TV follows the section: the dog, or Flipper Lab's companion. Same companion, same power.
   const skin = skinProp ?? skinFor(companion.profile);
   const sprites = spritesProp ?? (companion.profile === 'flipper' ? COMPANION : DOG);
   const p = skin.profile;
-  // the other TV's picture, warmed: a section change never shows an empty frame
+  // The other TV's picture and scenes, warmed once the page has what it needs
+  // (never on a frugal connection): a section change never shows an empty frame.
+  // The frame is warmed at the size this screen would show (srcset, sizes), not twice.
   useEffect(() => {
     if (typeof Image === 'undefined') return;
-    for (const k of [ORANGE_TV, TURQUOISE_TV]) new Image().src = k.frame.src;
-    COMPANION.preload?.();
-    DOG.preload?.();
+    const other = companion.profile === 'flipper' ? { tv: TURQUOISE_TV, scenes: DOG } : { tv: ORANGE_TV, scenes: COMPANION };
+    warmLater(() => {
+      warmFrame(other.tv);
+      other.scenes.preload?.();
+    });
   }, []);
+  // The knob is cut from the frame the browser chose (its currentSrc): one picture downloaded, not two sizes.
+  const [chosen, setChosen] = useState<{ of: string; src: string } | null>(null);
+  const frameSrc = chosen?.of === skin.frame.src ? chosen.src : null;
   const [osd, setOsd] = useState<number>(0);
   const lastDial = useRef(companion.dial);
   // Runs on a dial change only: the re-render it causes must not cancel its own timer.
@@ -337,14 +367,14 @@ export function RetroTv({ companion, registry, skin: skinProp, sprites: spritesP
         <div class="tv-crt" aria-hidden="true" />
       </div>
 
-      <img class="tv-frame" src={skin.frame.src} srcset={skin.frame.srcset} sizes="(max-width: 600px) 90vw, 560px" alt="" draggable={false} decoding="async" />
+      <img class="tv-frame" src={skin.frame.src} srcset={skin.frame.srcset} sizes={FRAME_SIZES} alt="" draggable={false} decoding="async" onLoad={(e) => setChosen({ of: skin.frame.src, src: (e.currentTarget as HTMLImageElement).currentSrc || skin.frame.src })} />
       {/* The knob of the dial, cut from the same picture, turns with the view. */}
       <div
         class="tv-knob"
         aria-hidden="true"
         style={{
           ...knob,
-          backgroundImage: `url(${skin.frame.src})`,
+          backgroundImage: frameSrc ? `url(${frameSrc})` : 'none',
           backgroundSize: `${(1 / (p.knob.rx * 2)) * 100}% ${(1 / (p.knob.ry * 2)) * 100}%`,
           backgroundPosition: `${((p.knob.cx - p.knob.rx) / (1 - p.knob.rx * 2)) * 100}% ${((p.knob.cy - p.knob.ry) / (1 - p.knob.ry * 2)) * 100}%`,
           transform: `rotate(${angle}deg)`,

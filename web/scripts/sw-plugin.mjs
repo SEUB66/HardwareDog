@@ -11,8 +11,12 @@ import { readFileSync, readdirSync } from 'node:fs';
 
 /** What the service worker keeps for offline use from the start: the interface, not every picture. */
 export const PRECACHE_FILE = /^(index|diagnostic|engineering)\.html$|\.(js|css|woff2)$|^assets\/(hd-tv-|hd-dog-scenes|hd-companion-scenes|hd-head-|hd-mark-|hd-boot)/;
-/** Public files the interface needs offline (icons, manifest, the static introduction). */
-export const PRECACHE_PUBLIC = /^(manifest\.webmanifest|favicon\.ico|favicon-(16|32)\.png|apple-touch-icon\.png|icon-(maskable-)?(192|512)\.png|intro\.css)$/;
+/**
+ * Public files the interface needs offline (icons, manifest, the static
+ * introduction). The 512 px icons are not: the system reads them when the
+ * app is installed, online; kept, they would cost a slow first visit ~0.2 MB.
+ */
+export const PRECACHE_PUBLIC = /^(manifest\.webmanifest|favicon\.ico|favicon-(16|32)\.png|apple-touch-icon\.png|icon-(maskable-)?192\.png|intro\.css|boot-watch\.js)$/;
 
 /** @returns {import('vite').Plugin} */
 export function serviceWorker() {

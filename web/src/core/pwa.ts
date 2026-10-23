@@ -18,8 +18,15 @@
  *              where no such prompt exists, a line says how (Share, Add to
  *              Home Screen). Hardware Dog works the same without installing
  *
+ * REGISTER waits until the page has what it needs (loaded, its pictures in,
+ * a quiet moment, at the latest 30 s after the load): the offline copy
+ * never competes with a first visit's own downloads on a slow connection
+ * (core/net.ts).
+ *
  * No request leaves this site here: the worker file is the site's own.
  */
+
+import { afterQuiet } from './net';
 
 export type InstallState = 'available' | 'ios' | 'installed' | 'none';
 
@@ -47,7 +54,11 @@ export class Pwa {
   private listeners = new Set<() => void>();
   private rev = 0;
 
-  constructor(private readonly reload: () => void = () => location.reload()) {}
+  constructor(
+    private readonly reload: () => void = () => location.reload(),
+    /** When the worker may be registered: once the page has what it needs (core/net.ts). */
+    private readonly whenQuiet: (fn: () => void) => void = afterQuiet,
+  ) {}
 
   subscribe(l: () => void): () => void {
     this.listeners.add(l);
@@ -97,6 +108,10 @@ export class Pwa {
       this.takenOver(controlled);
       controlled = true;
     });
+    this.whenQuiet(() => this.register());
+  }
+
+  private register(): void {
     void navigator.serviceWorker
       .register('./sw.js')
       .then((reg) => {
