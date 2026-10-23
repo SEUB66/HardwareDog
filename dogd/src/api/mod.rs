@@ -39,6 +39,8 @@ use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 
+pub mod listen;
+
 use crate::config::Config;
 use crate::device;
 use crate::discovery::Discovery;
@@ -129,9 +131,9 @@ pub fn origin_allowed(origin: &str, cfg: &Config) -> bool {
     }
     for local in ["http://localhost", "http://127.0.0.1", "http://[::1]"] {
         if o == local
-            || o.strip_prefix(local).is_some_and(|rest| {
-                rest.starts_with(':') && rest[1..].chars().all(|c| c.is_ascii_digit())
-            })
+            || o.strip_prefix(local)
+                .and_then(|rest| rest.strip_prefix(':'))
+                .is_some_and(|port| !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()))
         {
             return true;
         }
@@ -166,7 +168,13 @@ fn same_token(a: &str, b: &str) -> bool {
 fn from_this_machine(req: &Request) -> bool {
     req.extensions()
         .get::<ConnectInfo<std::net::SocketAddr>>()
-        .is_some_and(|c| c.0.ip().is_loopback())
+        // ::ffff:127.0.0.1 on a dual-stack socket is this machine too
+        .is_some_and(|c| c.0.ip().to_canonical().is_loopback())
+}
+
+/// A refusal closes its connection: a refused peer holds nothing open.
+fn refuse(code: StatusCode, why: impl Into<String>) -> Response {
+    (code, [(header::CONNECTION, "close")], why.into()).into_response()
 }
 
 async fn guard(State(s): State<AppState>, req: Request, next: Next) -> Response {
@@ -178,11 +186,10 @@ async fn guard(State(s): State<AppState>, req: Request, next: Next) -> Response 
             _ => false,
         };
         if !ok {
-            return (
+            return refuse(
                 StatusCode::UNAUTHORIZED,
                 "dogd on the network: show the token it printed at start (Authorization: Bearer, or ?token=)",
-            )
-                .into_response();
+            );
         }
     }
     let headers = req.headers();
@@ -191,23 +198,28 @@ async fn guard(State(s): State<AppState>, req: Request, next: Next) -> Response 
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
     if !host_allowed(host, &s.cfg) {
-        return (
+        return refuse(
             StatusCode::FORBIDDEN,
             "dogd is local: requests must name a loopback host",
-        )
-            .into_response();
+        );
     }
-    let origin = headers
-        .get(header::ORIGIN)
-        .and_then(|h| h.to_str().ok())
-        .map(str::to_string);
+    // An Origin that cannot be read, or two of them, is refused: never
+    // taken for "no Origin" (not a browser), which would let it through.
+    let mut origins = headers.get_all(header::ORIGIN).iter();
+    let origin = match (origins.next(), origins.next()) {
+        (None, _) => None,
+        (Some(o), None) => match o.to_str() {
+            Ok(o) => Some(o.to_string()),
+            Err(_) => return refuse(StatusCode::FORBIDDEN, "unreadable Origin header"),
+        },
+        (Some(_), Some(_)) => return refuse(StatusCode::FORBIDDEN, "more than one Origin header"),
+    };
     if let Some(o) = &origin {
         if !origin_allowed(o, &s.cfg) {
-            return (
+            return refuse(
                 StatusCode::FORBIDDEN,
                 format!("origin {o} is not allowed (dogd --allow-origin)"),
-            )
-                .into_response();
+            );
         }
     }
     let preflight = req.method() == Method::OPTIONS;
@@ -806,6 +818,89 @@ mod http_tests {
         )
         .await;
         assert_eq!(s, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn the_guard_fails_closed_and_refusals_close_their_connection() {
+        let host = [("host", "127.0.0.1:4782")];
+        // an Origin that cannot be read, or two of them: never taken for no Origin
+        let mut req = HttpRequest::builder()
+            .uri("/v1/health")
+            .header("host", "127.0.0.1:4782")
+            .header(
+                "origin",
+                HeaderValue::from_bytes(b"http://localhost:5173\xff").unwrap(),
+            )
+            .extension(ConnectInfo(
+                "127.0.0.1:5".parse::<std::net::SocketAddr>().unwrap(),
+            ));
+        let res = app(&[])
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        assert_eq!(res.headers().get("connection").unwrap(), "close");
+        req = HttpRequest::builder()
+            .uri("/v1/health")
+            .header("host", "127.0.0.1:4782")
+            .header("origin", "http://localhost:5173")
+            .header("origin", "https://evil.example")
+            .extension(ConnectInfo(
+                "127.0.0.1:5".parse::<std::net::SocketAddr>().unwrap(),
+            ));
+        let res = app(&[])
+            .oneshot(req.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        // a local origin names its port
+        let (st, h) = call(
+            app(&[]),
+            "GET",
+            "/v1/health",
+            &[host[0], ("origin", "http://localhost:")],
+        )
+        .await;
+        assert_eq!(st, StatusCode::FORBIDDEN);
+        assert_eq!(
+            h.iter()
+                .find(|(k, _)| k == "connection")
+                .map(|(_, v)| v.as_str()),
+            Some("close")
+        );
+        let (st, _) = call(
+            app(&[]),
+            "GET",
+            "/v1/health",
+            &[host[0], ("origin", "http://localhost:5173")],
+        )
+        .await;
+        assert_eq!(st, StatusCode::OK);
+    }
+
+    /// On a dual-stack socket, 127.0.0.1 arrives as ::ffff:127.0.0.1: still this machine.
+    #[tokio::test]
+    async fn a_mapped_loopback_peer_is_this_machine() {
+        let lan = app_with(&["--listen-lan", "--listen", "[::]:4782"], Some("t0k3n"));
+        let (st, _) = call_from(
+            lan,
+            "[::ffff:127.0.0.1]:50000",
+            "GET",
+            "/v1/health",
+            &[("host", "127.0.0.1:4782")],
+        )
+        .await;
+        assert_eq!(st, StatusCode::OK);
+        let lan = app_with(&["--listen-lan", "--listen", "[::]:4782"], Some("t0k3n"));
+        let (st, _) = call_from(
+            lan,
+            "[::ffff:192.168.1.9]:50000",
+            "GET",
+            "/v1/health",
+            &[("host", "192.168.1.2:4782")],
+        )
+        .await;
+        assert_eq!(st, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

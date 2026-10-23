@@ -33,6 +33,9 @@ export interface FactSummary {
   rejectedLines: number;
 }
 
+/** Every fact a case states: none may be left out, or the case would quietly check less. */
+export const FACT_KEYS: readonly (keyof FactSummary)[] = ['undervoltage', 'overcurrent', 'usbAttaches', 'usbDisconnects', 'disconnectsAfterDrop', 'targetResets', 'framingErrors', 'rejectedLines'];
+
 export interface CaseFile {
   case: typeof CASE_VERSION;
   id: string;
@@ -114,6 +117,8 @@ export function parseCase(text: string): CaseFile {
   const c = JSON.parse(text) as CaseFile;
   if (c.case !== CASE_VERSION) throw new Error(`not a case v${CASE_VERSION} file`);
   if (!/^[0-9a-f]{64}$/.test(c.recording?.sha256 ?? '')) throw new Error('case: recording.sha256 missing');
+  // A file name next to the case, never a path: a case cannot make a reader open anything else.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*\.hdlog$/.test(c.recording?.file ?? '')) throw new Error('case: recording.file must be a file name next to the case (letters, digits, . _ -, ending .hdlog)');
   if (c.context !== undefined) {
     const x = c.context as unknown as Record<string, unknown>;
     for (const k of ['description', 'hardware'] as const) {
@@ -123,7 +128,12 @@ export function parseCase(text: string): CaseFile {
       if (x[k] !== undefined && (typeof x[k] !== 'string' || (x[k] as string).length > CONTEXT_MAX)) throw new Error(`case: context.${k} must be text`);
     }
   }
-  for (const d of c.expect?.diagnoses ?? []) {
+  const facts = c.expect?.facts as unknown as Record<string, unknown> | undefined;
+  if (!facts || typeof facts !== 'object') throw new Error('case: expect.facts missing');
+  for (const k of FACT_KEYS) if (!Number.isInteger(facts[k]) || (facts[k] as number) < 0) throw new Error(`case: expect.facts.${k} must be a count`);
+  for (const k of Object.keys(facts)) if (!(FACT_KEYS as readonly string[]).includes(k)) throw new Error(`case: unknown fact ${k}`);
+  if (!Array.isArray(c.expect.diagnoses)) throw new Error('case: expect.diagnoses must be a list (empty: none expected)');
+  for (const d of c.expect.diagnoses) {
     if (!(DIAGNOSIS_IDS as readonly string[]).includes(d.id)) throw new Error(`case: unknown diagnosis ${d.id}`);
   }
   return c;
@@ -143,9 +153,11 @@ export async function checkCase(c: CaseFile, hdlog: string): Promise<string[]> {
   if (recording.header.origin !== c.recording.origin) out.push(`origin ${recording.header.origin}, case says ${c.recording.origin}`);
   const sys = await replayRecording(recording);
   const facts = factSummary(sys);
-  for (const [k, v] of Object.entries(c.expect.facts)) {
-    const got = facts[k as keyof FactSummary];
-    if (got !== v) out.push(`fact ${k}: expected ${v}, replay gives ${got}`);
+  // every fact of the engine, not only those the file happens to state
+  for (const k of FACT_KEYS) {
+    const want = (c.expect.facts as Partial<FactSummary>)[k];
+    if (want === undefined) out.push(`fact ${k}: the case does not state it`);
+    else if (facts[k] !== want) out.push(`fact ${k}: expected ${want}, replay gives ${facts[k]}`);
   }
   const want = c.expect.diagnoses.map((d) => `${d.id}:${d.confidence}`).join(' ') || 'none';
   const got = sys.diagnoses.map((d) => `${d.id}:${d.confidence}`).join(' ') || 'none';

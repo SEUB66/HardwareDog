@@ -175,6 +175,16 @@ describe('cases', () => {
 
     const wrong = { ...c, expect: { ...c.expect, facts: { ...c.expect.facts, undervoltage: 99 } } };
     expect((await checkCase(wrong, text)).join(' ')).toMatch(/fact undervoltage: expected 99/);
+
+    // a case that leaves facts out checks them all the same, and fails
+    const { framingErrors: _left, ...partial } = c.expect.facts;
+    const thin = { ...c, expect: { ...c.expect, facts: partial as typeof c.expect.facts } };
+    expect((await checkCase(thin, text)).join(' ')).toMatch(/fact framingErrors: the case does not state it/);
+    expect(() => parseCase(JSON.stringify(thin))).toThrow(/expect.facts.framingErrors must be a count/);
+    expect(() => parseCase(JSON.stringify({ ...c, expect: { facts: c.expect.facts } }))).toThrow(/diagnoses must be a list/);
+    // a case names a file next to it, never a path
+    for (const file of ['../../../../home/runner/.ssh/id_rsa.hdlog', '/etc/passwd', '.hidden.hdlog', 'x.txt'])
+      expect(() => parseCase(JSON.stringify({ ...c, recording: { ...c.recording, file } })), file).toThrow(/file name next to the case/);
   });
 
   it('refuses to build a case from a file that is not intact', async () => {

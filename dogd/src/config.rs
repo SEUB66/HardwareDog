@@ -194,9 +194,7 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
                 )
             }
             "--listen-lan" => lan = true,
-            "--allow-origin" => {
-                allow_origins.push(value("--allow-origin")?.trim_end_matches('/').to_string())
-            }
+            "--allow-origin" => allow_origins.push(parse_origin(&value("--allow-origin")?)?),
             "--no-site-origin" => site_origin = false,
             "--data" => data_dir = PathBuf::from(value("--data")?),
             other => return Err(format!("unknown option {other}\n\n{USAGE}")),
@@ -246,6 +244,48 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
     })
 }
 
+/// A browser origin as browsers send it: scheme://host[:port], nothing else.
+/// "null" (sandboxed frames, file: and data: pages of any site) and "*" are
+/// refused; plain http only for this machine, where no one can rewrite the
+/// page on the way.
+pub fn parse_origin(value: &str) -> Result<String, String> {
+    let o = value.trim().trim_end_matches('/');
+    let bad = |why: &str| Err(format!("--allow-origin {value}: {why}"));
+    if o == "null" || o == "*" {
+        return bad("any site can send this origin");
+    }
+    let (scheme, rest) = match o.split_once("://") {
+        Some(("https", rest)) => ("https", rest),
+        Some(("http", rest)) => ("http", rest),
+        _ => return bad("an origin starts with https:// (or http:// on this machine)"),
+    };
+    if rest.is_empty() || rest.contains(['/', '?', '#', '@', ' ']) {
+        return bad("an origin is scheme://host[:port], with no path");
+    }
+    let port_ok = |p: &str| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit());
+    let host = match rest.strip_prefix('[').and_then(|r| r.find(']')) {
+        // [v6]:port
+        Some(close) => {
+            let (h, after) = rest.split_at(close + 2);
+            if !after.is_empty() && !after.strip_prefix(':').is_some_and(port_ok) {
+                return bad("the port must be a number");
+            }
+            h
+        }
+        None => match rest.split_once(':') {
+            Some((h, p)) if port_ok(p) => h,
+            Some(_) => return bad("the port must be a number"),
+            None => rest,
+        },
+    };
+    if scheme == "http" && !matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+        return bad(
+            "plain http is only for this machine: anyone on the way could change that page",
+        );
+    }
+    Ok(o.to_string())
+}
+
 /// Whether a link's hello names a board to remember in the identity index:
 /// not this computer (it has no chip id), not a simulator (its identity is
 /// invented, and simulated data never passes for real hardware).
@@ -255,6 +295,39 @@ pub fn remembers_identity(source: &Source, origin: Origin) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn allow_origin_takes_origins_only() {
+        assert_eq!(
+            parse_origin("https://bench.example/").unwrap(),
+            "https://bench.example"
+        );
+        assert_eq!(
+            parse_origin("https://bench.example:8443").unwrap(),
+            "https://bench.example:8443"
+        );
+        assert_eq!(
+            parse_origin("http://localhost:3000").unwrap(),
+            "http://localhost:3000"
+        );
+        assert_eq!(
+            parse_origin("http://[::1]:5173").unwrap(),
+            "http://[::1]:5173"
+        );
+        for bad in [
+            "null",
+            "*",
+            "bench.example",
+            "https://site/app",
+            "http://bench.example",
+            "ftp://x",
+            "https://",
+            "https://x:abc",
+            "https://u@x",
+        ] {
+            assert!(parse_origin(bad).is_err(), "{bad} accepted");
+        }
+    }
+
     #[test]
     fn only_physical_boards_enter_the_identity_index() {
         let tcp = Source::Tcp("10.0.0.5:4782".into());

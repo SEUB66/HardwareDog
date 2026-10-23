@@ -148,9 +148,19 @@ fn is_recording_id(s: &str) -> bool {
 impl Store {
     pub fn open(data_dir: &Path) -> Result<Store, String> {
         let dir = data_dir.join("sessions");
+        let created = !data_dir.exists();
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let db =
-            Connection::open(data_dir.join("index.sqlite")).map_err(|e| format!("index: {e}"))?;
+        // Recordings and the network inventory are this user's: what dogd
+        // owns is 0700 / 0600, even when an older dogd made it with the
+        // default umask. A --data directory that already existed is the
+        // user's own choice: only what dogd puts in it is tightened.
+        if created {
+            private(data_dir).map_err(|e| format!("{}: {e}", data_dir.display()))?;
+        }
+        private(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let index = data_dir.join("index.sqlite");
+        let db = Connection::open(&index).map_err(|e| format!("index: {e}"))?;
+        owner_only(&index).map_err(|e| format!("index: {e}"))?;
         db.execute_batch(SCHEMA)
             .map_err(|e| format!("index schema: {e}"))?;
         migrate(&db).map_err(|e| format!("index migration: {e}"))?;
@@ -909,13 +919,41 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<SessionRow> {
     })
 }
 
+/// A directory only its owner can enter (0700). Elsewhere than Unix: as the system made it.
+fn private(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
+    Ok(())
+}
+
+/// A file only its owner can read (0600).
+fn owner_only(file: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600))?;
+    }
+    #[cfg(not(unix))]
+    let _ = file;
+    Ok(())
+}
+
 /// Write to a temporary file, flush it to disk, then rename: a crash never
-/// leaves a half-written recording under the real name.
+/// leaves a half-written recording under the real name. Owner only (0600).
 fn write_atomic(path: &Path, data: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     let tmp = path.with_extension("hdlog.part");
     {
-        let mut f = std::fs::File::create(&tmp)?;
+        let mut open = std::fs::OpenOptions::new();
+        open.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+        let mut f = open.open(&tmp)?;
         f.write_all(data)?;
         f.sync_all()?;
     }
@@ -943,6 +981,32 @@ mod tests {
         ))
         .unwrap();
         (inspect(&data).unwrap().recording, data)
+    }
+
+    /// Recordings and the inventory are the user's own: 0700 / 0600, an old 0755 dir tightened.
+    #[cfg(unix)]
+    #[test]
+    fn the_data_directory_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        // made by dogd: 0700
+        let fresh = tmp().join("new");
+        drop(Store::open(&fresh).unwrap());
+        assert_eq!(mode(&fresh), 0o700);
+        // the user's own directory keeps its mode; what dogd puts in it is tightened
+        let d = tmp();
+        std::fs::create_dir_all(d.join("sessions")).unwrap();
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::set_permissions(d.join("sessions"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        let store = Store::open(&d).unwrap();
+        assert_eq!(mode(&d), 0o755);
+        assert_eq!(mode(&d.join("sessions")), 0o700);
+        assert_eq!(mode(&d.join("index.sqlite")), 0o600);
+        let file = d.join("sessions").join("x.hdlog");
+        write_atomic(&file, b"x").unwrap();
+        assert_eq!(mode(&file), 0o600);
+        drop(store);
     }
 
     #[test]

@@ -7,7 +7,16 @@ const pad = (n: number, w = 2) => String(Math.floor(n)).padStart(w, '0');
 /** 12:42:01.002 */
 export function clock(t: number): string {
   const d = new Date(t);
+  if (!Number.isFinite(d.getTime())) return '--:--:--.---';
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+}
+
+/** The zone clock() writes in, at time t: "UTC+02:00" (DST-aware). Reports say it once. */
+export function zoneOf(t: number): string {
+  const d = new Date(t);
+  const off = Number.isFinite(d.getTime()) ? -d.getTimezoneOffset() : 0;
+  const a = Math.abs(off);
+  return `UTC${off < 0 ? '-' : '+'}${pad(Math.floor(a / 60))}:${pad(a % 60)}`;
 }
 
 /** 12:42:01 */

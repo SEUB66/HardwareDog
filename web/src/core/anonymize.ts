@@ -22,7 +22,7 @@ import type { Recording, SessionEntry, SessionHeader } from './session';
 import { parseHdlog, toHdlog } from './session';
 import { sha256 } from './sha256';
 
-export const ANONYMIZE_VERSION = 1;
+export const ANONYMIZE_VERSION = 2; // 2: secrets everywhere, usb.follow, any case, MAC12, local host names
 
 /** Addresses for documentation (RFC 5737 / 3849): they never name a real host. */
 const IPV4_POOL = (n: number) => `192.0.2.${n}`;
@@ -52,6 +52,11 @@ const SECRET_MIN = 4;
 /** Hex runs this long are keys, hashes, serials: not boot codes like rst:0x1. */
 const LONG_HEX = /\b(?:0x)?[0-9a-f]{16,}\b/gi;
 const PATH_USER = /(\/(?:home|Users)\/|[A-Za-z]:\\Users\\)[^/\\\s]+/g;
+/** A MAC written without separators (a4cf12b3c4d5): twelve hex digits, at least one a-f. */
+const MAC12 = /\b(?=[0-9]*[a-f])[0-9a-f]{12}\b/gi;
+/** A machine named on a private network (nas.lan, printer.local): it names the place. */
+const LOCAL_HOST = /\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:lan|local|home|internal|corp|localdomain)\b/gi;
+const escapeRe = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The documentation ranges and the unspecified / loopback addresses say nothing about anyone. */
 export const isNeutralIpv4 = (ip: string) => /^(192\.0\.2|198\.51\.100|203\.0\.113)\.\d+$/.test(ip) || ip === '0.0.0.0' || ip.startsWith('127.');
@@ -98,17 +103,19 @@ class Mapper {
       if (value.length >= SECRET_MIN && value !== '<removed>') this.of('secret', value, () => '<removed>');
       return v.startsWith('"') ? `${k}${sep}"<removed>"` : v.startsWith("'") ? `${k}${sep}'<removed>'` : `${k}${sep}<removed>`;
     });
-    // Values met in structured fields (a device id, a host name, a secret) also hide in text.
-    for (const [kind, m] of this.maps) {
-      if (kind === 'ipv4' || kind === 'ipv6') continue;
-      for (const [from, to] of m) if (from.length >= 4) t = t.split(from).join(to);
-    }
+    // Values met in structured fields (a device id, a host name, a serial, a
+    // secret) also hide in text, in any case (MYROUTER.lan is myrouter.lan).
+    // Longest first: a port path holds the serial, and goes whole.
+    const known = [...this.maps].filter(([kind]) => kind !== 'ipv4' && kind !== 'ipv6').flatMap(([, m]) => [...m].filter(([from]) => from.length >= 4));
+    for (const [from, to] of known.sort((a, b) => b[0].length - a[0].length)) t = t.replace(new RegExp(escapeRe(from), 'gi'), to);
+    t = t.replace(LOCAL_HOST, (v) => this.host(v));
     t = t.replace(EMAIL, (v) => this.of('email', v.toLowerCase(), (n) => `user-${n}@example.org`));
     t = t.replace(MAC, (v) => this.of('mac', v.toLowerCase(), (n) => `02:00:00:00:00:${n.toString(16).padStart(2, '0')}`));
     // A MAC (six groups of two) is not an IPv6 address, stand-in included.
     t = t.replace(IPV6, (v) => (/^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i.test(v) ? v : /[a-f]/i.test(v) || v.split(':').length > 3 ? this.ip(v) : v));
     t = t.replace(IPV4, (v) => this.ip(v));
     t = t.replace(LONG_HEX, (v) => this.of('hex', v.toLowerCase(), (n) => `<hex-${n}>`));
+    t = t.replace(MAC12, (v) => this.of('hex', v.toLowerCase(), (n) => `<hex-${n}>`));
     t = t.replace(PATH_USER, (_all, root: string) => `${root}user`);
     if (t !== s) this.textLines++;
     return t;
@@ -175,8 +182,29 @@ function command(c: HostCommand, m: Mapper): HostCommand {
   if (typeof x['target'] === 'string') x['target'] = m.host(x['target']);
   if (typeof x['dns'] === 'string') x['dns'] = m.host(x['dns']);
   if (typeof x['upstream'] === 'string') x['upstream'] = m.host(x['upstream']);
+  // usb.follow names the target by its serial number and its port path (by-id: the serial again)
+  if (typeof x['serial'] === 'string') x['serial'] = m.of('serial', x['serial'], (n) => `ANON-${n}`);
+  if (typeof x['port'] === 'string') x['port'] = m.of('port', x['port'], (n) => `port-${n}`);
   if (typeof x['data'] === 'string') x['data'] = m.text(x['data']);
   return x as unknown as HostCommand;
+}
+
+/**
+ * Every structured value of an entry, met before any text is rewritten: a
+ * serial or a host name printed on the console before its own frame goes
+ * too. Nothing is rewritten here, nothing is counted.
+ */
+function learn(e: SessionEntry, m: Mapper): void {
+  if ('cmd' in e) {
+    const c = e.cmd as unknown as Record<string, unknown>;
+    for (const k of ['target', 'dns', 'upstream']) if (typeof c[k] === 'string') m.host(c[k] as string);
+    if (typeof c['serial'] === 'string') m.of('serial', c['serial'], (n) => `ANON-${n}`);
+    if (typeof c['port'] === 'string') m.of('port', c['port'], (n) => `port-${n}`);
+  }
+  if (!('frame' in e)) return;
+  const f = e.frame;
+  if (f.type === 'hello') m.of('device', f.device, (n) => `HD-ANON${n}`);
+  if (f.type === 'usb.attach' && f.serial) m.of('serial', f.serial, (n) => `ANON-${n}`);
 }
 
 /** Where the data came from, without the port path or the address of the board. */
@@ -196,8 +224,7 @@ export function anonymize(original: string): { hdlog: string; summary: Anonymize
   // Structured fields first: their values are then also found in free text.
   // Secrets too: a password printed before its "password=" line goes as well.
   for (const e of r.entries) {
-    if ('cmd' in e) command(e.cmd, m);
-    if ('frame' in e && e.frame.type === 'hello') m.of('device', e.frame.device, (n) => `HD-ANON${n}`);
+    learn(e, m);
     for (const s of strings(e)) m.learnSecrets(s);
   }
   const entries: SessionEntry[] = r.entries.map((e) => {
@@ -239,6 +266,8 @@ export function findLeaks(hdlog: string): string[] {
     if (!physical) return; // invented by the simulator: it names no one
     for (const v of s.match(MAC) ?? []) if (!v.toLowerCase().startsWith('02:00:00:00:00:')) say(where, `MAC address ${v}`);
     for (const v of s.match(LONG_HEX) ?? []) say(where, `long hex value ${v.slice(0, 12)}...`);
+    for (const v of s.match(MAC12) ?? []) say(where, `MAC-like value ${v}`);
+    for (const v of s.match(LOCAL_HOST) ?? []) if (!/^host-\d+\.example$/i.test(v)) say(where, `local host name ${v}`);
     for (const v of s.match(IPV4) ?? []) if (!isNeutralIpv4(v)) say(where, `address ${v}`);
   };
   // A secret's value, wherever its key=value line is: found again anywhere else.
@@ -251,9 +280,16 @@ export function findLeaks(hdlog: string): string[] {
       }
   const physical = r.header.origin === 'PHYSICAL';
   if (physical && !(r.header as { anonymized?: unknown }).anonymized) say('header', 'a recording of real hardware must be anonymized first (hwdog anonymize)');
-  scan('header', r.header.endpoint, physical);
+  // every header field a person could have typed or a port could name (not the ids and hashes it carries)
+  const { anonymized: _a, recording: _r, ...said } = r.header as SessionHeader & { anonymized?: unknown };
+  for (const s of strings(said)) scan('header', s, physical);
   r.entries.forEach((e, k) => {
     const where = `entry ${k + 1}`;
+    if ('cmd' in e && physical) {
+      const c = e.cmd as unknown as Record<string, unknown>;
+      if (typeof c['serial'] === 'string' && !/^ANON-\d+$/.test(c['serial'])) say(where, `USB serial number ${c['serial']} in a command`);
+      if (typeof c['port'] === 'string' && !/^port-\d+$/.test(c['port'])) say(where, `port path ${c['port']} in a command`);
+    }
     if ('frame' in e && e.frame.type === 'hello' && (e.frame as { chip?: string }).chip) say(where, 'factory chip id in hello');
     if ('frame' in e && e.frame.type === 'usb.attach' && physical) {
       const serial = (e.frame as { serial?: string | null }).serial;

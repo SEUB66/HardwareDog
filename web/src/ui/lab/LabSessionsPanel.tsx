@@ -185,6 +185,14 @@ export function LabSessionsPanel({ lab, onReplayBle }: { lab: Lab; onReplayBle?:
             </button>
           </>
         )}
+        {s.unsaved && (
+          <p class="note warn">
+            The last session is not kept in this browser ({s.unsaved.error}).{' '}
+            <button class="btn" onClick={() => download(`${s.unsaved!.data.header.id}.hdlab`, 'application/x-ndjson', s.unsavedText()!)}>
+              EXPORT .HDLAB
+            </button>
+          </p>
+        )}
         <label class="btn file-btn">
           OPEN .HDLAB…
           <input
