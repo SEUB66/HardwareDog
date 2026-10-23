@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { SUPPORT_MATRIX, detectCapabilities, type Capability } from '../../core/ble/capabilities';
 import { decodePayload, knownServiceUuids, loadNumbers, names } from '../../core/ble/decode';
 import type { GattCharView, WriteMode } from '../../core/ble/gatt';
-import { displayName, presence, shortUuid, viewDevices, type BleDevice, type BleFilter, type BleSort } from '../../core/ble/model';
+import { BLE_LIMITS, displayName, presence, shortUuid, viewDevices, type BleDevice, type BleFilter, type BleSort } from '../../core/ble/model';
 import { SAMPLE_MS } from '../../core/ble/service';
 import { VALUE_FORMATS, formatValue, parseValue, toHex, type ValueFormat } from '../../core/ble/values';
 import type { Lab } from '../../core/lab/context';
@@ -201,6 +201,8 @@ function Scan({ lab, selected, onSelect, focus, onFocus }: { lab: Lab; selected:
           )}
           {ble.origin === 'SIMULATED' && <Tag status="WARN" label="DEMO DATA" />}
           {ble.state === 'REPLAY' && <Tag status="INFO" label={`REPLAY · ${ble.replayOf}`} />}
+          {ble.state === 'REPLAY' && ble.replayIntegrity && <Tag status={ble.replayIntegrity === 'VERIFIED' ? 'PASS' : 'WARN'} label={ble.replayIntegrity} />}
+          {ble.state === 'REPLAY' && ble.replaySimulated && <Tag status="WARN" label="SIMULATED" />}
         </div>
         {(error || ble.error) && <p class="note warn">{error ?? `[${ble.error!.code}] ${ble.error!.message}`}</p>}
         <div class="counters">
@@ -365,7 +367,10 @@ function Inspect({ lab, focus }: { lab: Lab; focus: string | null }) {
         <dt>CONNECTABLE</dt>
         <dd>{d.connectable === null ? 'not reported by this API' : d.connectable ? 'yes' : 'no'}</dd>
         <dt>SERVICES ADVERTISED</dt>
-        <dd>{d.services.length ? d.services.map((u) => `${u}${names.service(u) ? ` (${names.service(u)})` : ''}`).join(', ') : 'none'}</dd>
+        <dd>
+          {d.services.length ? d.services.map((u) => `${u}${names.service(u) ? ` (${names.service(u)})` : ''}`).join(', ') : 'none'}
+          {d.truncated > 0 && <span class="dim">{` · ${d.truncated} more advertised entr${d.truncated > 1 ? 'ies' : 'y'} not kept (limit ${BLE_LIMITS.maxEntries} per kind)`}</span>}
+        </dd>
         <dt>OBSERVATIONS</dt>
         <dd>
           {d.count} · payload changed {d.payloadChanges} time(s) · first {new Date(d.firstSeen).toLocaleTimeString()} · last {new Date(d.lastSeen).toLocaleTimeString()}

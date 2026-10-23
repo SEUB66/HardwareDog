@@ -58,7 +58,16 @@ export function CameraObjects({ lab }: { lab: Lab }) {
               START AN INSPECTION
             </button>
           ) : (
-            <button class="btn" onClick={() => confirm('Start a new inspection? The current one stays in this browser.') && insp.start(place)}>
+            <button
+              class="btn"
+              onClick={() => {
+                if (!confirm('Start a new inspection? The network results and what was said about them are cleared: they belong to this place.')) return;
+                lab.camera.net.clear();
+                const photos = insp.photoCount({});
+                if (confirm(`Delete the current inspection${photos ? ` and its ${photos} photo(s)` : ''} from this browser? OK deletes it; Cancel keeps it here.`)) void insp.discard(place);
+                else insp.start(place);
+              }}
+            >
               NEW INSPECTION
             </button>
           )}
@@ -131,7 +140,14 @@ function RoomCard({ lab, room, onAdd, onSheet }: { lab: Lab; room: RoomVisit; on
     <section class="camera-room" aria-label={room.label || ROOM_LABEL[room.kind]}>
       <header>
         <b>{room.label || ROOM_LABEL[room.kind]}</b> <span class="dim">{ROOM_LABEL[room.kind]}</span>
-        <button class="btn small" onClick={() => confirm('Remove this room and its objects?') && insp.removeRoom(room.id)} aria-label="Remove room">
+        <button
+          class="btn small"
+          onClick={() => {
+            const photos = insp.photoCount({ roomId: room.id });
+            if (confirm(`Remove this room and its objects${photos ? `, and delete their ${photos} photo(s) from this browser` : ''}?`)) void insp.removeRoom(room.id);
+          }}
+          aria-label="Remove room"
+        >
           ✕
         </button>
       </header>
@@ -175,7 +191,11 @@ function ItemCard({ lab, room, item, onSheet }: { lab: Lab; room: RoomVisit; ite
             sheet: {f.name}
           </button>
         )}
-        <button class="btn small" onClick={() => insp.removeItem(item.id)} aria-label={`Remove ${item.label}`}>
+        <button
+          class="btn small"
+          onClick={() => (item.photos.length === 0 || confirm(`Remove ${item.label} and delete its ${item.photos.length} photo(s) from this browser?`)) && void insp.removeItem(item.id)}
+          aria-label={`Remove ${item.label}`}
+        >
           ✕
         </button>
       </header>

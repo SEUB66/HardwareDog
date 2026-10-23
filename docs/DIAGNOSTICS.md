@@ -6,7 +6,7 @@ SCENARIOS    17 physical fault scenarios    web/src/core/scenarios.ts
 PROOF        reliability matrix             web/test/scenarios.test.ts
 RULE TESTS   threshold / precedence tests   web/test/diagnostics.test.ts
 CASES        recorded incidents             cases/, web/test/cases.test.ts
-RULESET      version 3                      RULESET_VERSION, diagnostics.ts
+RULESET      version 4                      RULESET_VERSION, diagnostics.ts
 ```
 
 Hardware Dog does not guess. Every diagnosis comes from a written rule,
@@ -17,6 +17,10 @@ The ruleset has a version. It is bumped whenever a rule, a default
 threshold or a confidence definition changes.
 
 ```text
+v4   counts that never read a capped list (a long capture at the wrong
+     baud keeps SERIAL_CONFIGURATION_MISMATCH); a disconnect just before
+     the first low sample counts with its drop; an I2C loss is set against
+     the whole gap between two scans and the whole drop
 v3   NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY;
      no link-layer diagnosis while a link loss explained by the supply
      is still open
@@ -111,7 +115,11 @@ Precedence rules that prevent double counting:
 [X] while the link is down because the supply dropped (NETWORK_POWER_LOSS,
     link not back yet), NO_LINK is not reported: "check the cable" would
     point the wrong way
-[X] an I2C loss within 2 s of a voltage drop names the supply as the cause
+[X] an I2C loss names the supply as the cause when a voltage drop, or the
+    2 s after it, falls between the scan that saw the device and the one
+    that missed it (a 3 s watch or a long sag included)
+[X] a USB disconnect within two sample periods before the first low sample
+    of a drop counts with that drop: the rail can collapse between samples
 [X] a scan that hits a bus fault is not sent: devices are never "gone"
     because the bus failed
 ```

@@ -24,7 +24,7 @@ static int failures = 0;
 typedef struct {
     char out[65536];
     size_t len;
-    uint32_t t;
+    uint64_t t;
     uint16_t man, die, config, cal;
     float v, i, shunt;
     bool nack;
@@ -37,7 +37,7 @@ typedef struct {
     char probe_id[64];
 } board_t;
 
-static uint32_t b_now(void *c) { return ((board_t *)c)->t; }
+static uint64_t b_now(void *c) { return ((board_t *)c)->t; }
 static void b_write(void *c, const char *d, size_t n) {
     board_t *b = c;
     if (b->len + n < sizeof b->out) {
@@ -415,6 +415,26 @@ static void test_time_never_goes_backwards(void) {
     CHECK(has("\"t\":500"));
 }
 
+/* A probe left on for 7 weeks: the clock passes 2^32 ms (49.7 days) and keeps counting. */
+static void test_time_after_49_days(void) {
+    setup();
+    B.t = 4294967200ULL; /* 96 ms before 2^32 */
+    hdp_start(&D);
+    clear();
+    B.t = 4294967280ULL;
+    hdp_poll(&D);
+    CHECK(has("\"type\":\"power\",\"t\":4294967280,"));
+    clear();
+    B.t = 4294967300ULL; /* past 2^32: a 32-bit clock would read 4 and stay pinned */
+    hdp_poll(&D);
+    CHECK(has("\"type\":\"power\",\"t\":4294967300,"));
+    clear();
+    B.t = 4294967296ULL + 86400000ULL; /* a day later, samples still come */
+    hdp_poll(&D);
+    CHECK(has("\"t\":4381367296,"));
+    CHECK(lines_well_formed());
+}
+
 static void test_commands(void) {
     setup();
     D.cfg.caps |= HDP_CAP_NET | HDP_CAP_PROBE;
@@ -566,6 +586,7 @@ int main(void) {
     test_network_checks_and_probes();
     test_read_failure_stops_power();
     test_time_never_goes_backwards();
+    test_time_after_49_days();
     test_commands();
     test_hostile_commands();
     test_caps_are_respected();

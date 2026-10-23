@@ -24,7 +24,9 @@ interface speaks it too, as text, through the same decoder.
 
 ```text
 [ 1 ] Every device frame is a JSON object with "type" and "t".
-[ 2 ] "t" is milliseconds since device boot. It never goes backwards.
+[ 2 ] "t" is milliseconds since device boot. It never goes backwards, and it
+      does not wrap: the firmware counts on 64 bits (2^53 ms is still exact
+      in JSON), so a probe left on for months keeps a clock.
 [ 3 ] Producers emit enums in the canonical case of the schema.
       Decoders accept any case (be strict in what you send, liberal in
       what you accept).

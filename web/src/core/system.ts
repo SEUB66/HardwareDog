@@ -117,6 +117,8 @@ export const HELLO_WAIT_MS = 3_000;
 /** Shown on STATUS while the link is up: the port answered, but not as a Hardware Dog. */
 export const NO_HARDWARE_DOG = 'NO HARDWARE DOG ON THIS PORT';
 const HYSTERESIS_V = 0.05;
+/** Two sample periods at 50 Hz: how early a disconnect may come before the first low sample, when the meter does not say its rate. */
+const EARLY_DETACH_MS = 50;
 const SERIAL_LINES = 500;
 
 /**
@@ -817,6 +819,8 @@ export class System {
           this.facts.uart.baud = f.baud;
           this.facts.uart.rxAtBaud = 0;
           this.facts.uart.framingAtBaud = [];
+          this.facts.uart.errorsAtBaud = 0;
+          this.facts.uart.garbledAtBaud = 0;
         }
         if (changed) this.log(t, 'UART', 'INFO', `${f.port} configured`, `${f.baud} ${f.bits}${f.parity[0]}${f.stop}`);
         break;
@@ -920,6 +924,27 @@ export class System {
     if (list.length > limit) list.splice(0, list.length - limit);
   }
 
+  /**
+   * A rail that collapses fast can drop the target off USB before the next
+   * sample shows the sag (samples are periodic, a disconnect is an event).
+   * A disconnect within two sample periods before the first low sample of
+   * a drop belongs to that drop, and is said so. Same clock only: across
+   * two Dogs, their alignment decides (during()).
+   */
+  private claimEarlyDetaches(t: number, v: number): void {
+    const ahead = this.meter && this.meter.rate_hz > 0 ? Math.min(200, 2000 / this.meter.rate_hz) : EARLY_DETACH_MS;
+    const drop = this.facts.drops.at(-1)!;
+    for (let n = this.facts.detaches.length - 1; n >= 0; n--) {
+      const d = this.facts.detaches[n]!;
+      if (t - d.t > ahead) break;
+      if (d.t > t || d.dropAt !== null || d.undetermined !== undefined || d.clk?.dog !== this.clk?.dog) continue;
+      d.dropAt = t;
+      d.dropSeq = drop.seq;
+      d.dropMin = v;
+      this.log(t, 'RULE', 'INFO', 'disconnect just before the first low sample', `${Math.round(t - d.t)} ms before it, within two sample periods (${Math.round(ahead)} ms): counted with this drop`);
+    }
+  }
+
   private onPower(t: number, v: number, i: number): void {
     this.powerSeen = true;
     const p = this.power;
@@ -948,7 +973,9 @@ export class System {
         p.lastDropVoltage = v;
         p.dropCount++;
         this.remember(this.facts.drops, { seq: this.seq, start: t, end: null, min: v, ...this.stamp() });
+        this.facts.seen.drops++;
         this.log(t, 'POWER', 'WARN', 'voltage drop', `${volts(v)} < ${volts(s.undervoltageThreshold)}`);
+        this.claimEarlyDetaches(t, v);
       } else if (v < this.dropMin) {
         this.dropMin = v;
         p.lastDropVoltage = v;
@@ -1049,6 +1076,7 @@ export class System {
     const rel = below === null ? 'OUT' : during(started!, below, here, window);
     const correlated = rel === 'IN';
     const m = below === null ? 0 : margin(below, here);
+    this.facts.seen.detaches++;
     this.remember(this.facts.detaches, {
       seq: this.seq,
       t,
@@ -1089,6 +1117,8 @@ export class System {
     // A line that does not read as text (a console read by this browser) is the same clue.
     if (kind === 'framing') this.remember(this.facts.uart.framingAtBaud, { t, seq: this.seq });
     if (kind === 'garbled') this.remember(this.facts.uart.framingAtBaud, { t, seq: this.seq, kind: 'garbled' });
+    if (kind === 'framing' || kind === 'garbled') this.facts.uart.errorsAtBaud++;
+    if (kind === 'garbled') this.facts.uart.garbledAtBaud++;
     // Rule: repeated framing errors -> baud mismatch is a hypothesis, not a fact.
     if (kind !== 'framing' && kind !== 'garbled') return;
     this.framingErrorTimes = this.framingErrorTimes.filter((x) => t - x < 5000);
@@ -1232,9 +1262,10 @@ export class System {
     );
   }
 
-  private pushSerial(line: SerialState['lines'][number]): void {
+  private serialSeq = 0;
+  private pushSerial(line: Omit<SerialState['lines'][number], 'id'>): void {
     const lines = this.serial.lines;
-    lines.push(line);
+    lines.push({ id: ++this.serialSeq, ...line });
     if (lines.length > SERIAL_LINES) lines.splice(0, lines.length - SERIAL_LINES);
   }
 
@@ -1305,6 +1336,12 @@ export class System {
     this.recorder?.add({ at, dog, cmd });
     if (cmd.cmd === 'time') this.pack?.sent(dog, cmd.id, at);
     this.transport!.send(cmd, dog);
+  }
+
+  /** A part of the interface failed to draw: on the timeline, so the session file keeps it. */
+  uiFailed(where: string, detail: string): void {
+    this.log(this.now(), 'SYS', 'FAIL', `${where.toLowerCase()} could not be drawn`, detail);
+    this.changed();
   }
 
   /** A source could not be opened: said where it shows (STATUS), not only in the trace. */

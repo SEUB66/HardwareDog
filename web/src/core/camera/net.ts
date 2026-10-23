@@ -163,7 +163,10 @@ export class CameraNet {
     }
     this.error = null;
     // Simulated and physical devices never share a list (nor a report).
-    if ([...this.model.devices.values()].some((d) => d.origin !== this.origin)) this.model.clear();
+    if ([...this.model.devices.values()].some((d) => d.origin !== this.origin)) {
+      this.model.clear();
+      this.notes.clear();
+    }
     this.run++;
     this.op = newOp('camera.net');
     this.bus.emit({ source: 'CAMERA', tool: 'camera.net', type: 'op.start', op: this.op, severity: 'INFO', message: `network discovery on ${iface.name} ${iface.network}`, origin: this.origin, params: { kind: 'search', iface: iface.name, network: iface.network, methods: this.methods.join(' '), say: 'cam.searching' } });
@@ -210,22 +213,33 @@ export class CameraNet {
     this.changed();
   }
 
+  /** What was said about the device at `key`, if it is still that device (same MAC when both are known). */
   note(key: string): DeviceNote {
-    return this.notes.get(key) ?? { known: false, label: '', confirmation: '', ble: [] };
+    const n = this.notes.get(key);
+    const mac = this.model.devices.get(key)?.mac ?? null;
+    if (!n || (n.mac && mac && n.mac.toLowerCase() !== mac.toLowerCase())) return { known: false, label: '', confirmation: '', ble: [] };
+    return n;
+  }
+
+  /** The notes that still hold, per device on the list: what a report may use. */
+  liveNotes(): Map<string, DeviceNote> {
+    return new Map([...this.model.devices.keys()].filter((k) => this.notes.has(k)).map((k) => [k, this.note(k)]));
   }
 
   /** What a person says about a device: kept apart from the observations, and on the timeline. */
   setNote(key: string, patch: Partial<DeviceNote>): void {
-    const n = { ...this.note(key), ...patch };
+    const n = { ...this.note(key), ...patch, mac: this.model.devices.get(key)?.mac ?? null };
     this.notes.set(key, n);
     const d = this.model.devices.get(key);
     this.bus.emit({ source: 'USER', tool: 'camera.net', type: 'note', severity: 'INFO', message: `${d?.ip ?? key}: ${n.known ? `known (${n.label || 'no label'})` : 'not marked known'}${n.confirmation ? ` · confirmed: ${n.confirmation}` : ''}${n.ble.length ? ` · linked to ${n.ble.length} BLE device(s) by hand` : ''}`, origin: this.origin, device: d?.ip ?? key, params: { declared: true } });
     this.changed();
   }
 
+  /** The results and what was said about them go together: notes never outlive the devices they were about. */
   clear(): void {
     if (this.busy) return;
     this.model.clear();
+    this.notes.clear();
     this.lost = 0;
     this.status = null;
     this.state = 'IDLE';

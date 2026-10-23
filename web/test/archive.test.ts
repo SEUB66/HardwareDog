@@ -204,6 +204,25 @@ describe('archive failures', () => {
     expect(text).not.toContain('"mark":"c"');
   });
 
+  it('a session that outgrows the largest file the reader opens is finalized intact, and that is said', async () => {
+    const archive = new SessionArchive(memoryBackend());
+    const errors: string[] = [];
+    const rec = new SessionRecorder(header(T0, 'WEB SERIAL'));
+    const maxBytes = 1024 * 1024 + 50_000; // 1 MiB kept for the last line, its seal and the footer
+    const writer = archive.record(rec, undefined, { flushMs: null, onError: (e) => errors.push(e), maxBytes });
+    for (let k = 0; k < 200; k++) rec.add({ at: T0 + k, mark: `${k} `.padEnd(900, 'x') });
+    await writer.stop();
+    const text = await archive.text(writer.meta.key);
+    expect(new TextEncoder().encode(text).length).toBeLessThan(maxBytes);
+    const file = parseHdlog(text);
+    expect(file.integrity!.status).toBe('VERIFIED');
+    expect(file.entries.length).toBeGreaterThan(40);
+    expect(file.entries.length).toBeLessThan(200);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/reached 1 MiB, the largest file Hardware Dog opens: it is finalized and readable/);
+    expect(writer.meta.closed).toBe('NORMAL');
+  });
+
   it('falls back to memory when IndexedDB is not available', async () => {
     expect(await idbBackend(null)).toBeNull();
     const refusing = { open: () => { throw new DOMException('storage disabled', 'SecurityError'); } } as unknown as IDBFactory;

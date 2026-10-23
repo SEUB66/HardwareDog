@@ -2,9 +2,10 @@
  * HARDWARE DOG / CAMERA SNIFFER / BLUETOOTH AND USB CLUES
  *
  * Bluetooth: what Bluetooth Lab observes, read for this inspection. An
- * unknown Bluetooth device is not a camera, and a location tracker is not
- * a camera either: the only signatures here name trackers, from documented
- * sources, versioned. Everything else stays "BLE device not identified".
+ * unknown Bluetooth device, or a tracker signature, is not counted as a
+ * camera clue, and not excluded either: the only signatures here name
+ * trackers, from documented sources, versioned, and a signature is bytes
+ * anyone can send. Everything else stays "BLE device not identified".
  * Wi-Fi and Bluetooth observations are never merged on their own.
  *
  * USB: the interfaces a plugged device declares, by class. A video
@@ -31,25 +32,25 @@ const hasService = (d: BleDevice, short: string) => d.services.some((u) => u.toU
 export const BLE_SIGNATURES: BleSignature[] = [
   {
     id: 'dult',
-    label: 'Location tracker (DULT advertisement): not a camera',
+    label: 'Location tracker (DULT advertisement): not counted as a camera clue',
     source: 'Bluetooth SIG assigned 16-bit UUID 0xFCB2 "Location Enabled Advertisement Service" (bundled Nordic numbers database), used by the IETF DULT accessory protocol.',
     match: (d) => hasService(d, 'FCB2'),
   },
   {
     id: 'apple-find-my',
-    label: 'Apple Find My offline-finding beacon (a tracker or an Apple device): not a camera',
+    label: 'Apple Find My offline-finding beacon (an AirTag, AirPods, or an offline iPhone, iPad or Mac): not counted as a camera clue, not excluded either',
     source: 'Manufacturer data of company 0x004C (Apple) starting with type 0x12, as documented by Heinrich et al., "Who Can Find My Devices?", PETS 2021.',
     match: (d) => d.manufacturer.get(0x004c)?.[0] === 0x12,
   },
   {
     id: 'tile',
-    label: 'Tile tracker: not a camera',
+    label: 'Tile tracker: not counted as a camera clue',
     source: 'Bluetooth SIG 16-bit member UUIDs 0xFEED and 0xFEEC, assigned to Tile, Inc.',
     match: (d) => hasService(d, 'FEED') || hasService(d, 'FEEC'),
   },
   {
     id: 'samsung-smarttag',
-    label: 'Samsung SmartTag (offline finding): not a camera',
+    label: 'Samsung SmartTag (offline finding): not counted as a camera clue',
     source: 'Bluetooth SIG 16-bit member UUID 0xFD5A, assigned to Samsung Electronics Co., Ltd.',
     match: (d) => hasService(d, 'FD5A'),
   },

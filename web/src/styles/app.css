@@ -914,6 +914,12 @@ select {
   color: var(--pink);
 }
 
+/* Reading back up: new lines wait below, said, until the operator goes back down. */
+.console-new {
+  display: block;
+  margin: 6px 0 0 auto;
+}
+
 .console-input {
   display: flex;
   gap: 8px;
