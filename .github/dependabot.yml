@@ -1,0 +1,8 @@
+# The actions are pinned by commit; Dependabot proposes the new commit (with
+# its tag in the comment) when an action releases, as a reviewed pull request.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -3,6 +3,12 @@ name: release
 # A tag dogd-vX.Y.Z publishes dogd for Kali, Debian and Ubuntu: one .deb
 # per architecture, the bare binaries, and SHA256SUMS. Built on Ubuntu
 # 22.04 (glibc 2.35), so the packages run there and on anything newer.
+#
+# Only a commit already on main is published, and only after its tests pass
+# here. Actions are pinned by commit (a moved tag runs nothing new in the job
+# that writes releases). Every published file gets a signed build provenance
+# (Sigstore, GitHub attestations): `gh attestation verify FILE --repo
+# SEUB66/HardwareDog` says which workflow, commit and tag built it.
 on:
   push:
     tags: ['dogd-v*']
@@ -11,7 +17,28 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: the tagged commit is on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "$GITHUB_REF_NAME is not a commit of main: not published"; exit 1; }
+      - name: format
+        working-directory: dogd
+        run: cargo fmt --check
+      - name: lint
+        working-directory: dogd
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: unit tests
+        working-directory: dogd
+        run: cargo test --locked
+
   package:
+    needs: test
     strategy:
       fail-fast: true
       matrix:
@@ -22,7 +49,7 @@ jobs:
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: the tag is the version in Cargo.toml
         run: |
           want="dogd-v$(sed -n 's/^version = "\(.*\)"/\1/p' dogd/Cargo.toml | head -1)"
@@ -46,7 +73,7 @@ jobs:
         run: |
           v="${GITHUB_REF_NAME#dogd-v}"
           tar -C dogd/target/release -czf "dist/dogd-${v}-linux-${{ matrix.arch }}.tar.gz" dogd
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dogd-${{ matrix.arch }}
           path: dist/*
@@ -56,15 +83,22 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: dist
           merge-multiple: true
       - name: checksums
         working-directory: dist
         run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      # Signed where it was built: each file listed in SHA256SUMS.
+      - name: build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/SHA256SUMS
       - name: release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -74,6 +108,7 @@ jobs:
 
           ```sh
           sha256sum --check --ignore-missing SHA256SUMS
+          gh attestation verify hwdog-dogd_*_amd64.deb --repo SEUB66/HardwareDog   # optional: who built it, from which commit
           sudo apt install ./hwdog-dogd_*_amd64.deb
           dogd serve --source host
           ```
