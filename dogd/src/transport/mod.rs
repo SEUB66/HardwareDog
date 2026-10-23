@@ -177,14 +177,31 @@ impl Link {
     }
 }
 
+/// A TCP source that does not answer in this long is said to be unreachable,
+/// instead of waiting out about two minutes of SYN retries.
+const TCP_CONNECT: Duration = Duration::from_secs(5);
+
+/// A Wi-Fi Hardware Dog that loses power or leaves the network sends no FIN:
+/// without probes its link would read ONLINE forever. After 10 s of
+/// silence, a probe every 5 s; 3 unanswered and the socket fails, so the
+/// link goes LOST (about 25 s).
+fn keepalive(s: &tokio::net::TcpStream) -> std::io::Result<()> {
+    let ka = socket2::TcpKeepalive::new().with_time(Duration::from_secs(10));
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+    let ka = ka.with_interval(Duration::from_secs(5)).with_retries(3);
+    socket2::SockRef::from(s).set_tcp_keepalive(&ka)
+}
+
 async fn open(source: &Source) -> Result<(Reader, Writer), String> {
     match source {
         Source::None => Err("no source".into()),
         Source::Tcp(addr) => {
-            let s = tokio::net::TcpStream::connect(addr)
+            let s = tokio::time::timeout(TCP_CONNECT, tokio::net::TcpStream::connect(addr))
                 .await
+                .map_err(|_| format!("tcp {addr}: no answer within {} s", TCP_CONNECT.as_secs()))?
                 .map_err(|e| format!("tcp {addr}: {e}"))?;
             let _ = s.set_nodelay(true);
+            let _ = keepalive(&s);
             let (r, w) = s.into_split();
             Ok((Box::new(r), Box::new(w)))
         }
@@ -206,6 +223,29 @@ async fn open(source: &Source) -> Result<(Reader, Writer), String> {
                 .map_err(|e| format!("serial {path}: {e}"))?;
             let (r, w) = tokio::io::split(port);
             Ok((Box::new(r), Box::new(w)))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A peer that goes silent without closing is probed, so its link can be lost.
+    #[tokio::test]
+    async fn a_tcp_source_probes_a_silent_peer() {
+        let peer = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let s = tokio::net::TcpStream::connect(peer.local_addr().unwrap())
+            .await
+            .unwrap();
+        keepalive(&s).unwrap();
+        let r = socket2::SockRef::from(&s);
+        assert!(r.keepalive().unwrap());
+        #[cfg(target_os = "linux")]
+        {
+            assert_eq!(r.tcp_keepalive_time().unwrap(), Duration::from_secs(10));
+            assert_eq!(r.tcp_keepalive_interval().unwrap(), Duration::from_secs(5));
+            assert_eq!(r.tcp_keepalive_retries().unwrap(), 3);
         }
     }
 }

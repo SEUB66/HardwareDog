@@ -97,14 +97,14 @@ async fn serve(mut cfg: Config) -> i32 {
     let mut links = Vec::new();
     for (n, (source, origin)) in sources.into_iter().enumerate() {
         let (seen, found) = (store.clone(), discovery.clone());
-        // This computer is not a board: it has no identity to remember.
-        let is_host = source == config::Source::Host;
+        // This computer has no identity to remember; a simulator's is invented.
+        let remember = config::remembers_identity(&source, origin);
         let link = transport::Link::new(
             &format!("D{}", n + 1),
             &source,
             origin,
             move |hello, port| {
-                if is_host {
+                if !remember {
                     return;
                 }
                 seen.saw_device(hello, port);

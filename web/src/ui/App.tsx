@@ -342,13 +342,30 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     download(`hwdog-usb-${d.vid.toString(16)}-${d.pid.toString(16)}.json`, 'application/json', JSON.stringify(d, null, 2));
   };
 
+  /**
+   * Source changes, one at a time, in order: each closes the session that
+   * is really current (a ref, never a stale closure), so two quick clicks
+   * or a slow dogd can never leave a session running unseen.
+   */
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const switching = useRef<Promise<void>>(Promise.resolve());
+  /** Bumped by every source request: one that resolves after a newer one is dropped. */
+  const switchGen = useRef(0);
   /** Every source change is a new session: data never mixes. Null: back to NOT CONNECTED. */
-  const start = async (transport: Transport | null) => {
+  const start = (transport: Transport | null): Promise<void> => {
+    switchGen.current++;
+    const run = switching.current.then(() => startNow(transport));
+    switching.current = run.catch(() => {});
+    return run;
+  };
+  const startNow = async (transport: Transport | null) => {
+    const current = sessionRef.current;
     await system.disconnect();
-    await session.writer?.stop();
+    await current.writer?.stop();
     // Through dogd, the finished recording also goes to dogd's local store.
-    if (viaDogd(session.transport) && session.writer && !session.writer.error) {
-      const w = session.writer;
+    if (viaDogd(current.transport) && current.writer && !current.writer.error) {
+      const w = current.writer;
       void archive
         .text(w.meta.key)
         .then((text) => dogdStore(w.meta.header.recording, text))
@@ -356,6 +373,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     }
     setPalette(false);
     const next = newSession(transport, archive);
+    sessionRef.current = next;
     setSession(next);
     setScreen(transport instanceof ReplayTransport ? 'TRACE' : 'STATUS');
     setTraceOnly(null);
@@ -363,7 +381,15 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     void archive.prune(next.writer ? [next.writer.meta.key] : []).then(refreshSessions, () => {});
   };
 
-  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario: ScenarioId = DEFAULT_SCENARIO) => {
+  /** A source picked or reached after a newer request: closed, never started. */
+  const stale = async (gen: number, transport: Transport): Promise<boolean> => {
+    if (gen === switchGen.current) return false;
+    await transport.close().catch(() => {});
+    return true;
+  };
+
+  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario: ScenarioId = DEFAULT_SCENARIO, starting?: (t: Transport) => void) => {
+    const gen = ++switchGen.current;
     let transport: Transport;
     if (kind === 'WEB SERIAL') {
       // the browser's port chooser: the companion waits with the person, nothing pretended
@@ -391,6 +417,8 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     } else {
       transport = simulator(scenario);
     }
+    if (await stale(gen, transport)) return;
+    starting?.(transport);
     await start(transport);
   };
 
@@ -399,15 +427,19 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
    * asking for the checks: the watch starts (ACTIVE, said on the timeline),
    * and NET is the screen to read.
    */
-  const wantNetwork = useRef(false);
+  // The checks were asked for this transport only: a failed attempt or
+  // another source never inherits them.
+  const wantNetwork = useRef<Transport | null>(null);
   const openNetwork = async () => {
-    wantNetwork.current = true;
-    await switchTransport('DOGD');
+    wantNetwork.current = null;
+    await switchTransport('DOGD', DEFAULT_SCENARIO, (t) => (wantNetwork.current = t));
   };
   // The link opens during the start: the watch begins once it is online.
   useEffect(() => {
     if (booting || !wantNetwork.current) return;
-    wantNetwork.current = false;
+    const wanted = wantNetwork.current;
+    wantNetwork.current = null;
+    if (session.transport !== wanted) return;
     if (system.link !== 'ONLINE' || !system.observes('net')) return;
     if (!system.netWatch) system.watchNet(10, 'example.com', 'example.com');
     setScreen('NET');
@@ -415,6 +447,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
 
   /** Any board's serial console, read by this browser: no probe needed. Its console is the screen to watch. */
   const openConsole = async () => {
+    const gen = ++switchGen.current;
     let transport: ConsoleTransport;
     const op = lab.device.begin('device.console', 'connect', 'choosing a serial port', 'PHYSICAL', true);
     try {
@@ -425,6 +458,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       system.mark(`serial console: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    if (await stale(gen, transport)) return;
     await start(transport);
     setScreen('SERIAL');
   };
