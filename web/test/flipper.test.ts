@@ -137,6 +137,20 @@ describe('Flipper file formats', () => {
     expect(compareParsed(a, parseFlipperFile(DEMO_FILES['/ext/lfrfid/demo_badge.rfid']!)).comparable).toBe(false);
   });
 
+  it('pairs IR signals by name and rank: a second POWER is compared too, and timings value by value', () => {
+    const ir = (...signals: string[]) => parseFlipperFile(`Filetype: IR signals file\nVersion: 1\n${signals.join('#\n')}`);
+    const parsed = (name: string, command: string) => `name: ${name}\ntype: parsed\nprotocol: NEC\naddress: 04 00 00 00\ncommand: ${command}\n`;
+    const raw = (name: string, data: string) => `name: ${name}\ntype: raw\nfrequency: 38000\nduty_cycle: 0.330000\ndata: ${data}\n`;
+    const a = ir(parsed('POWER', '08 00 00 00'), parsed('POWER', '09 00 00 00'));
+    const b = ir(parsed('POWER', '08 00 00 00'), parsed('POWER', '0A 00 00 00'));
+    expect(compareParsed(a, b).diffs).toEqual([{ where: 'signal POWER #2 command', a: '09 00 00 00', b: '0A 00 00 00' }]);
+    const c = ir(parsed('POWER', '08 00 00 00'));
+    expect(compareParsed(a, c).diffs.map((d) => d.where)).toEqual(['signals named POWER', 'signal POWER #2']);
+    // same count, same total, different values: a difference all the same
+    const d = compareParsed(ir(raw('VOL', '100 200 300 400')), ir(raw('VOL', '200 100 300 400')));
+    expect(d.diffs).toEqual([{ where: 'signal VOL timings value 1', a: '100 us', b: '200 us' }]);
+  });
+
   it('refuses malformed and binary files with the line', () => {
     expect(() => parseFlipperFile('hello')).toThrow(FormatError);
     expect(() => parseFlipperFile(Uint8Array.of(0, 1, 2, 0xff))).toThrow('UTF-8');

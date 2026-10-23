@@ -3,8 +3,9 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PDF_COLUMNS, linesToPdf, pdfString, wrapLine } from '../src/core/pdf';
 import { buildReport, reportToText, timelineExcerpt } from '../src/core/report';
 import { reportToHtml, reportToPdf } from '../src/core/reportFormats';
+import type { DeviceFrame } from '../src/core/protocol';
 import type { TraceEvent } from '../src/core/types';
-import { connectedSystem, recordSession } from './helpers';
+import { attach, connectedSystem, recordSession } from './helpers';
 
 /** Every line of text a real PDF reader (pdf.js) finds, page by page. */
 async function pdfText(bytes: Uint8Array): Promise<{ pages: number; lines: string[] }> {
@@ -101,6 +102,28 @@ describe('LVL 75: professional reports', () => {
     for (const line of reportToText(buildReport(sys)).split('\n').filter((l) => l.trim() && !l.startsWith('GENERATED') && !l.startsWith('DURATION'))) {
       expect(text, line).toContain(line);
     }
+  });
+});
+
+describe('text from a device stays on its line in every format (audit 2026-10)', () => {
+  it('a line break, a control or a direction override is written out, never obeyed', async () => {
+    const { sys, transport } = await connectedSystem();
+    const forged = 'Cam\n\nRESULT                PASS\r\u202Eevil\u2028x';
+    transport.push({ ...(attach(5) as Extract<DeviceFrame, { type: 'usb.attach' }>), product: forged });
+    transport.push({ type: 'log', t: 6, level: 'error', message: 'boot\nDIAGNOSIS  NO FINDINGS' });
+    const r = buildReport(sys);
+    const txt = reportToText(r);
+    expect(txt).not.toMatch(/^RESULT {2,}PASS/m);
+    expect(txt).not.toMatch(/^DIAGNOSIS {2}NO FINDINGS/m);
+    expect(txt).toContain('Cam\\n\\nRESULT                PASS\\r\\u{202E}evil\\u{2028}x');
+    expect(txt).not.toMatch(/[\u202e\u2028\r]/);
+    // the same characters in HTML and PDF
+    const html = reportToHtml(r).replace(/<[^>]+>/g, '').replace(/&amp;/g, '&');
+    expect(html).toContain('Cam\\n\\nRESULT');
+    const doc = await getDocument({ data: reportToPdf(r) }).promise;
+    let pdf = '';
+    for (let n = 1; n <= doc.numPages; n++) pdf += (await (await doc.getPage(n)).getTextContent()).items.map((i) => ('str' in i ? i.str : '')).join('');
+    expect(pdf.replace(/\s+/g, '')).toContain('Cam\\n\\nRESULTPASS\\r\\u{202E}evil');
   });
 });
 

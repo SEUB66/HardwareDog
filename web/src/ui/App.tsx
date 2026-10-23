@@ -35,6 +35,7 @@ import { browserLang } from '../core/lab/rules';
 import { SimBanner } from './components/SimBanner';
 import { Tour } from './Tour';
 import { WhatsNew } from './WhatsNew';
+import { Boundary } from './components/Boundary';
 import { CameraSniffer, type CameraTool } from './camera/CameraSniffer';
 import { isNewScreen } from '../core/features';
 import { Tag } from './components/Tag';
@@ -158,6 +159,10 @@ function download(name: string, type: string, content: string | Uint8Array) {
 
 const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+/** Space on these is theirs (press, open, scroll), not the trace's. */
+const ownsSpace = (el: EventTarget | null) => el instanceof HTMLElement && el.matches('button, a, summary, [role="button"], [tabindex]');
+/** A dialog above the screen (what's new, the tour, a poster full screen): the keyboard is its own. */
+const dialogOpen = () => document.querySelector('[role="dialog"][aria-modal="true"]:not(.palette)') !== null;
 
 /** hwdog-HD-20261001-011817.hdlog: the session id, down to the second. */
 const hdlogName = (h: SessionHeader) => `hwdog-${h.id}${String(new Date(h.startedAt).getSeconds()).padStart(2, '0')}.hdlog`;
@@ -585,9 +590,11 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   useEffect(() => {
     if (booting) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const ctrl = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (ctrl && key === 'k') {
+      const dialog = dialogOpen();
+      if (ctrl && key === 'k' && !dialog) {
         e.preventDefault();
         setPalette(!paletteOpen.current);
         return;
@@ -601,11 +608,14 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         }
         return;
       }
+      if (dialog) return;
       if (e.key === 'Escape') {
         if (isTyping(e.target)) (e.target as HTMLElement).blur();
         else back();
         return;
       }
+      // Typing: the keys are the field's (Ctrl+L, Ctrl+E and digits included).
+      if (isTyping(e.target)) return;
       if (ctrl && key === 'e') {
         e.preventDefault();
         exportReport('txt');
@@ -616,7 +626,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         system.clearTrace();
         return;
       }
-      if (isTyping(e.target) || ctrl || e.altKey) return;
+      if (ctrl || e.altKey) return;
       const fn: Record<string, Screen> = { F1: 'HELP', F2: 'TRACE', F3: 'PROBE', F4: 'REPORT' };
       if (fn[e.key]) {
         e.preventDefault();
@@ -627,7 +637,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         navigate(DIGIT_SCREENS[Number(e.key) - 1]!);
         return;
       }
-      if (e.key === ' ' && !(e.target instanceof HTMLButtonElement) && !(e.target instanceof HTMLAnchorElement)) {
+      if (e.key === ' ' && !ownsSpace(e.target)) {
         e.preventDefault();
         system.toggleTrace();
       }
@@ -884,7 +894,11 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
           onConnect={() => navigate('SETUP')}
           onStop={demoOf(session.transport) ? () => void start(null) : null}
         />}
-        {!home && body}
+        {!home && (
+          <Boundary key={screen} where={screen} onError={(detail) => system.uiFailed(screen, detail)}>
+            {body}
+          </Boundary>
+        )}
       </main>
 
       <footer class="foot">
@@ -908,20 +922,24 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       </footer>
 
       {/* One TV: floating, it follows every section; docked, it sits in the page's place for it (home, Flipper Lab, Camera Sniffer), elsewhere a small tab. */}
-      <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
+      <Boundary where="TV" quiet onError={(detail) => system.uiFailed('TV', detail)}>
+        <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
+      </Boundary>
 
       {touring && <Tour onEnd={() => setTouring(false)} />}
       {whatsNew && !touring && (
-        <WhatsNew
-          lab={lab}
-          placement={placement}
-          reducedMotion={reducedMotion}
-          onClose={() => setWhatsNew(false)}
-          onGo={(s) => {
-            setWhatsNew(false);
-            navigate(s);
-          }}
-        />
+        <Boundary where="WHAT'S NEW" quiet onError={(detail) => system.uiFailed("WHAT'S NEW", detail)}>
+          <WhatsNew
+            lab={lab}
+            placement={placement}
+            reducedMotion={reducedMotion}
+            onClose={() => setWhatsNew(false)}
+            onGo={(s) => {
+              setWhatsNew(false);
+              navigate(s);
+            }}
+          />
+        </Boundary>
       )}
 
       {palette && (

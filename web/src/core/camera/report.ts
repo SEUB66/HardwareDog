@@ -18,7 +18,8 @@
 
 import type { Lang } from '../lab/rules';
 import { family } from './catalog';
-import { bleLabel, type BleClue, type UsbClue } from './clues';
+import type { BleDevice } from '../ble/model';
+import { bleClues, bleLabel, type BleClue, type UsbClue } from './clues';
 import { ITEM_STATUSES, priorityWhy, STATUS_LABEL, type Inspection } from './inspection';
 import { classify, namesOf, NOT_ESTABLISHED, STATE_LABEL, STATE_ORDER, type DeviceNote, type NetDevice, type NetState } from './model';
 
@@ -27,7 +28,8 @@ export interface ReportInput {
   devices: NetDevice[];
   notes: Map<string, DeviceNote>;
   network: { iface: string | null; network: string | null; methods: string[]; state: string; detail: string; origin: 'PHYSICAL' | 'SIMULATED'; ran: boolean; lost: number; scanNotes: string[] };
-  ble: { ran: boolean; source: string | null; origin: string; clues: BleClue[] };
+  /** ran: a live scan started during this inspection. note: what is on screen but not counted (a replay, an older scan). */
+  ble: { ran: boolean; source: string | null; origin: string; clues: BleClue[]; note?: string };
   usb: { ran: boolean; supported: boolean; clues: UsbClue[] };
   generated: number;
   lang: Lang;
@@ -40,8 +42,9 @@ export interface ReportOptions {
   hidePersonal: boolean;
 }
 
-export const CONCLUSION: Record<'none' | 'some', Record<Lang, string>> = {
+export const CONCLUSION: Record<'none' | 'some' | 'nothing', Record<Lang, string>> = {
   none: { en: 'No clue identified with the methods used.', fr: 'Aucun indice identifié avec les méthodes utilisées.' },
+  nothing: { en: 'Nothing was examined: no conclusion.', fr: 'Rien n’a été examiné : aucune conclusion.' },
   some: { en: 'Clues to examine were found with the methods used (see FACTS and TO VERIFY).', fr: 'Des indices à examiner ont été relevés avec les méthodes utilisées (voir FAITS et À VÉRIFIER).' },
 };
 
@@ -55,7 +58,7 @@ export const LIMITS = [
   'A camera that records to a memory card, without a network, or that is switched off, can escape every scan.',
   'Network discovery only sees what devices announce on the chosen network: another network (guest Wi-Fi isolation, a mobile connection) is invisible. No answer excludes nothing.',
   'Service discovery is not traffic capture: nothing here observed what devices send.',
-  'An unidentified Bluetooth device is not a camera; a tracker is not a camera.',
+  'An unidentified Bluetooth device, or a tracker signature, is not counted as a camera clue; it is not excluded either (an offline iPhone sends the same Apple signature as an AirTag).',
   'An empty USB result excludes nothing: a camera charger declares no data interface.',
   'A visual inspection depends on what can be seen safely: mains devices, fixed equipment and safety detectors were not opened.',
 ];
@@ -114,6 +117,36 @@ export interface Report {
   text: string;
 }
 
+/** What Bluetooth Lab holds, as far as a report needs it. */
+export interface BleView {
+  sourceKind: string | null;
+  scanStartedAt: number | null;
+  origin: string;
+  state: string;
+  replayOf: string | null;
+  replayIntegrity: string | null;
+  replaySimulated: boolean;
+  model: { devices: Map<string, BleDevice> };
+}
+
+/**
+ * Bluetooth facts are an inspection's only from a live scan started
+ * during it: a replay, or an older scan still on screen, is said and never
+ * counted as observed here.
+ */
+export function bleForReport(ble: BleView, inspectionStarted: number): ReportInput['ble'] {
+  if (ble.sourceKind !== 'REPLAY' && ble.scanStartedAt !== null && ble.scanStartedAt >= inspectionStarted) {
+    return { ran: true, source: ble.sourceKind, origin: ble.origin, clues: bleClues(ble.model.devices.values()) };
+  }
+  const note =
+    ble.state === 'REPLAY' && ble.replayOf
+      ? `Bluetooth Lab shows a replay of ${ble.replayOf} (${ble.replayIntegrity ?? 'integrity unknown'}${ble.replaySimulated ? ', SIMULATED' : ''}): not observed during this inspection, not counted.`
+      : ble.model.devices.size
+        ? 'Bluetooth Lab shows a scan started before this inspection: not counted.'
+        : null;
+  return { ran: false, source: null, origin: 'PHYSICAL', clues: [], ...(note ? { note } : {}) };
+}
+
 export function buildReport(input: ReportInput, options: ReportOptions): Report {
   const m = new Masker(options.maskNetwork);
   // What a person typed can hold an address or a name too: scrubbed like the rest.
@@ -140,8 +173,16 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   const usbVideo = input.usb.clues.filter((u) => u.video);
   const clues = clueDevices.length + clueItems.length + usbVideo.length;
   const todoItems = items.filter(({ item }) => item.status === 'TO_EXAMINE' || item.status === 'NEEDS_CHECK' || item.status === 'NOT_VERIFIED');
-  const todoDevices = devices.filter(({ d, c }) => ['VIDEO_COMPATIBLE', 'MODEL_IDENTIFIED', 'MEDIA_SERVICE', 'UNDETERMINED'].includes(c.state) && !input.notes.get(d.key)?.known);
-  const conclusion = clues ? CONCLUSION.some[input.lang] : todoItems.length + todoDevices.length ? conclusionOpen(todoItems.length + todoDevices.length, input.lang) : CONCLUSION.none[input.lang];
+  // A device that announced nothing is still to identify: most cloud cameras announce nothing.
+  const todoDevices = devices.filter(({ d, c }) => ['VIDEO_COMPATIBLE', 'MODEL_IDENTIFIED', 'MEDIA_SERVICE', 'UNDETERMINED', 'DISCOVERED'].includes(c.state) && !input.notes.get(d.key)?.known);
+  const examined = input.network.ran || input.ble.ran || input.usb.ran || items.some(({ item }) => item.status !== 'TO_EXAMINE');
+  const conclusion = clues
+    ? CONCLUSION.some[input.lang]
+    : todoItems.length + todoDevices.length
+      ? conclusionOpen(todoItems.length + todoDevices.length, input.lang)
+      : examined
+        ? CONCLUSION.none[input.lang]
+        : CONCLUSION.nothing[input.lang];
 
   L.push('# HARDWARE DOG · CAMERA SNIFFER · REPORT', '');
   L.push(`Generated: ${new Date(input.generated).toISOString()}`);
@@ -158,7 +199,8 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   );
   if (input.network.lost) L.push(`  - ${input.network.lost} observation(s) were dropped by the engine (buffer full).`);
   for (const n of input.network.scanNotes) L.push(`  - ${m.scrub(n)}`);
-  L.push(input.ble.ran ? `- Bluetooth: ${md(input.ble.source ?? '?')} · ${input.ble.clues.length} device(s) observed${input.ble.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}` : '- Bluetooth: not scanned');
+  L.push(input.ble.ran ? `- Bluetooth: ${md(input.ble.source ?? '?')} · ${input.ble.clues.length} device(s) observed${input.ble.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}` : '- Bluetooth: not scanned during this inspection');
+  if (input.ble.note) L.push(`  - ${md(input.ble.note)}`);
   L.push(input.usb.ran ? (input.usb.supported ? `- USB: ${input.usb.clues.length} device(s) read` : '- USB: not readable on this system') : '- USB: not read');
   L.push(`- Physical inspection: ${insp.rooms.length} room(s), ${items.length} object(s), ${items.filter(({ item }) => item.status !== 'TO_EXAMINE').length} examined`);
   L.push('');
@@ -178,7 +220,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   const trackers = input.ble.clues.filter((c) => c.signature);
   for (const c of trackers) L.push(`- Bluetooth ${m.alias('ble', c.id)}: ${bleLabel(c)} (${c.signature!.source})`);
   const unknownBle = input.ble.clues.length - trackers.length;
-  if (unknownBle) L.push(`- Bluetooth: ${unknownBle} device(s) not identified (no reliable signature; not a camera by default).`);
+  if (unknownBle) L.push(`- Bluetooth: ${unknownBle} device(s) not identified (no reliable signature: not counted as a camera clue, not excluded either).`);
   for (const u of input.usb.clues) L.push(`- USB ${md(u.id)} ${md(u.name)} at ${md(u.port)}: interfaces ${md(u.interfaces.join(', '))}`);
   L.push('');
 

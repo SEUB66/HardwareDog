@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutAnnotations, timeTicks, type AnnotationInput, type Bounds } from '../src/ui/components/annotations';
+import { chartScale, layoutAnnotations, timeTicks, type AnnotationInput, type Bounds } from '../src/ui/components/annotations';
 
 const bounds: Bounds = { left: 46, right: 630, top: 10, bottom: 170 };
 
@@ -110,5 +110,28 @@ describe('timeTicks', () => {
     const ticks = timeTicks(0, 15_000, 300, 70);
     const gap = ((ticks[1]! - ticks[0]!) / 15_000) * 300;
     expect(gap).toBeGreaterThanOrEqual(70);
+  });
+});
+
+describe('chart scale', () => {
+  it('keeps the declared scale for a signal inside it', () => {
+    const s = chartScale([5.02, 4.98], [4.4, 5.4], 0.2);
+    expect([s.lo, s.hi, s.outOfRange]).toEqual([4.4, 5.4, 0]);
+    expect(s.ticks.map((t) => t.toFixed(1))).toEqual(['4.4', '4.6', '4.8', '5.0', '5.2', '5.4']);
+  });
+
+  it('grows by whole steps to follow a signal that leaves it', () => {
+    const s = chartScale([3.1], [4.4, 5.4], 0.2);
+    expect(s.lo).toBeCloseTo(3);
+    expect(s.outOfRange).toBe(0);
+  });
+
+  it('one absurd sample is OUT OF RANGE, not a scale of 1e17, and the ticks stay a dozen', () => {
+    const started = performance.now();
+    const s = chartScale([5, -1e17, 1e9, Number.NaN], [4.4, 5.4], 0.2);
+    expect(performance.now() - started).toBeLessThan(50);
+    expect([s.lo, s.hi, s.outOfRange]).toEqual([4.4, 5.4, 3]);
+    const wide = chartScale([8.9], [0, 2], 0.0001);
+    expect(wide.ticks.length).toBeLessThanOrEqual(13);
   });
 });

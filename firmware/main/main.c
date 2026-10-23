@@ -44,9 +44,9 @@ static QueueHandle_t uart_events;
 
 /* ------------------------------------------------------------ HAL */
 
-static uint32_t now_ms(void *ctx) {
+static uint64_t now_ms(void *ctx) {
     (void)ctx;
-    return (uint32_t)(esp_timer_get_time() / 1000);
+    return (uint64_t)(esp_timer_get_time() / 1000);
 }
 
 static void link_write(void *ctx, const char *data, size_t len) {

@@ -60,6 +60,8 @@ export interface DeviceNote {
   confirmation: string;
   /** Bluetooth devices this person linked to it, by key. Manual, and shown as such. */
   ble: string[];
+  /** The MAC the device had when this was said: another device at that address later does not inherit it. */
+  mac?: string | null;
 }
 
 export const emptyNote = (): DeviceNote => ({ known: false, label: '', confirmation: '', ble: [] });

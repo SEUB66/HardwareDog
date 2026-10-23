@@ -73,8 +73,8 @@ function Parsed({ p }: { p: ParsedFile }) {
           {w}
         </p>
       ))}
-      {p.ir?.map((s) => (
-        <div class="preview-block" key={s.name}>
+      {p.ir?.map((s, n) => (
+        <div class="preview-block" key={n}>
           <b>{s.name}</b>{' '}
           {s.type === 'parsed' ? (
             <>

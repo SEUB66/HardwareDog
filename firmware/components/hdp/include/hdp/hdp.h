@@ -51,8 +51,9 @@ typedef struct {
 
 typedef struct {
     void *ctx;
-    /* Device uptime in ms. Never goes backwards. */
-    uint32_t (*now_ms)(void *ctx);
+    /* Device uptime in ms. Never goes backwards. 64 bits: a 32-bit count
+       wraps after 49.7 days and the "never backwards" rule would then pin t. */
+    uint64_t (*now_ms)(void *ctx);
     /* Write bytes to the host link (USB CDC / TCP). One call = one whole line. */
     void (*write)(void *ctx, const char *data, size_t len);
     /* Power monitor bus (INA226). Return 0 on success. */
@@ -115,11 +116,11 @@ typedef struct {
     bool ina_ok;
     float current_lsb;
     hdp_cal_t cal;
-    uint32_t next_sample;
-    uint32_t next_net;
+    uint64_t next_sample;
+    uint64_t next_net;
     uint32_t i2c_watch_ms;
-    uint32_t next_i2c;
-    uint32_t last_t;
+    uint64_t next_i2c;
+    uint64_t last_t;
     /* target UART */
     uint32_t baud;
     char uart_line[HDP_MAX_UART_LINE + 1];

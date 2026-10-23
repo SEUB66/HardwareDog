@@ -15,7 +15,7 @@
 import { errorInfo, newOp, type LabBus, type LabEvent } from '../lab/events';
 import type { LabSessionData } from '../lab/session';
 import { GattSession } from './gatt';
-import { BleScanModel, type BleDevice, type BleObservation, type BleSourceKind } from './model';
+import { BLE_LIMITS, BleScanModel, capList, type BleDevice, type BleObservation, type BleSourceKind } from './model';
 import { DemoBleScan, DogdBleScan, WebBluetoothScan, type BleSource } from './sources';
 import { toHex } from './values';
 
@@ -72,6 +72,11 @@ export class BleService {
   paused = false;
   gatt: GattSession | null = null;
   replayOf: string | null = null;
+  /** The replayed session's integrity, and whether any of it was simulated: said in the scan view. */
+  replayIntegrity: string | null = null;
+  replaySimulated = false;
+  /** When the live scan on screen started (host wall clock); null for a replay or none. */
+  scanStartedAt: number | null = null;
   private source: BleSource | null = null;
   private scanOp: string | null = null;
   private sampled = new Map<string, { mono: number; repeats: number }>();
@@ -112,6 +117,9 @@ export class BleService {
     this.sampled.clear();
     this.sampledOut = 0;
     this.replayOf = null;
+    this.replayIntegrity = null;
+    this.replaySimulated = false;
+    this.scanStartedAt = this.bus.clock.now();
     this.source = source;
     this.sourceKind = kind;
     this.origin = source.origin;
@@ -226,7 +234,8 @@ export class BleService {
         name: o.advName,
         systemName: o.systemName,
         connectable: o.connectable,
-        services: o.services.join(' '),
+        services: capList(o.services).join(' '),
+        ...(o.services.length > BLE_LIMITS.maxEntries ? { servicesCut: o.services.length - BLE_LIMITS.maxEntries } : {}),
         mfr,
         svc,
         repeats,
@@ -248,6 +257,9 @@ export class BleService {
     this.sourceKind = 'REPLAY';
     this.origin = 'REPLAY';
     this.replayOf = data.header.name;
+    this.replayIntegrity = data.integrity;
+    this.replaySimulated = data.events.some((e) => e.origin === 'SIMULATED');
+    this.scanStartedAt = null;
     let n = 0;
     for (const e of data.events) {
       const o = observationOf(e);

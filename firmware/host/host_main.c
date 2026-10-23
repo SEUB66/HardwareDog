@@ -68,13 +68,14 @@ static uint32_t rnd(sim_t *s) {
 }
 static float noise(sim_t *s, float amp) { return ((float)(rnd(s) % 2001) / 1000.0f - 1.0f) * amp; }
 
-static uint32_t now_ms(void *ctx) {
-    sim_t *s = ctx;
+static uint32_t sim_ms(sim_t *s) {
     if (s->fast) return s->vt;
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return (uint32_t)((t.tv_sec - s->t0.tv_sec) * 1000 + (t.tv_nsec - s->t0.tv_nsec) / 1000000);
 }
+
+static uint64_t now_ms(void *ctx) { return sim_ms(ctx); }
 
 static void write_all(int fd, const char *p, size_t n) {
     while (n > 0) {
@@ -110,7 +111,7 @@ static int ina_read(void *ctx, uint8_t addr, uint8_t reg, uint16_t *value) {
     sim_t *s = ctx;
     if (addr != 0x40 || s->scenario == NOINA) return -1; /* NACK */
     float v, i;
-    rail(s, now_ms(s), &v, &i);
+    rail(s, sim_ms(s), &v, &i);
     switch (reg) {
     case 0x00: *value = s->config; return 0;
     case 0x02: *value = (uint16_t)lroundf(v / 0.00125f); return 0;
@@ -140,7 +141,7 @@ static int ina_write(void *ctx, uint8_t addr, uint8_t reg, uint16_t value) {
    BME280 sits on a loose wire: off the bus 4 s out of every 10. */
 static int i2c_probe(void *ctx, uint8_t addr) {
     sim_t *s = ctx;
-    if (addr == 0x76 && s->scenario == I2CFLAKY && now_ms(s) % 10000 >= 6000) return HDP_I2C_NACK;
+    if (addr == 0x76 && s->scenario == I2CFLAKY && sim_ms(s) % 10000 >= 6000) return HDP_I2C_NACK;
     return addr == 0x3C || addr == 0x76 ? HDP_I2C_ACK : HDP_I2C_NACK;
 }
 
@@ -200,7 +201,7 @@ static int router_phase(uint32_t t) {
 
 static void net_status(void *ctx, hdp_net_t *n) {
     sim_t *s = ctx;
-    int phase = s->scenario == ROUTER ? router_phase(now_ms(s)) : 0;
+    int phase = s->scenario == ROUTER ? router_phase(sim_ms(s)) : 0;
     n->link_present = true;
     n->link_up = phase != 1;
     if (phase == 1) {
@@ -238,12 +239,12 @@ static int probe_start(void *ctx, const char *id, const char *target, const char
     for (int k = 0; k < n && k < 8; k++) snprintf(s->probe.tests[k], 16, "%s", tests[k]);
     s->probe.n = n < 8 ? n : 8;
     s->probe.next = 0;
-    s->probe.at = now_ms(s) + 50;
+    s->probe.at = sim_ms(s) + 50;
     return 0;
 }
 
 static void probe_poll(sim_t *s, hdp_device_t *d) {
-    if (s->probe.n == 0 || now_ms(s) < s->probe.at) return;
+    if (s->probe.n == 0 || sim_ms(s) < s->probe.at) return;
     if (s->probe.next == s->probe.n) {
         hdp_probe_done(d, s->probe.id);
         s->probe.n = 0;
@@ -257,7 +258,7 @@ static void probe_poll(sim_t *s, hdp_device_t *d) {
     else if (!strcmp(test, "DNS")) hdp_probe_result(d, s->probe.id, test, HDP_CHECK_PASS, "resolved");
     else if (!strcmp(test, "TCP")) hdp_probe_result(d, s->probe.id, test, HDP_CHECK_PASS, "port 80 open");
     else hdp_probe_result(d, s->probe.id, test, HDP_CHECK_PASS, "HTTP/1.1 200 OK");
-    s->probe.at = now_ms(s) + 50;
+    s->probe.at = sim_ms(s) + 50;
 }
 
 static int cal_load(void *ctx, hdp_cal_t *out) {
@@ -390,8 +391,8 @@ int main(int argc, char **argv) {
         while ((n = read(s.in_fd, buf, sizeof buf)) > 0) hdp_host_input(&d, buf, (size_t)n);
         open = false;
     }
-    while (now_ms(&s) < seconds * 1000) {
-        uint32_t t = now_ms(&s);
+    while (sim_ms(&s) < seconds * 1000) {
+        uint32_t t = sim_ms(&s);
         for (uint32_t u = last + 1; u <= t; u++) target_uart(&s, &d, u);
         last = t;
         if (open) open = host_input(&s, &d, &wait_hello);

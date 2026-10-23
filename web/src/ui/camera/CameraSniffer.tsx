@@ -516,7 +516,7 @@ function BleUsb({ lab, usb, onUsb }: { lab: Lab; usb: UsbReading | null; onUsb: 
   const start = (kind: 'WEB BLUETOOTH' | 'DOGD' | 'DEMO') => settled() && (mark(), void lab.ble.start(kind).catch((e) => setError(errorInfo(e).message)));
   return (
     <>
-      <Panel title="BLUETOOTH CLUES" info="Bluetooth Lab's observations, read for this inspection. An unidentified Bluetooth device is not a camera, and a location tracker is not a camera. The only signatures name trackers, from documented sources.">
+      <Panel title="BLUETOOTH CLUES" info="Bluetooth Lab's observations, read for this inspection. An unidentified Bluetooth device, or a tracker, is not counted as a camera clue, and not excluded either. The only signatures name trackers, from documented sources.">
         <div class="actions">
           {lab.ble.scanning ? (
             <button class="btn" onClick={() => settled() && (mark(), void lab.ble.stop())}>

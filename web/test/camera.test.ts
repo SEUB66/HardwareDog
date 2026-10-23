@@ -5,7 +5,7 @@ import { demoLanApi } from '../src/core/camera/demo';
 import { Inspections, priority, type Inspection, type PhotoRecord } from '../src/core/camera/inspection';
 import { classify, emptyNote, NetModel, type NetDevice } from '../src/core/camera/model';
 import { CameraNet, DOGD_HOWTO, type LanApi } from '../src/core/camera/net';
-import { buildReport, CONCLUSION, conclusionOpen, type ReportInput } from '../src/core/camera/report';
+import { bleForReport, buildReport, CONCLUSION, conclusionOpen, type BleView, type ReportInput } from '../src/core/camera/report';
 import type { BleDevice } from '../src/core/ble/model';
 import type { DogdLanObservation, DogdLanStatus } from '../src/core/dogd';
 import { SCREENS } from '../src/core/commands';
@@ -152,6 +152,24 @@ describe('network discovery service', () => {
     const net = new CameraNet(bus, () => api ?? demoLanApi(() => Date.now()));
     return { bus, events, net };
   };
+
+  it('what was said about a device stays with that device and those results', () => {
+    const { net } = make();
+    net.model.add(obs({ ip: '192.168.1.23', kind: 'neighbor', mac: 'aa:bb:cc:00:00:01' }), 'PHYSICAL');
+    const key = [...net.model.devices.keys()][0]!;
+    net.setNote(key, { known: true, confirmation: 'lens behind the smoke detector grille, flat A' });
+    expect(net.note(key).known).toBe(true);
+    expect(net.liveNotes().get(key)?.confirmation).toMatch(/flat A/);
+    // another place, another device at the same address: it inherits nothing
+    net.model.clear();
+    net.model.add(obs({ ip: '192.168.1.23', kind: 'neighbor', mac: 'dd:ee:ff:00:00:02' }), 'PHYSICAL');
+    expect(net.note(key)).toEqual({ known: false, label: '', confirmation: '', ble: [] });
+    expect(net.liveNotes().get(key)?.known).toBe(false);
+    // CLEAR RESULTS takes what was said with them
+    net.clear();
+    net.model.add(obs({ ip: '192.168.1.23', kind: 'neighbor', mac: 'aa:bb:cc:00:00:01' }), 'PHYSICAL');
+    expect(net.note(key).known).toBe(false);
+  });
 
   it('scans the demo network end to end, records it and says it neutrally', async () => {
     const { net, events } = make();
@@ -350,8 +368,8 @@ describe('Bluetooth and USB clues', () => {
       ble({ id: 'd', manufacturer: new Map([[0x004c, new Uint8Array([0x10, 0x05])]]) }),
     ]);
     const by = (id: string) => clues.find((c) => c.id === id)!;
-    expect(bleLabel(by('a'))).toMatch(/Find My.*not a camera/);
-    expect(bleLabel(by('b'))).toMatch(/Tile.*not a camera/);
+    expect(bleLabel(by('a'))).toMatch(/Find My.*offline iPhone.*not counted as a camera clue, not excluded either/);
+    expect(bleLabel(by('b'))).toMatch(/Tile.*not counted as a camera clue/);
     // a name proves nothing: no signature, not identified
     expect(bleLabel(by('c'))).toBe('BLE device not identified');
     expect(bleLabel(by('d'))).toBe('BLE device not identified');
@@ -426,6 +444,32 @@ describe('guided inspection', () => {
     insp.finish();
     expect(events.at(-1)!.params?.['say']).toBe('cam.done');
   });
+
+  it('photos of a private room go with the object, the room or the inspection they belong to', async () => {
+    const { insp, store, photos } = make();
+    insp.start('Flat A');
+    const bath = insp.addRoom('bathroom');
+    const mirror = insp.addItem(bath.id, null, 'Mirror')!;
+    const shelf = insp.addItem(bath.id, null, 'Shelf')!;
+    const bed = insp.addRoom('bedroom');
+    const lamp = insp.addItem(bed.id, null, 'Lamp')!;
+    const shot = async (itemId: string) => (await insp.addPhoto(itemId, new Blob(['x'], { type: 'image/jpeg' }), 10, 10))!.id;
+    const [m1, m2, s1, l1] = [await shot(mirror.id), await shot(mirror.id), await shot(shelf.id), await shot(lamp.id)];
+    expect(insp.photoCount({ roomId: bath.id })).toBe(3);
+    expect(insp.photoCount({ itemId: mirror.id })).toBe(2);
+    await insp.removeItem(mirror.id);
+    expect(await photos.get(m1)).toBeUndefined();
+    expect(await photos.get(m2)).toBeUndefined();
+    await insp.removeRoom(bath.id);
+    expect(await photos.get(s1)).toBeUndefined();
+    expect(await photos.get(l1)).toBeDefined();
+    const old = insp.current.id;
+    await insp.discard('Flat B');
+    expect(await photos.get(l1)).toBeUndefined();
+    expect(await store.get(old)).toBeUndefined();
+    expect(insp.current.place).toBe('Flat B');
+    expect(await photos.all()).toEqual([]);
+  });
 });
 
 describe('report', () => {
@@ -448,6 +492,42 @@ describe('report', () => {
     expect(r.text).not.toMatch(FORBIDDEN);
     expect(r.text).toMatch(/## LIMITS/);
     expect(buildReport(base({ lang: 'fr' }), { maskNetwork: false, hidePersonal: false }).conclusion).toBe(CONCLUSION.none.fr);
+  });
+
+  it('a device that announced nothing is still to identify: no strongest conclusion until it is known', () => {
+    const m = new NetModel();
+    m.add(obs({ ip: '192.168.1.44', kind: 'neighbor', mac: '10:20:30:40:50:60' }), 'PHYSICAL');
+    const devices = [...m.devices.values()];
+    const open = buildReport(base({ devices }), { maskNetwork: false, hidePersonal: false });
+    expect(open.conclusion).toBe(conclusionOpen(1, 'en'));
+    expect(open.text).toMatch(/192\.168\.1\.44 \(Device discovered\): identify it/);
+    expect(open.text).not.toMatch(/Nothing left in the list/);
+    const notes = new Map([[devices[0]!.key, { ...emptyNote(), known: true, label: 'my phone' }]]);
+    expect(buildReport(base({ devices, notes }), { maskNetwork: false, hidePersonal: false }).conclusion).toBe(CONCLUSION.none.en);
+  });
+
+  it('Bluetooth facts come from a live scan started during this inspection, never from a replay', () => {
+    const devices = new Map([['DEMO|A', { key: 'DEMO|A' } as never]]);
+    const view = (o: Partial<BleView>): BleView => ({ sourceKind: 'DOGD', scanStartedAt: 2000, origin: 'PHYSICAL', state: 'SCANNING', replayOf: null, replayIntegrity: null, replaySimulated: false, model: { devices: new Map() }, ...o });
+    expect(bleForReport(view({}), 1000)).toMatchObject({ ran: true, source: 'DOGD', clues: [] });
+    // a live scan that saw nothing was a scan all the same
+    expect(bleForReport(view({ state: 'IDLE' }), 1000).ran).toBe(true);
+    const replay = bleForReport(view({ sourceKind: 'REPLAY', scanStartedAt: null, origin: 'REPLAY', state: 'REPLAY', replayOf: 'bench', replayIntegrity: 'MODIFIED', replaySimulated: true, model: { devices } }), 1000);
+    expect(replay).toMatchObject({ ran: false, clues: [] });
+    expect(replay.note).toBe('Bluetooth Lab shows a replay of bench (MODIFIED, SIMULATED): not observed during this inspection, not counted.');
+    const older = bleForReport(view({ scanStartedAt: 500, model: { devices } }), 1000);
+    expect(older).toMatchObject({ ran: false, note: 'Bluetooth Lab shows a scan started before this inspection: not counted.' });
+    const text = buildReport(base({ ble: replay }), { maskNetwork: false, hidePersonal: false }).text;
+    expect(text).toContain('- Bluetooth: not scanned during this inspection');
+    expect(text).toContain('replay of bench (MODIFIED, SIMULATED)');
+  });
+
+  it('with no method run and nothing examined, it concludes nothing', () => {
+    const idle = base({ network: { ...base().network, ran: false }, ble: { ...base().ble, ran: false } });
+    const r = buildReport(idle, { maskNetwork: false, hidePersonal: false });
+    expect(r.conclusion).toBe(CONCLUSION.nothing.en);
+    expect(r.text).not.toContain(CONCLUSION.none.en);
+    expect(buildReport({ ...idle, lang: 'fr' }, { maskNetwork: false, hidePersonal: false }).conclusion).toBe(CONCLUSION.nothing.fr);
   });
 
   it('separates facts, interpretations, declarations and what is left, with event references', () => {
