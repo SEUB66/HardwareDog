@@ -38,6 +38,12 @@ import type { DeviceFrame } from './protocol';
 export const DRIFT_PPM = 100;
 /** Longest a frame waits for the other Dogs before it goes on the timeline. */
 export const HOLD_MS = 500;
+/**
+ * A Dog time further ahead of its arrival than this (plus the clock error)
+ * is a glitch (a firmware bug, a bit error, a hostile device): placed at
+ * its arrival, said, and never allowed to hold its Dog's later frames.
+ */
+export const AHEAD_MS = 10_000;
 /** How often each Dog's clock is sampled again. */
 export const SYNC_EVERY_MS = 10_000;
 /** Time samples kept per Dog. */
@@ -134,11 +140,16 @@ export class DogClock {
    * A Dog time on the host clock, and its error. Within one Dog the order
    * of its own frames is the truth: a host time never goes back.
    */
-  convert(t: number, arrival: number): { t: number; err: number | null } {
+  convert(t: number, arrival: number): { t: number; err: number | null; ahead?: number } {
     const guess = this.provisional === null ? arrival : t + this.provisional;
     const best = this.best(guess);
     let host = best ? t + best.offset : guess;
     const err = best ? best.err : null;
+    const ahead = host - arrival;
+    if (ahead > AHEAD_MS + (err ?? 0)) {
+      // An outlier does not move this Dog's clock: its next frames stay where they belong.
+      return { t: Math.max(this.last, arrival), err, ahead };
+    }
     if (host < this.last) host = this.last;
     this.last = host;
     return { t: host, err };
@@ -162,12 +173,17 @@ export interface Placed {
   frame: DeviceFrame;
   t: number;
   err: number | null;
+  /** Its own time was this far ahead of its arrival (ms): a glitch, placed at arrival. */
+  ahead?: number;
 }
 
 /**
  * The pack: clocks and the merge. `dogs` is the pack's fixed order (D1,
  * D2...); it breaks ties between equal times.
  */
+/** Frames held for the other Dogs, at most. */
+const MAX_HELD = 20_000;
+
 export class Pack {
   readonly clocks = new Map<string, DogClock>();
   private queue: Placed[] = [];
@@ -195,10 +211,13 @@ export class Pack {
       this.live.add(dog);
     }
     if (frame.type === 'time') clock.answer(frame.id, frame.t, at);
-    const { t, err } = clock.convert(frame.t, at);
+    const { t, err, ahead } = clock.convert(frame.t, at);
     this.frontier.set(dog, Math.max(this.frontier.get(dog) ?? -Infinity, t));
-    this.insert({ dog, seq, frame, t, err });
-    return this.release(at);
+    this.insert({ dog, seq, frame, t, err, ...(ahead !== undefined ? { ahead } : {}) });
+    // Never more held than a bench produces in a while: past it, the oldest go out in order.
+    const out = this.release(at);
+    while (this.queue.length > MAX_HELD) out.push(this.queue.shift()!);
+    return out;
   }
 
   /** A Dog's link is gone: nothing more will come from it. */

@@ -54,7 +54,26 @@ async function getJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-export const dogdLink = (base = DOGD_URL): Promise<DogdLink> => getJson<DogdLink>(`${base}/v1/link`);
+const LINK_STATES = ['NONE', 'CONNECTING', 'ONLINE', 'LOST'] as const;
+
+/**
+ * A link as dogd describes it, checked: what goes into a recording's
+ * header must be what the reader accepts later (origin PHYSICAL or
+ * SIMULATED, a Dog id D1..D99, a label of 256 characters at most). A dogd
+ * of another version, or another service on its port, is refused here.
+ */
+export function checkLink(v: unknown): DogdLink {
+  const bad = (why: string) => new Error(`dogd answered something that is not a link (${why}): another version, or another program on port 4782?`);
+  if (typeof v !== 'object' || v === null) throw bad('not an object');
+  const l = v as Record<string, unknown>;
+  if (!LINK_STATES.includes(l['state'] as (typeof LINK_STATES)[number])) throw bad('state');
+  if (l['origin'] !== 'PHYSICAL' && l['origin'] !== 'SIMULATED') throw bad(`origin ${String(l['origin'])}`);
+  if (l['dog'] !== undefined && (typeof l['dog'] !== 'string' || !/^D[1-9][0-9]?$/.test(l['dog']))) throw bad('dog');
+  if (typeof l['source'] !== 'string' || typeof l['label'] !== 'string') throw bad('source / label');
+  return { ...(l as unknown as DogdLink), label: (l['label'] as string).slice(0, 256), source: (l['source'] as string).slice(0, 256) };
+}
+
+export const dogdLink = async (base = DOGD_URL): Promise<DogdLink> => checkLink(await getJson<unknown>(`${base}/v1/link`));
 
 /** Is dogd running on this computer? Its version when it answers (nothing is started by asking). */
 export const dogdHealth = (base = DOGD_URL): Promise<{ dogd: string; hdp: number; status: string }> => getJson(`${base}/v1/health`);
@@ -62,7 +81,9 @@ export const dogdHealth = (base = DOGD_URL): Promise<{ dogd: string; hdp: number
 /** Every link dogd holds, D1 first. A dogd older than packs has one: /v1/link. */
 export async function dogdLinks(base = DOGD_URL): Promise<DogdLink[]> {
   try {
-    return (await getJson<{ links: DogdLink[] }>(`${base}/v1/links`)).links;
+    const links = (await getJson<{ links?: unknown }>(`${base}/v1/links`)).links;
+    if (!Array.isArray(links)) throw new Error('dogd answered something that is not its links: another version, or another program on port 4782?');
+    return links.map(checkLink);
   } catch (e) {
     if (e instanceof Error && e.message.startsWith('dogd: 404')) return [{ ...(await dogdLink(base)), dog: 'D1' }];
     throw e;
@@ -158,7 +179,7 @@ export class DogdTransport implements Transport {
     if (link.state !== 'ONLINE') throw new Error(this.dog === undefined ? `dogd has no device online (${link.reason ?? link.state})` : notOnline(link));
     if (link.origin !== this.origin) throw new Error(`dogd source changed to ${link.origin} since the session started`);
 
-    const path = this.dog === undefined ? '/v1/hdp' : `/v1/hdp/${this.dog}`;
+    const path = this.dog === undefined ? '/v1/hdp' : `/v1/hdp/${encodeURIComponent(this.dog)}`;
     const socket = new WebSocket(`${this.base.replace(/^http/, 'ws')}${path}`);
     socket.binaryType = 'arraybuffer';
     this.socket = socket;

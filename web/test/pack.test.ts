@@ -147,3 +147,27 @@ describe('one timeline: merging Dogs in the true order of events', () => {
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 });
+
+describe('one glitched Dog time (audit 2026-10)', () => {
+  it('is placed at its arrival and never holds back its Dog’s later frames', () => {
+    const p = new Pack(['D1', 'D2']);
+    const out: Placed[] = [];
+    let seq = 0;
+    const arrive = (dog: string, f: DeviceFrame, at: number) => out.push(...p.arrive(dog, ++seq, f, at));
+    const hello = (dog: string, at: number) => arrive(dog, { type: 'hello', t: 0, proto: 1, device: dog, rev: 'A', fw: '1' }, at);
+    hello('D1', 1000);
+    hello('D2', 1000);
+    arrive('D1', { type: 'power', t: 100, v: 5, i: 0.1 }, 1100);
+    arrive('D1', { type: 'power', t: 9_000_000_000, v: 5, i: 0.1 }, 1120); // a bit flip
+    for (let k = 1; k <= 20; k++) {
+      arrive('D1', { type: 'power', t: 120 + k * 20, v: 5, i: 0.1 }, 1120 + k * 20);
+      arrive('D2', { type: 'power', t: 120 + k * 20, v: 5, i: 0.1 }, 1120 + k * 20);
+    }
+    const glitch = out.find((x) => x.frame.t === 9_000_000_000);
+    expect(glitch?.ahead).toBeGreaterThan(1e9);
+    expect(glitch?.t).toBe(1120);
+    // the frames after it went out: nothing waits for a time 104 days away
+    expect(p.held).toBeLessThan(5);
+    expect(out.filter((x) => x.dog === 'D1' && x.frame.type === 'power').length).toBeGreaterThan(15);
+  });
+});

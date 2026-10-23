@@ -74,10 +74,22 @@ export interface LabSessionData {
 
 export const CLOCK_NOTE = 'at: host wall clock (ms); mono: host monotonic clock (ms); device clocks are not synchronized to the host';
 
+/**
+ * LAB-20261023T042512.345Z-3f9a: UTC to the millisecond and four random hex
+ * digits. Two sessions started in the same second, or in the hour the
+ * clocks go back, never share an id (an id is the key a session is kept under).
+ */
 const labId = (t: number) => {
+  const r = new Uint8Array(2);
+  globalThis.crypto.getRandomValues(r);
+  const stamp = new Date(t).toISOString().replace(/[-:]/g, '');
+  return `LAB-${stamp}-${Array.from(r, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+};
+/** The name a session gets when none is given: the local time, as a person reads it. */
+const labName = (t: number) => {
   const d = new Date(t);
   const p = (n: number) => String(n).padStart(2, '0');
-  return `LAB-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+  return `LAB ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 };
 
 /**
@@ -97,7 +109,7 @@ export class LabRecorder {
     app: string,
   ) {
     const startedAt = bus.clock.now();
-    this.header = { format: 'hdlab', version: 1, id: labId(startedAt), name: name.trim() || labId(startedAt), startedAt, startMono: bus.clock.mono(), app, clock: CLOCK_NOTE, footerSealed: true };
+    this.header = { format: 'hdlab', version: 1, id: labId(startedAt), name: name.trim() || labName(startedAt), startedAt, startMono: bus.clock.mono(), app, clock: CLOCK_NOTE, footerSealed: true };
     this.unsubscribe = bus.subscribe((e) => this.take(e));
   }
 
@@ -158,6 +170,11 @@ const SEVERITIES = ['INFO', 'PASS', 'WARN', 'FAIL'];
 const TYPES = ['link.state', 'op.start', 'op.progress', 'op.end', 'observe', 'marker', 'note', 'info'];
 const ORIGINS: LabOrigin[] = ['PHYSICAL', 'SIMULATED', 'REPLAY'];
 
+const PROVENANCES = ['MEASURED', 'DECODED', 'ESTIMATED', 'UNKNOWN'];
+const isShort = (v: unknown, max = 256) => typeof v === 'string' && v.length <= max;
+const isPrimitive = (v: unknown) => v === null || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)) || isShort(v, 4096);
+
+/** Every field of an event, optional ones included: a file from anyone opens checked or not at all. */
 function checkEvent(v: unknown, line: number): LabEvent {
   const bad = (what: string) => new Error(`line ${line}: ${what}`);
   if (!isObj(v)) throw bad('not an event');
@@ -170,6 +187,26 @@ function checkEvent(v: unknown, line: number): LabEvent {
   if (!ORIGINS.includes(v['origin'] as LabOrigin)) throw bad('origin');
   if (v['params'] !== undefined && !isObj(v['params'])) throw bad('params');
   if (v['raw'] !== undefined && (typeof v['raw'] !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(v['raw']))) throw bad('raw');
+  for (const k of ['device', 'code', 'op'] as const) if (v[k] !== undefined && !isShort(v[k])) throw bad(k);
+  if (!isShort(v['tool'], 64)) throw bad('tool');
+  if (v['params'] !== undefined && !Object.values(v['params'] as object).every(isPrimitive)) throw bad('params');
+  if (v['measures'] !== undefined) {
+    const ms = v['measures'];
+    if (!Array.isArray(ms) || ms.length > 64) throw bad('measures');
+    for (const m of ms as unknown[]) {
+      if (!isObj(m) || !isShort(m['name'], 64) || typeof m['value'] !== 'number' || !Number.isFinite(m['value']) || !isShort(m['unit'], 16) || !PROVENANCES.includes(m['provenance'] as string)) throw bad('measures');
+    }
+  }
+  if (v['progress'] !== undefined) {
+    const p = v['progress'];
+    if (!isObj(p) || typeof p['done'] !== 'number' || !Number.isFinite(p['done']) || (p['total'] !== null && (typeof p['total'] !== 'number' || !Number.isFinite(p['total']))) || !isShort(p['unit'], 16)) throw bad('progress');
+  }
+  if (v['decoded'] !== undefined) {
+    const d = v['decoded'];
+    if (!isObj(d) || !isShort(d['decoder'], 64) || !isShort(d['version'], 32) || !isObj(d['fields']) || !Object.values(d['fields']).every(isPrimitive)) throw bad('decoded');
+  }
+  if (v['sourceTime'] !== undefined && (typeof v['sourceTime'] !== 'number' || !Number.isFinite(v['sourceTime']))) throw bad('sourceTime');
+  if (v['actions'] !== undefined && (!Array.isArray(v['actions']) || !(v['actions'] as unknown[]).every((a) => isObj(a) && isShort(a['label'], 64) && isShort(a['command'], 64)))) throw bad('actions');
   return v as unknown as LabEvent;
 }
 
@@ -247,6 +284,7 @@ export function summarize(events: readonly LabEvent[]): WindowSummary {
   const failures: WindowSummary['failures'] = [];
   const rssi = new Map<string, number[]>();
   const ble = new Map<string, BleDeviceSummary>();
+  const seen = new Set<string>();
   for (const e of events) {
     const k = `${e.source} ${e.type}`;
     bySourceType[k] = (bySourceType[k] ?? 0) + 1;
@@ -260,7 +298,10 @@ export function summarize(events: readonly LabEvent[]): WindowSummary {
       const r = e.measures?.find((m) => m.name === 'rssi');
       if (r) (rssi.get(e.device) ?? rssi.set(e.device, []).get(e.device)!).push(r.value);
       const payload = e.raw ?? (e.params?.['mfr'] !== undefined || e.params?.['svc'] !== undefined ? `${e.params?.['mfr'] ?? ''}|${e.params?.['svc'] ?? ''}` : undefined);
-      if (payload !== undefined && !d.payloads.includes(payload)) d.payloads.push(payload);
+      if (payload !== undefined && !seen.has(`${e.device}\u0000${payload}`)) {
+        seen.add(`${e.device}\u0000${payload}`);
+        d.payloads.push(payload);
+      }
     }
   }
   for (const [id, xs] of rssi) ble.get(id)!.rssiMedian = median(xs);
@@ -292,7 +333,9 @@ export function compare(before: readonly LabEvent[], after: readonly LabEvent[])
     .map((device) => {
       const x = a.ble.get(device)!;
       const y = b.ble.get(device)!;
-      const payloadChanged = x.payloads.join('|') !== y.payloads.join('|');
+      // as sets: two payloads seen in another order are the same payloads
+      const ys = new Set(y.payloads);
+      const payloadChanged = x.payloads.length !== y.payloads.length || !x.payloads.every((p) => ys.has(p));
       return { device, rssiBefore: x.rssiMedian, rssiAfter: y.rssiMedian, payloadChanged };
     });
   return { before: a, after: b, counts, bleOnlyBefore, bleOnlyAfter, bleBoth };
