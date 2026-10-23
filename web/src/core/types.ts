@@ -123,6 +123,8 @@ export interface UsbState {
 export type Parity = 'NONE' | 'EVEN' | 'ODD';
 
 export interface SerialLine {
+  /** Rank in the session, never reused: a line keeps its place when old ones go. */
+  id: number;
   t: number;
   dir: 'RX' | 'TX';
   text: string;

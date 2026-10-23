@@ -19,12 +19,14 @@
  */
 
 import type { Footer, Recording, SessionEntry, SessionHeader, SessionRecorder } from './session';
-import { HdlogSealer, parseHdlog, recoverHdlog } from './session';
+import { HDLOG_LIMITS, HdlogSealer, parseHdlog, recoverHdlog } from './session';
 import { Sha256, sha256 } from './sha256';
 
 export const SIM_RETENTION = 5;
 /** Flush to storage when this much text is waiting, even between ticks. */
 const CHUNK_BYTES = 256 * 1024;
+/** Room kept below the reader's limit for one more line, its seal and the footer. */
+const FINAL_ROOM = 1024 * 1024;
 
 export interface SessionMeta {
   key: string;
@@ -74,13 +76,16 @@ export class ArchiveWriter {
   private timer: ReturnType<typeof setInterval> | null = null;
   private stopped = false;
   private readonly onError: (message: string) => void;
+  /** The largest file the reader opens (HDLOG_LIMITS); smaller in tests. */
+  private readonly maxBytes: number;
 
   constructor(
     private readonly backend: ArchiveBackend,
     recorder: SessionRecorder,
     private readonly summary: () => string[] = () => [],
-    options: { flushMs?: number | null; onError?: (message: string) => void } = {},
+    options: { flushMs?: number | null; onError?: (message: string) => void; maxBytes?: number } = {},
   ) {
+    this.maxBytes = options.maxBytes ?? HDLOG_LIMITS.maxBytes;
     const h = recorder.header;
     this.sealer = new HdlogSealer(h);
     this.file.update(this.sealer.headerLine);
@@ -108,7 +113,19 @@ export class ArchiveWriter {
     this.pendingBytes += size;
     this.meta.entries++;
     this.meta.lastAt = e.at;
+    // The writer keeps the reader's limit: a file past it could not be
+    // opened again. It is finalized here, intact, and that is said.
+    if (this.meta.bytes + this.pendingBytes > this.maxBytes - FINAL_ROOM) return this.full();
     if (this.pendingBytes >= CHUNK_BYTES) void this.flush();
+  }
+
+  private full(): void {
+    void this.stop().then(() => {
+      if (!this.error)
+        this.onError(
+          `the recording reached ${Math.round(this.maxBytes / 1024 / 1024)} MiB, the largest file Hardware Dog opens: it is finalized and readable; the session goes on, unrecorded (reconnect the source for a new recording)`,
+        );
+    });
   }
 
   /** Seal and write what is waiting. Writes are queued, so chunks never reorder. */

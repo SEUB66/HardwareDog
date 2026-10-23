@@ -145,9 +145,26 @@ export class Inspections {
     return r;
   }
 
-  removeRoom(roomId: string): void {
+  /** A room goes with its objects and their photos: nothing of it stays in this browser. */
+  async removeRoom(roomId: string): Promise<void> {
+    const room = this.current.rooms.find((r) => r.id === roomId);
     this.current.rooms = this.current.rooms.filter((r) => r.id !== roomId);
     this.changed();
+    for (const p of room?.items.flatMap((i) => i.photos) ?? []) await this.photos.remove(p).catch(() => {});
+  }
+
+  /** Photos kept for a room or an object: said before it is removed. */
+  photoCount(of: { roomId?: string; itemId?: string }): number {
+    const rooms = this.current.rooms.filter((r) => of.roomId === undefined || r.id === of.roomId);
+    return rooms.flatMap((r) => r.items).filter((i) => of.itemId === undefined || i.id === of.itemId).reduce((n, i) => n + i.photos.length, 0);
+  }
+
+  /** The current inspection and all its photos, deleted from this browser; a new one starts. */
+  async discard(place = ''): Promise<void> {
+    const old = this.current;
+    this.start(place);
+    await this.store.remove(old.id).catch(() => {});
+    for (const p of old.rooms.flatMap((r) => r.items.flatMap((i) => i.photos))) await this.photos.remove(p).catch(() => {});
   }
 
   addItem(roomId: string, familyId: string | null, label = '', where = ''): Item | null {
@@ -211,9 +228,12 @@ export class Inspections {
     this.changed();
   }
 
-  removeItem(itemId: string): void {
+  /** An object goes with its photos. */
+  async removeItem(itemId: string): Promise<void> {
+    const photos = this.find(itemId)?.item.photos ?? [];
     for (const r of this.current.rooms) r.items = r.items.filter((i) => i.id !== itemId);
     this.changed();
+    for (const p of photos) await this.photos.remove(p).catch(() => {});
   }
 
   /** The objects of the visit, ordered by organisation priority, then as added. */

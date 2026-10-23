@@ -181,6 +181,34 @@ describe('.hdlog v2 integrity and provenance', () => {
     expect(parseHdlog(text.replace(/\n/g, '\r\n')).integrity!.status).toBe('MODIFIED');
   });
 
+  it('seals its footer line too: no byte of the file is left out', async () => {
+    const text = await file();
+    const l = lines(text);
+    expect(l[0]).toContain('"footerSealed":true');
+    expect(l.at(-1)).toMatch(/,"self":"[0-9a-f]{64}"\}\}$/);
+    const withFooter = (f: string) => parseHdlog(join([...l.slice(0, -1), f]));
+    const problems = (f: string) => withFooter(f).integrity!.problems.join(' ');
+    // How it closed: a recovered session cannot pass for one closed normally.
+    expect(withFooter(l.at(-1)!.replace('"closed":"NORMAL"', '"closed":"SNAPSHOT"')).integrity!.status).toBe('MODIFIED');
+    expect(problems(l.at(-1)!.replace('"closed":"NORMAL"', '"closed":"SNAPSHOT"'))).toMatch(/footer line changed/);
+    expect(problems(l.at(-1)!.replace('"closed":"NORMAL"', '"closed":"DONE"'))).toMatch(/not a closing/);
+    // When it ended: the last entry says it.
+    expect(problems(l.at(-1)!.replace(/"endedAt":(\d+)/, (_, t) => `"endedAt":${Number(t) + 60_000}`))).toMatch(/endedAt/);
+    // The line as written, byte for byte.
+    expect(withFooter(l.at(-1)!.replace('{"end":{', '{"end": {')).integrity!.status).toBe('MODIFIED');
+    // Its seal cannot just be dropped.
+    expect(problems(l.at(-1)!.replace(/,"self":"[0-9a-f]{64}"/, ''))).toMatch(/footer line is not sealed/);
+  });
+
+  it('an older footer, without its own seal, still reads VERIFIED', () => {
+    const legacy = Object.values(import.meta.glob('../../cases/power/HD-C017.hdlog', { query: '?raw', import: 'default', eager: true }))[0] as string;
+    expect(legacy.split('\n').at(-2)).not.toContain('"self"');
+    const r = parseHdlog(legacy);
+    expect(r.integrity!.status).toBe('VERIFIED');
+    // its endedAt is checked all the same
+    expect(parseHdlog(legacy.replace('"endedAt":1790778104900', '"endedAt":1790778999900')).integrity!.status).toBe('MODIFIED');
+  });
+
   it('cannot be relabeled: origin must match the source', async () => {
     const l = lines(await file());
     l[0] = l[0]!.replace('"origin":"SIMULATED"', '"origin":"PHYSICAL"');

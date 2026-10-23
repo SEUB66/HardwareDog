@@ -331,25 +331,45 @@ export function compareParsed(a: ParsedFile, b: ParsedFile): { comparable: boole
     const sy = typeof y === 'string' ? y : JSON.stringify(y ?? null);
     if (sx !== sy) diffs.push({ where, a: sx, b: sy });
   };
+  /** Two timing lists: the first value that differs, or their sizes when they do not line up. */
+  const timings = (where: string, x: readonly number[], y: readonly number[]) => {
+    const sx = timingStats(x);
+    const sy = timingStats(y);
+    const first = x.length === y.length ? x.findIndex((t, k) => t !== y[k]) : -1;
+    if (first >= 0) push(`${where} value ${first + 1}`, `${x[first]} us`, `${y[first]} us`);
+    else push(where, `${sx?.count ?? 0} values, ${sx?.totalUs ?? 0} us`, `${sy?.count ?? 0} values, ${sy?.totalUs ?? 0} us`);
+  };
   if (a.kind === 'ir') {
-    const names = [...new Set([...(a.ir ?? []).map((s) => s.name), ...(b.ir ?? []).map((s) => s.name)])];
-    for (const n of names) {
-      const x = a.ir!.find((s) => s.name === n);
-      const y = b.ir!.find((s) => s.name === n);
-      if (!x || !y) {
-        push(`signal ${n}`, x ? 'present' : 'absent', y ? 'present' : 'absent');
-        continue;
-      }
-      if (x.type !== y.type) push(`signal ${n} type`, x.type, y.type);
-      else if (x.type === 'parsed' && y.type === 'parsed') {
-        push(`signal ${n} protocol`, x.protocol, y.protocol);
-        push(`signal ${n} address`, hex(x.address), hex(y.address));
-        push(`signal ${n} command`, hex(x.command), hex(y.command));
-      } else if (x.type === 'raw' && y.type === 'raw') {
-        push(`signal ${n} frequency`, String(x.frequency), String(y.frequency));
-        const sx = timingStats(x.timings);
-        const sy = timingStats(y.timings);
-        push(`signal ${n} timings`, `${sx?.count ?? 0} values, ${sx?.totalUs ?? 0} us`, `${sy?.count ?? 0} values, ${sy?.totalUs ?? 0} us`);
+    // IR files often name several signals alike (POWER twice): paired by name and rank, never the first one only.
+    const byName = (list: readonly IrSignal[]) => {
+      const m = new Map<string, IrSignal[]>();
+      for (const s of list) m.set(s.name, [...(m.get(s.name) ?? []), s]);
+      return m;
+    };
+    const as = byName(a.ir ?? []);
+    const bs = byName(b.ir ?? []);
+    for (const n of new Set([...as.keys(), ...bs.keys()])) {
+      const xs = as.get(n) ?? [];
+      const ys = bs.get(n) ?? [];
+      const several = xs.length > 1 || ys.length > 1;
+      if (several) push(`signals named ${n}`, String(xs.length), String(ys.length));
+      for (let k = 0; k < Math.max(xs.length, ys.length); k++) {
+        const label = several ? `${n} #${k + 1}` : n;
+        const x = xs[k];
+        const y = ys[k];
+        if (!x || !y) {
+          push(`signal ${label}`, x ? 'present' : 'absent', y ? 'present' : 'absent');
+          continue;
+        }
+        if (x.type !== y.type) push(`signal ${label} type`, x.type, y.type);
+        else if (x.type === 'parsed' && y.type === 'parsed') {
+          push(`signal ${label} protocol`, x.protocol, y.protocol);
+          push(`signal ${label} address`, hex(x.address), hex(y.address));
+          push(`signal ${label} command`, hex(x.command), hex(y.command));
+        } else if (x.type === 'raw' && y.type === 'raw') {
+          push(`signal ${label} frequency`, String(x.frequency), String(y.frequency));
+          timings(`signal ${label} timings`, x.timings, y.timings);
+        }
       }
     }
   } else if (a.kind === 'subghz') {
@@ -359,11 +379,7 @@ export function compareParsed(a: ParsedFile, b: ParsedFile): { comparable: boole
     push('preset', x.preset, y.preset);
     push('protocol', x.protocol, y.protocol);
     for (const k of [...new Set([...Object.keys(x.key), ...Object.keys(y.key)])]) push(k, x.key[k] ?? '', y.key[k] ?? '');
-    if (x.timings || y.timings) {
-      const sx = timingStats(x.timings ?? []);
-      const sy = timingStats(y.timings ?? []);
-      push('RAW timings', `${sx?.count ?? 0} values, ${sx?.totalUs ?? 0} us`, `${sy?.count ?? 0} values, ${sy?.totalUs ?? 0} us`);
-    }
+    if (x.timings || y.timings) timings('RAW timings', x.timings ?? [], y.timings ?? []);
   } else if (a.kind === 'nfc') {
     const x = a.nfc!;
     const y = b.nfc!;

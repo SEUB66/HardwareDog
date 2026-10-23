@@ -66,13 +66,13 @@ const CONTEXT_MAX = 4000;
 export function factSummary(sys: System): FactSummary {
   const f = sys.facts;
   return {
-    undervoltage: f.drops.length,
+    undervoltage: Math.max(f.seen.drops, f.drops.length),
     overcurrent: f.spikes.length,
     usbAttaches: f.attaches.length,
-    usbDisconnects: f.detaches.length,
+    usbDisconnects: Math.max(f.seen.detaches, f.detaches.length),
     disconnectsAfterDrop: f.detaches.filter((d) => d.dropAt !== null).length,
     targetResets: f.uart.resets.length,
-    framingErrors: f.uart.framingAtBaud.length,
+    framingErrors: Math.max(f.uart.errorsAtBaud, f.uart.framingAtBaud.length),
     rejectedLines: sys.frameErrors,
   };
 }

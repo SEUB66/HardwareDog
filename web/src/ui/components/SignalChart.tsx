@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { clock, clockShort } from '../../core/format';
 import type { PowerSample } from '../../core/types';
-import { layoutAnnotations, timeTicks, type AnnotationInput } from './annotations';
+import { chartScale, layoutAnnotations, timeTicks, type AnnotationInput } from './annotations';
 
 export interface ChartMarker {
   t: number;
@@ -54,18 +54,14 @@ export function SignalChart(props: SignalChartProps) {
   }, []);
 
   const start = end - windowMs;
-  const visible = samples.filter((s) => s.t >= start && s.t <= end);
+  const visible = samples.filter((s) => s.t >= start && s.t <= end && Number.isFinite(pick(s)));
   const values = visible.map(pick);
-  let [lo, hi] = domain;
-  for (const v of values) {
-    if (v < lo) lo = Math.floor(v / step) * step;
-    if (v > hi) hi = Math.ceil(v / step) * step;
-  }
+  const { lo, hi, outOfRange, ticks: yTicks } = chartScale(values, domain, step);
 
   const plotW = width - M.left - M.right;
   const plotH = height - M.top - M.bottom;
   const x = (t: number) => M.left + ((t - start) / windowMs) * plotW;
-  const y = (v: number) => M.top + (1 - (v - lo) / (hi - lo)) * plotH;
+  const y = (v: number) => M.top + (1 - (Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * plotH;
 
   // Peak-detect decimation: per pixel column keep first, min, max, last.
   const points: string[] = [];
@@ -94,15 +90,13 @@ export function SignalChart(props: SignalChartProps) {
   });
   flush();
 
-  const yTicks: number[] = [];
-  for (let v = lo; v <= hi + step / 2; v += step) yTicks.push(Math.round(v / step) * step);
   // Time labels are ~50 px wide: keep them spaced, and inside the svg.
   const xTicks = timeTicks(start, end, plotW, 78).filter((t) => x(t) - 26 >= 0 && x(t) + 26 <= width);
 
   const visibleMarkers = markers.filter((m) => m.t >= start && m.t <= end);
   const bounds = { left: M.left, right: width - M.right, top: M.top, bottom: M.top + plotH };
-  const annotationInputs: AnnotationInput[] = visibleMarkers.map((m) => ({
-    id: `m${m.t}`,
+  const annotationInputs: AnnotationInput[] = visibleMarkers.map((m, n) => ({
+    id: `m${n}`,
     kind: 'marker',
     x: x(m.t),
     y: 0,
@@ -151,6 +145,7 @@ export function SignalChart(props: SignalChartProps) {
           MIN {min === null ? '--' : props.format(min)} / MAX {max === null ? '--' : props.format(max)}
         </span>
         {hidden > 0 && <span>{hidden} EVENTS UNLABELED</span>}
+        {outOfRange > 0 && <span class="warn">{outOfRange} OUT OF RANGE</span>}
         <span class="cursor" aria-live="off">
           {cursor ? `${clock(cursor.t)}  ${props.format(pick(cursor))}` : ''}
         </span>
@@ -188,8 +183,8 @@ export function SignalChart(props: SignalChartProps) {
             <line class="threshold" x1={M.left} x2={width - M.right} y1={y(threshold.value)} y2={y(threshold.value)} />
           )}
 
-          {visibleMarkers.map((m) => (
-            <line key={`m${m.t}`} class="marker" x1={x(m.t)} x2={x(m.t)} y1={M.top} y2={M.top + plotH} />
+          {visibleMarkers.map((m, n) => (
+            <line key={`m${n}`} class="marker" x1={x(m.t)} x2={x(m.t)} y1={M.top} y2={M.top + plotH} />
           ))}
 
           {labels.map((l) => (

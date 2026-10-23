@@ -15,11 +15,21 @@ export function Serial({ system }: { system: System }) {
   const [stamps, setStamps] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const out = useRef<HTMLDivElement>(null);
+  // Follows the newest line until the operator scrolls up to read; back at the bottom, it follows again.
+  const [follow, setFollow] = useState(true);
+  const last = s.lines.at(-1)?.id ?? 0;
+  const seen = useRef(last);
+  if (follow) seen.current = last;
+  const unread = s.lines.filter((l) => l.id > seen.current).length;
 
   useEffect(() => setBaud(String(s.baud)), [s.baud]);
   useEffect(() => {
-    if (out.current) out.current.scrollTop = out.current.scrollHeight;
-  });
+    if (follow && out.current) out.current.scrollTop = out.current.scrollHeight;
+  }, [last, follow, stamps]);
+  const onScroll = () => {
+    const el = out.current;
+    if (el) setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 24);
+  };
 
   const send = (e: Event) => {
     e.preventDefault();
@@ -61,8 +71,17 @@ export function Serial({ system }: { system: System }) {
                 </option>
               ))}
             </select>
-            <button class="btn" type="submit" disabled={!system.online}>
+            <button class="btn" type="submit" disabled={!system.online || system.baudSearching !== null}>
               APPLY
+            </button>
+            <button
+              class="btn"
+              type="button"
+              disabled={!system.online || system.baudSearching !== null}
+              title="Try each usual rate and keep the one whose lines read as text. The device has to be talking."
+              onClick={() => setMessage(system.findBaud())}
+            >
+              {system.baudSearching !== null ? `TRYING ${system.baudSearching}…` : 'FIND BAUD'}
             </button>
           </form>
         </Panel>
@@ -84,9 +103,9 @@ export function Serial({ system }: { system: System }) {
           <span class="box">[{stamps ? 'X' : ' '}]</span>
           TIMESTAMPS
         </label>
-        <div class="console" ref={out} role="log" aria-label="Serial console" tabIndex={0}>
-          {s.lines.map((l, n) => (
-            <div key={n} class={l.dir === 'TX' ? 'tx' : undefined}>
+        <div class="console" ref={out} role="log" aria-label="Serial console" tabIndex={0} onScroll={onScroll}>
+          {s.lines.map((l) => (
+            <div key={l.id} class={l.dir === 'TX' ? 'tx' : undefined}>
               {stamps && <span class="dim">{clock(l.t)} </span>}
               {l.dir === 'TX' ? '< ' : '> '}
               {l.text}
@@ -97,6 +116,11 @@ export function Serial({ system }: { system: System }) {
             <span class="cursor-blink">_</span>
           </div>
         </div>
+        {!follow && unread > 0 && (
+          <button class="btn console-new" type="button" onClick={() => setFollow(true)}>
+            {unread} NEW LINE{unread > 1 ? 'S' : ''} ↓
+          </button>
+        )}
         <form class="console-input" onSubmit={send}>
           <label class="sr-only" for="uart-tx">
             Send to target

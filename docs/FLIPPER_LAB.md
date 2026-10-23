@@ -285,13 +285,16 @@ One timeline for every lab tool, recorded whether or not any lab screen or
 the TV is showing (`web/src/core/lab/session.ts`, `manager.ts`):
 
 ```text
-header   {"format":"hdlab","version":1, id, name, startedAt, startMono, app, clock}
+header   {"format":"hdlab","version":1, id, name, startedAt, startMono, app, clock, footerSealed}
 events   one lab event per line, in the order this computer received them
-footer   {"end":true, endedAt, endMono, events, lost, sha256}
+footer   {"end":true, endedAt, endMono, events, lost, sha256, self}
 ```
 
-The seal is the SHA-256 of every line before the footer. Reopened, a file
-is VERIFIED, MODIFIED (bytes changed) or UNSEALED (never stopped). A
+The seal is the SHA-256 of every line before the footer; `self` is the
+SHA-256 of the footer line before it, so its end time and losses are sealed
+too (files from before 2026-10 have neither `footerSealed` nor `self`).
+Reopened, a file is VERIFIED, MODIFIED (bytes changed) or UNSEALED (never
+stopped). A
 session keeps 50 000 events; what comes after is counted as lost and said
 in the footer and the report. Durations come from the monotonic clock;
 events of two devices are ordered by reception on this computer: their own

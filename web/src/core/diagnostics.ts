@@ -30,7 +30,7 @@ const errorsText = (all: number, garbled: number): string =>
  * or a confidence definition changes: recordings carry the version they
  * were made with, and a replay on other rules says so.
  */
-export const RULESET_VERSION = 3; // 3: NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY
+export const RULESET_VERSION = 4; // 4: true counts, early disconnects, I2C gaps; 3: NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY
 
 export const DIAGNOSIS_IDS = [
   'POWER_INSTABILITY',
@@ -158,10 +158,12 @@ export interface NetFact {
 }
 
 export interface SessionFacts {
+  /** The last FACT_LIMIT drops and disconnects, as evidence; `seen` counts them all. */
   drops: DropFact[];
   spikes: SpikeFact[];
   attaches: number[];
   detaches: DetachFact[];
+  seen: { drops: number; detaches: number };
   /** Target drawing current while no USB device is enumerated. */
   unenumerated: { since: number | null; longestMs: number; firstAt: number | null; firstSeq: number | null };
   uart: {
@@ -169,8 +171,11 @@ export interface SessionFacts {
     rxLines: number;
     /** Counters reset whenever the baud rate changes. */
     rxAtBaud: number;
-    /** Framing errors from a UART, and lines that do not read as text (kind garbled). */
+    /** Framing errors from a UART, and lines that do not read as text (kind garbled): the last FACT_LIMIT, as evidence. */
     framingAtBaud: { t: number; seq: number; kind?: 'garbled' }[];
+    /** All of them at this rate, counted (the list above keeps the last ones only). */
+    errorsAtBaud: number;
+    garbledAtBaud: number;
     resets: ResetFact[];
   };
   net: NetFact[];
@@ -183,8 +188,9 @@ export const emptyFacts = (): SessionFacts => ({
   spikes: [],
   attaches: [],
   detaches: [],
+  seen: { drops: 0, detaches: 0 },
   unenumerated: { since: null, longestMs: 0, firstAt: null, firstSeq: null },
-  uart: { baud: 115200, rxLines: 0, rxAtBaud: 0, framingAtBaud: [], resets: [] },
+  uart: { baud: 115200, rxLines: 0, rxAtBaud: 0, framingAtBaud: [], errorsAtBaud: 0, garbledAtBaud: 0, resets: [] },
   net: [],
   i2c: { scans: [], errors: [] },
   outages: [],
@@ -192,6 +198,9 @@ export const emptyFacts = (): SessionFacts => ({
 
 /** Keep fact lists bounded on long sessions. */
 export const FACT_LIMIT = 500;
+
+/** "1200 (the last 500 kept as evidence)": a count never reads the capped list. */
+const counted = (all: number, kept: number): string => (all > kept ? `${all} (the last ${kept} kept as evidence)` : String(kept));
 export const NET_HISTORY = 30;
 
 /** "rst:0x8 (TG1WDT_SYS_RST)" -> reset fact. ESP-IDF boot banner format. */
@@ -278,8 +287,8 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       confidence,
       basis: `${c} of ${n} disconnects followed a drop (${pct(c, n)} %)`,
       observed: [
-        `${f.drops.length} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`,
-        `${n} USB disconnect(s), last at ${clock(f.detaches[n - 1]!.t)}.`,
+        `${counted(f.seen.drops, f.drops.length)} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`,
+        `${counted(f.seen.detaches, n)} USB disconnect(s), last at ${clock(f.detaches[n - 1]!.t)}.`,
         ...(unplacedNote ? [unplacedNote] : []),
       ],
       correlation: `${c} / ${n} disconnects occurred within ${s.correlationWindowMs} ms of a voltage drop below ${volts(s.undervoltageThreshold)} (delay ${ms(Math.min(...delays))} to ${ms(Math.max(...delays))}).`,
@@ -298,7 +307,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
         ? `${f.drops.length} drop(s), none known to be followed by a disconnect`
         : `${f.drops.length} drop(s), none followed by a disconnect`,
       observed: [
-        `${f.drops.length} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`,
+        `${counted(f.seen.drops, f.drops.length)} undervoltage event(s) below ${volts(s.undervoltageThreshold)}, minimum ${volts(minV)}.`,
         ...(unplacedNote ? [unplacedNote] : []),
       ],
       correlation: null,
@@ -412,8 +421,11 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
     });
   }
 
-  // SERIAL: framing errors at the current baud rate.
-  const e = f.uart.framingAtBaud.length;
+  // SERIAL: framing errors at the current baud rate, counted all along (a long
+  // capture at the wrong rate keeps its diagnosis), cited from the last ones.
+  // (facts built from lists alone, without the counters, still count their lists)
+  const e = Math.max(f.uart.errorsAtBaud, f.uart.framingAtBaud.length);
+  const garbled = Math.max(f.uart.garbledAtBaud, f.uart.framingAtBaud.filter((x) => x.kind === 'garbled').length);
   const lastE = f.uart.framingAtBaud.at(-1)?.t;
   if (e >= 3 && lastE !== undefined && now - lastE < 15_000) {
     const ratio = e / Math.max(1, f.uart.rxAtBaud);
@@ -422,11 +434,11 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
         id: 'SERIAL_CONFIGURATION_MISMATCH',
         title: 'SERIAL CONFIGURATION MISMATCH',
         confidence: e >= 5 && ratio >= 0.8 ? 'HIGH' : 'MEDIUM',
-        basis: `${errorsText(e, f.uart.framingAtBaud.filter((x) => x.kind === 'garbled').length)} on ${f.uart.rxAtBaud} lines (${pct(e, f.uart.rxAtBaud)} %)`,
-        observed: [`${errorsText(e, f.uart.framingAtBaud.filter((x) => x.kind === 'garbled').length)} at ${f.uart.baud} baud, on ${pct(e, f.uart.rxAtBaud)} % of received lines.`],
+        basis: `${errorsText(e, garbled)} on ${f.uart.rxAtBaud} lines (${pct(e, f.uart.rxAtBaud)} %)`,
+        observed: [`${errorsText(e, garbled)} at ${f.uart.baud} baud, on ${pct(e, f.uart.rxAtBaud)} % of received lines.`],
         correlation: null,
         cause: 'The target UART runs at another baud rate (or data / parity / stop bits differ).',
-        next: 'Try common rates on SERIAL: 9600, 57600, 115200, 921600. Errors stop at the right one.',
+        next: 'FIND BAUD on SERIAL tries the usual rates and keeps the one whose lines read as text (or pick one: 9600, 57600, 115200, 921600).',
         since: f.uart.framingAtBaud[0]!.t,
         evidence: evidence(...f.uart.framingAtBaud.map((x) => x.seq)),
       });
@@ -512,7 +524,8 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   const scans = f.i2c.scans;
   if (scans.length < 2) return null;
   const all = [...new Set(scans.flatMap((x) => x.addresses))].sort((a, b) => a - b);
-  type Loss = { addr: number; t: number; seq: number; clk: Clk | undefined; back: { t: number; seq: number } | null; absent: number };
+  /** prevT: the scan before, where it still answered. It went somewhere in (prevT, t]. */
+  type Loss = { addr: number; t: number; prevT: number; seq: number; clk: Clk | undefined; back: { t: number; seq: number } | null; absent: number };
   const losses: Loss[] = [];
   for (const addr of all) {
     let open: Loss | null = null;
@@ -520,7 +533,7 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
       const was = scans[k - 1]!.addresses.includes(addr);
       const is = scans[k]!.addresses.includes(addr);
       if (was && !is) {
-        open = { addr, t: scans[k]!.t, seq: scans[k]!.seq, clk: scans[k]!.clk, back: null, absent: 1 };
+        open = { addr, t: scans[k]!.t, prevT: scans[k - 1]!.t, seq: scans[k]!.seq, clk: scans[k]!.clk, back: null, absent: 1 };
         losses.push(open);
       } else if (!was && !is && open) open.absent++;
       else if (!was && is && open) {
@@ -535,8 +548,16 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   const flapping = losses.filter((l) => l.back !== null).length;
   const confirmed = losses.some((l) => l.absent >= 2);
   const confidence: Confidence = flapping >= 2 ? 'HIGH' : flapping === 1 || confirmed ? 'MEDIUM' : 'LOW';
+  // The supply explains a loss when the drop, or the 2 s after it, overlaps
+  // the time the address went missing: a scan every 3 s, or a long sag,
+  // must not turn a brownout into a loose wire. Two clocks: their
+  // alignment decides, as everywhere.
   const afterDrop = losses.filter((l) =>
-    f.drops.some((d) => relation({ t: d.start, clk: d.clk }, { t: l.t, clk: l.clk }, I2C_POWER_WINDOW_MS) === 'IN'),
+    f.drops.some((d) =>
+      (d.clk?.dog ?? null) === (l.clk?.dog ?? null)
+        ? d.start <= l.t && (d.end ?? Infinity) + I2C_POWER_WINDOW_MS > l.prevT
+        : relation({ t: d.start, clk: d.clk }, { t: l.t, clk: l.clk }, I2C_POWER_WINDOW_MS) === 'IN',
+    ),
   );
   return {
     id: 'I2C_DEVICE_DISAPPEARED',
@@ -548,7 +569,7 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
       `Last loss at ${clock(losses.at(-1)!.t)}.`,
     ],
     correlation: afterDrop.length
-      ? `${afterDrop.length} / ${losses.length} losses within ${ms(I2C_POWER_WINDOW_MS)} of a voltage drop below ${volts(s.undervoltageThreshold)}.`
+      ? `${afterDrop.length} / ${losses.length} losses during a voltage drop below ${volts(s.undervoltageThreshold)}, or within ${ms(I2C_POWER_WINDOW_MS)} after it, between the scan that saw the device and the one that missed it.`
       : null,
     cause: afterDrop.length
       ? 'The device resets or browns out with the supply: it stops answering after each voltage drop.'

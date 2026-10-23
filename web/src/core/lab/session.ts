@@ -7,11 +7,14 @@
  *
  *   header   {"format":"hdlab","version":1,...}   who, when, which clocks
  *   events   one LabEvent per line, seq ascending
- *   footer   {"end":true,...,"sha256":"..."}      counts, losses, the seal
+ *   footer   {"end":true,...,"sha256":"...","self":"..."}   counts, losses, the seals
  *
  * The seal is the SHA-256 of every line before the footer (each with its
- * "\n"). A reopened file is VERIFIED when it matches, MODIFIED when bytes
- * changed, UNSEALED when it has no footer (a session that never stopped).
+ * "\n"); "self", the SHA-256 of the footer line before it, seals the
+ * footer's own fields (end time, losses). A reopened file is VERIFIED when
+ * both match, MODIFIED when bytes changed, UNSEALED when it has no footer
+ * (a session that never stopped). A header with "footerSealed" says the
+ * footer must seal itself; files from before 2026-10 have neither.
  *
  * Replay is a visualization: a reopened session is read-only and nothing
  * in it is ever sent to a device again.
@@ -22,7 +25,7 @@
  * the file never claims they are.
  */
 
-import { Sha256 } from '../sha256';
+import { Sha256, sha256 } from '../sha256';
 import type { LabBus, LabEvent, LabOrigin } from './events';
 import { LAB_SOURCES } from './events';
 
@@ -44,6 +47,8 @@ export interface LabSessionHeader {
   startMono: number;
   app: string;
   clock: string;
+  /** The footer seals its own line ("self"). Absent in older files. */
+  footerSealed?: true;
 }
 
 export interface LabSessionFooter {
@@ -54,6 +59,8 @@ export interface LabSessionFooter {
   /** Events received but not kept (the session limit), counted. */
   lost: number;
   sha256: string;
+  /** sha256 of the footer line up to `,"self"`. Absent in older files. */
+  self?: string;
 }
 
 export type LabIntegrity = 'VERIFIED' | 'MODIFIED' | 'UNSEALED' | 'LIVE';
@@ -90,7 +97,7 @@ export class LabRecorder {
     app: string,
   ) {
     const startedAt = bus.clock.now();
-    this.header = { format: 'hdlab', version: 1, id: labId(startedAt), name: name.trim() || labId(startedAt), startedAt, startMono: bus.clock.mono(), app, clock: CLOCK_NOTE };
+    this.header = { format: 'hdlab', version: 1, id: labId(startedAt), name: name.trim() || labId(startedAt), startedAt, startMono: bus.clock.mono(), app, clock: CLOCK_NOTE, footerSealed: true };
     this.unsubscribe = bus.subscribe((e) => this.take(e));
   }
 
@@ -115,7 +122,8 @@ export class LabRecorder {
       this.unsubscribe();
       this.unsubscribe = null;
       const body = bodyLines(this.header, this.events);
-      this.footer = { end: true, endedAt: this.bus.clock.now(), endMono: this.bus.clock.mono(), events: this.events.length, lost: this.lost, sha256: seal(body) };
+      const footer = { end: true as const, endedAt: this.bus.clock.now(), endMono: this.bus.clock.mono(), events: this.events.length, lost: this.lost, sha256: seal(body) };
+      this.footer = { ...footer, self: sha256(JSON.stringify(footer).slice(0, -1)) };
     }
     return this.data();
   }
@@ -128,6 +136,9 @@ export class LabRecorder {
 function bodyLines(header: LabSessionHeader, events: readonly LabEvent[]): string[] {
   return [JSON.stringify(header), ...events.map((e) => JSON.stringify(e))];
 }
+
+/** The footer's own seal, read from its line as written. */
+const FOOTER_SELF = /^(\{"end":true,.*),"self":"([0-9a-f]{64})"\}$/;
 
 function seal(lines: readonly string[]): string {
   const h = new Sha256();
@@ -198,7 +209,11 @@ export function parseHdlab(text: string): LabSessionData {
     events.push(e);
   }
   let integrity: LabIntegrity = 'UNSEALED';
-  if (footer) integrity = seal(lines.slice(0, last)) === footer.sha256 && footer.events === events.length ? 'VERIFIED' : 'MODIFIED';
+  if (footer) {
+    const own = FOOTER_SELF.exec(lines[last]!);
+    const selfOk = own ? sha256(own[1]!) === own[2] : header['footerSealed'] !== true && !('self' in footer);
+    integrity = seal(lines.slice(0, last)) === footer.sha256 && footer.events === events.length && selfOk ? 'VERIFIED' : 'MODIFIED';
+  }
   return { header: header as unknown as LabSessionHeader, events, footer, integrity };
 }
 

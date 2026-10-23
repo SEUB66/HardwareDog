@@ -41,6 +41,22 @@ describe('BLE model', () => {
     expect(m.observations).toBe(3);
   });
 
+  it('a device advertising a new random UUID every time stays bounded and fast, and the cut is counted', () => {
+    const m = new BleScanModel();
+    const uuid = (n: number) => `${n.toString(16).padStart(8, '0')}-0000-1000-8000-00805f9b34fb`;
+    const started = performance.now();
+    for (let n = 0; n < 5000; n++) m.add(obs({ id: 'SPAM', services: [uuid(n), uuid(n + 100_000)], serviceData: [{ uuid: uuid(n), data: Uint8Array.of(1) }] }));
+    expect(performance.now() - started).toBeLessThan(2000);
+    const d = m.devices.get('DEMO|SPAM')!;
+    expect(d.services).toHaveLength(BLE_LIMITS.maxEntries);
+    expect(d.serviceData.size).toBe(BLE_LIMITS.maxEntries);
+    expect(d.truncated).toBe(2 * 5000 - BLE_LIMITS.maxEntries + 5000 - BLE_LIMITS.maxEntries);
+    // one advertisement cannot carry more than the limit either
+    m.add(obs({ id: 'BIG', services: Array.from({ length: 500 }, (_, n) => uuid(n)) }));
+    expect(m.devices.get('DEMO|BIG')!.services).toHaveLength(BLE_LIMITS.maxEntries);
+    expect(m.devices.get('DEMO|BIG')!.truncated).toBe(500 - BLE_LIMITS.maxEntries);
+  });
+
   it('refuses beyond its limit and says it', () => {
     const m = new BleScanModel();
     for (let i = 0; i < BLE_LIMITS.maxDevices + 3; i++) m.add(obs({ id: `D${i}` }));

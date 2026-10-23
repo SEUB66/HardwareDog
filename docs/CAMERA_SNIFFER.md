@@ -157,8 +157,9 @@ Bluetooth device is shown as the person's, never as observed.
 
 Bluetooth Lab's scanner (Web Bluetooth, dogd on Linux, or its demo): names
 advertised and system names apart, services, manufacturer data, RSSI (a
-level, never a distance), last seen, source. An unknown Bluetooth device is
-not a camera, and a tracker is not a camera. The only signatures
+level, never a distance), last seen, source. An unknown Bluetooth device,
+or a tracker, is not counted as a camera clue, and not excluded either (an
+offline iPhone sends the same Apple signature as an AirTag). The only signatures
 (`ble-signatures 1`) name trackers, each with its source:
 
 ```text
@@ -273,7 +274,10 @@ person stated), TO VERIFY, and LIMITS. Its strongest conclusion is:
 > No clue identified with the methods used.
 > Aucun indice identifié avec les méthodes utilisées.
 
-and never "no camera" nor "room secured". Export is previewed exactly; it
+only when something was examined and nothing is left to identify: a device
+that announced nothing (most cloud cameras) stays in TO VERIFY until it is
+marked known, and with no method run the result is "Nothing was examined:
+no conclusion". Never "no camera" nor "room secured". Export is previewed exactly; it
 can replace addresses, MACs and announced names with stable aliases, and
 hide the place, labels and notes. Photos are never in the file.
 
