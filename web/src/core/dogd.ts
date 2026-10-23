@@ -39,11 +39,15 @@ export interface DogdLink {
   reason: string | null;
 }
 
+/** dogd answers on this machine in milliseconds: past this, it is hung, and that is said. */
+const DOGD_ANSWER_MS = 4000;
+
 async function getJson<T>(url: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, { cache: 'no-store' });
-  } catch {
+    res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(DOGD_ANSWER_MS) });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'TimeoutError') throw new Error(`dogd at ${new URL(url).host} did not answer within ${DOGD_ANSWER_MS / 1000} s: it is starting, or hung. Restart it: docs/DOGD.md`);
     throw new Error(`no dogd at ${new URL(url).host}. Start it on this computer: dogd serve --source host (its network), or --source serial:PORT (a probe). docs/DOGD.md`);
   }
   if (!res.ok) throw new Error(`dogd: ${res.status} ${await res.text()}`);

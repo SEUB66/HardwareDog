@@ -427,6 +427,7 @@ select {
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   margin: 0 -1px -1px 0;
+  min-width: 0;
 }
 
 .metric .pm {
@@ -445,6 +446,9 @@ select {
   font-size: var(--fs-metric);
   font-variant-numeric: tabular-nums;
   color: var(--cyan);
+  /* a value from a broken or hostile source stays in its card */
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .metric .value.static {
