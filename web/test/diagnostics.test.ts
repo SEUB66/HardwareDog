@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { diagnose, emptyFacts, parseResetLine, type NetFact, type SessionFacts } from '../src/core/diagnostics';
 import { DEFAULT_SETTINGS } from '../src/core/types';
+import { attach, connectedSystem } from './helpers';
 
 const S = DEFAULT_SETTINGS;
 const net = (over: Partial<NetFact>, t: number): NetFact => ({
@@ -119,5 +120,68 @@ describe('usb enumeration', () => {
     expect(ids(x, 3500)).toEqual([]);
     expect(ids(x, 4000)).toEqual(['USB_NOT_ENUMERATED:MEDIUM']);
     expect(ids(x, 12_000)).toEqual(['USB_NOT_ENUMERATED:HIGH']);
+  });
+});
+
+describe('long sessions (audit 2026-10)', () => {
+  it('a target at the wrong baud rate for 2100 lines keeps its diagnosis, with true counts', async () => {
+    const { sys, transport, clock } = await connectedSystem();
+    transport.push({ type: 'uart.config', t: 1, port: 'UART0', baud: 115200, bits: 8, parity: 'NONE', stop: 1 });
+    for (let n = 0; n < 2100; n++) {
+      transport.push({ type: 'uart.rx', t: 10 + n * 10, data: 'à\u0000þ\u0080\u001cø' });
+      transport.push({ type: 'uart.error', t: 10 + n * 10, kind: 'garbled' });
+    }
+    clock.set(1_000_000 + 21_100);
+    sys.evaluate();
+    const d = sys.diagnoses.find((x) => x.id === 'SERIAL_CONFIGURATION_MISMATCH');
+    expect(d?.confidence).toBe('HIGH');
+    expect(d!.basis).toBe('2100 garbled lines on 2100 lines (100 %)');
+    expect(d!.evidence.length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('a disconnect that beats the sample (audit 2026-10)', () => {
+  it('counts with the drop whose first low sample comes right after it, never blamed on the cable', async () => {
+    const { sys, transport, clock } = await connectedSystem();
+    transport.push(attach(1));
+    for (let k = 0; k < 3; k++) {
+      const t0 = 1000 + k * 4000;
+      for (let t = t0 - 200; t < t0; t += 20) transport.push({ type: 'power', t, v: 5.05, i: 0.3 });
+      transport.push({ type: 'usb.detach', t: t0 + 8 }); // the rail collapses between two samples
+      transport.push({ type: 'power', t: t0 + 20, v: 4.4, i: 0.7 });
+      transport.push({ type: 'power', t: t0 + 40, v: 4.5, i: 0.6 });
+      for (let t = t0 + 60; t < t0 + 400; t += 20) transport.push({ type: 'power', t, v: 5.05, i: 0.3 });
+      transport.push(attach(t0 + 900));
+    }
+    clock.set(1_000_000 + 13_000);
+    sys.evaluate();
+    const ids = sys.diagnoses.map((d) => `${d.id}:${d.confidence}`);
+    expect(ids).toContain('POWER_INSTABILITY:HIGH');
+    expect(ids.some((x) => x.startsWith('USB_INTERMITTENT'))).toBe(false);
+    expect(ids.some((x) => x.startsWith('SUPPLY_SAG'))).toBe(false);
+    const p = sys.diagnoses.find((d) => d.id === 'POWER_INSTABILITY')!;
+    expect(p.correlation).toMatch(/delay -12 ms to -12 ms/);
+    expect(sys.trace.all().some((e) => e.message === 'disconnect just before the first low sample')).toBe(true);
+  });
+});
+
+describe('an I2C device that browns out with the supply (audit 2026-10)', () => {
+  it('a loss seen by a scan 3 s later is still set against the drop, not a loose wire', async () => {
+    const { sys, transport, clock } = await connectedSystem();
+    const scan = (t: number, present: boolean) => transport.push({ type: 'i2c.scan', t, speed: 100000, devices: present ? [{ addr: 0x76, ident: null, method: null }] : [] });
+    for (let k = 0; k < 3; k++) {
+      const t0 = k * 9000;
+      scan(t0, true);
+      for (let t = t0 + 400; t < t0 + 500; t += 20) transport.push({ type: 'power', t, v: 5.05, i: 0.3 });
+      for (let t = t0 + 500; t < t0 + 600; t += 20) transport.push({ type: 'power', t, v: 4.3, i: 0.6 }); // the sag
+      for (let t = t0 + 600; t < t0 + 700; t += 20) transport.push({ type: 'power', t, v: 5.05, i: 0.3 });
+      scan(t0 + 3000, false); // 2.5 s after the drop began: the device is gone
+      scan(t0 + 6000, true);
+    }
+    clock.set(1_000_000 + 27_000);
+    sys.evaluate();
+    const d = sys.diagnoses.find((x) => x.id === 'I2C_DEVICE_DISAPPEARED')!;
+    expect(d.correlation).toMatch(/^3 \/ 3 losses during a voltage drop/);
+    expect(d.cause).toMatch(/browns out with the supply/);
   });
 });

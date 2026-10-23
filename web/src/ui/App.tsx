@@ -35,6 +35,7 @@ import { browserLang } from '../core/lab/rules';
 import { SimBanner } from './components/SimBanner';
 import { Tour } from './Tour';
 import { WhatsNew } from './WhatsNew';
+import { Boundary } from './components/Boundary';
 import { CameraSniffer, type CameraTool } from './camera/CameraSniffer';
 import { isNewScreen } from '../core/features';
 import { Tag } from './components/Tag';
@@ -158,6 +159,10 @@ function download(name: string, type: string, content: string | Uint8Array) {
 
 const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
+/** Space on these is theirs (press, open, scroll), not the trace's. */
+const ownsSpace = (el: EventTarget | null) => el instanceof HTMLElement && el.matches('button, a, summary, [role="button"], [tabindex]');
+/** A dialog above the screen (what's new, the tour, a poster full screen): the keyboard is its own. */
+const dialogOpen = () => document.querySelector('[role="dialog"][aria-modal="true"]:not(.palette)') !== null;
 
 /** hwdog-HD-20261001-011817.hdlog: the session id, down to the second. */
 const hdlogName = (h: SessionHeader) => `hwdog-${h.id}${String(new Date(h.startedAt).getSeconds()).padStart(2, '0')}.hdlog`;
@@ -337,13 +342,30 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     download(`hwdog-usb-${d.vid.toString(16)}-${d.pid.toString(16)}.json`, 'application/json', JSON.stringify(d, null, 2));
   };
 
+  /**
+   * Source changes, one at a time, in order: each closes the session that
+   * is really current (a ref, never a stale closure), so two quick clicks
+   * or a slow dogd can never leave a session running unseen.
+   */
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const switching = useRef<Promise<void>>(Promise.resolve());
+  /** Bumped by every source request: one that resolves after a newer one is dropped. */
+  const switchGen = useRef(0);
   /** Every source change is a new session: data never mixes. Null: back to NOT CONNECTED. */
-  const start = async (transport: Transport | null) => {
+  const start = (transport: Transport | null): Promise<void> => {
+    switchGen.current++;
+    const run = switching.current.then(() => startNow(transport));
+    switching.current = run.catch(() => {});
+    return run;
+  };
+  const startNow = async (transport: Transport | null) => {
+    const current = sessionRef.current;
     await system.disconnect();
-    await session.writer?.stop();
+    await current.writer?.stop();
     // Through dogd, the finished recording also goes to dogd's local store.
-    if (viaDogd(session.transport) && session.writer && !session.writer.error) {
-      const w = session.writer;
+    if (viaDogd(current.transport) && current.writer && !current.writer.error) {
+      const w = current.writer;
       void archive
         .text(w.meta.key)
         .then((text) => dogdStore(w.meta.header.recording, text))
@@ -351,6 +373,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     }
     setPalette(false);
     const next = newSession(transport, archive);
+    sessionRef.current = next;
     setSession(next);
     setScreen(transport instanceof ReplayTransport ? 'TRACE' : 'STATUS');
     setTraceOnly(null);
@@ -358,7 +381,15 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     void archive.prune(next.writer ? [next.writer.meta.key] : []).then(refreshSessions, () => {});
   };
 
-  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario: ScenarioId = DEFAULT_SCENARIO) => {
+  /** A source picked or reached after a newer request: closed, never started. */
+  const stale = async (gen: number, transport: Transport): Promise<boolean> => {
+    if (gen === switchGen.current) return false;
+    await transport.close().catch(() => {});
+    return true;
+  };
+
+  const switchTransport = async (kind: Exclude<TransportKind, 'REPLAY' | 'PACK'>, scenario: ScenarioId = DEFAULT_SCENARIO, starting?: (t: Transport) => void) => {
+    const gen = ++switchGen.current;
     let transport: Transport;
     if (kind === 'WEB SERIAL') {
       // the browser's port chooser: the companion waits with the person, nothing pretended
@@ -386,6 +417,8 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     } else {
       transport = simulator(scenario);
     }
+    if (await stale(gen, transport)) return;
+    starting?.(transport);
     await start(transport);
   };
 
@@ -394,15 +427,19 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
    * asking for the checks: the watch starts (ACTIVE, said on the timeline),
    * and NET is the screen to read.
    */
-  const wantNetwork = useRef(false);
+  // The checks were asked for this transport only: a failed attempt or
+  // another source never inherits them.
+  const wantNetwork = useRef<Transport | null>(null);
   const openNetwork = async () => {
-    wantNetwork.current = true;
-    await switchTransport('DOGD');
+    wantNetwork.current = null;
+    await switchTransport('DOGD', DEFAULT_SCENARIO, (t) => (wantNetwork.current = t));
   };
   // The link opens during the start: the watch begins once it is online.
   useEffect(() => {
     if (booting || !wantNetwork.current) return;
-    wantNetwork.current = false;
+    const wanted = wantNetwork.current;
+    wantNetwork.current = null;
+    if (session.transport !== wanted) return;
     if (system.link !== 'ONLINE' || !system.observes('net')) return;
     if (!system.netWatch) system.watchNet(10, 'example.com', 'example.com');
     setScreen('NET');
@@ -410,6 +447,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
 
   /** Any board's serial console, read by this browser: no probe needed. Its console is the screen to watch. */
   const openConsole = async () => {
+    const gen = ++switchGen.current;
     let transport: ConsoleTransport;
     const op = lab.device.begin('device.console', 'connect', 'choosing a serial port', 'PHYSICAL', true);
     try {
@@ -420,6 +458,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       system.mark(`serial console: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    if (await stale(gen, transport)) return;
     await start(transport);
     setScreen('SERIAL');
   };
@@ -585,9 +624,11 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
   useEffect(() => {
     if (booting) return;
     const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const ctrl = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
-      if (ctrl && key === 'k') {
+      const dialog = dialogOpen();
+      if (ctrl && key === 'k' && !dialog) {
         e.preventDefault();
         setPalette(!paletteOpen.current);
         return;
@@ -601,11 +642,14 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         }
         return;
       }
+      if (dialog) return;
       if (e.key === 'Escape') {
         if (isTyping(e.target)) (e.target as HTMLElement).blur();
         else back();
         return;
       }
+      // Typing: the keys are the field's (Ctrl+L, Ctrl+E and digits included).
+      if (isTyping(e.target)) return;
       if (ctrl && key === 'e') {
         e.preventDefault();
         exportReport('txt');
@@ -616,7 +660,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         system.clearTrace();
         return;
       }
-      if (isTyping(e.target) || ctrl || e.altKey) return;
+      if (ctrl || e.altKey) return;
       const fn: Record<string, Screen> = { F1: 'HELP', F2: 'TRACE', F3: 'PROBE', F4: 'REPORT' };
       if (fn[e.key]) {
         e.preventDefault();
@@ -627,7 +671,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         navigate(DIGIT_SCREENS[Number(e.key) - 1]!);
         return;
       }
-      if (e.key === ' ' && !(e.target instanceof HTMLButtonElement) && !(e.target instanceof HTMLAnchorElement)) {
+      if (e.key === ' ' && !ownsSpace(e.target)) {
         e.preventDefault();
         system.toggleTrace();
       }
@@ -884,7 +928,11 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
           onConnect={() => navigate('SETUP')}
           onStop={demoOf(session.transport) ? () => void start(null) : null}
         />}
-        {!home && body}
+        {!home && (
+          <Boundary key={screen} where={screen} onError={(detail) => system.uiFailed(screen, detail)}>
+            {body}
+          </Boundary>
+        )}
       </main>
 
       <footer class="foot">
@@ -908,20 +956,24 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
       </footer>
 
       {/* One TV: floating, it follows every section; docked, it sits in the page's place for it (home, Flipper Lab, Camera Sniffer), elsewhere a small tab. */}
-      <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
+      <Boundary where="TV" quiet onError={(detail) => system.uiFailed('TV', detail)}>
+        <TvFloating companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
+      </Boundary>
 
       {touring && <Tour onEnd={() => setTouring(false)} />}
       {whatsNew && !touring && (
-        <WhatsNew
-          lab={lab}
-          placement={placement}
-          reducedMotion={reducedMotion}
-          onClose={() => setWhatsNew(false)}
-          onGo={(s) => {
-            setWhatsNew(false);
-            navigate(s);
-          }}
-        />
+        <Boundary where="WHAT'S NEW" quiet onError={(detail) => system.uiFailed("WHAT'S NEW", detail)}>
+          <WhatsNew
+            lab={lab}
+            placement={placement}
+            reducedMotion={reducedMotion}
+            onClose={() => setWhatsNew(false)}
+            onGo={(s) => {
+              setWhatsNew(false);
+              navigate(s);
+            }}
+          />
+        </Boundary>
       )}
 
       {palette && (

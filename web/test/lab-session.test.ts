@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { LabBus, type LabEventInput } from '../src/core/lab/events';
 import { HDLAB_LIMITS, LabRecorder, compare, labReport, near, parseHdlab, splitAt, toHdlab } from '../src/core/lab/session';
 import { FakeTime } from './lab-helpers';
+import { sha256 } from '../src/core/sha256';
+
+/** The seal of an .hdlab body, written out: every line with its LF. */
+const sealOf = (lines: string[]) => sha256(lines.map((l) => l + '\n').join(''));
 
 const base: LabEventInput = { source: 'BLE', tool: 'ble.scan', type: 'observe', severity: 'INFO', message: 'adv', origin: 'SIMULATED' };
 
@@ -37,6 +41,24 @@ describe('lab sessions (.hdlab)', () => {
     expect(parseHdlab(text.replace('button pressed', 'button pushed')).integrity).toBe('MODIFIED');
     const lines = text.trimEnd().split('\n');
     expect(parseHdlab(lines.slice(0, -1).join('\n') + '\n').integrity).toBe('UNSEALED');
+  });
+
+  it('seals its footer too: losses and end time cannot be edited unseen', () => {
+    const { rec } = session();
+    const text = toHdlab(rec.stop());
+    expect(text.split('\n')[0]).toContain('"footerSealed":true');
+    expect(text.trimEnd().split('\n').at(-1)).toMatch(/,"self":"[0-9a-f]{64}"\}$/);
+    expect(parseHdlab(text.replace('"lost":0', '"lost":7')).integrity).toBe('MODIFIED');
+    expect(parseHdlab(text.replace(/"endMono":(\d+)/, (_, t) => `"endMono":${Number(t) + 3_600_000}`)).integrity).toBe('MODIFIED');
+    expect(parseHdlab(text.replace(/,"self":"[0-9a-f]{64}"/, '')).integrity).toBe('MODIFIED');
+    // a file from before the footer sealed itself: read as it was
+    const older = text.replace(',"footerSealed":true', '');
+    const lines = older.trimEnd().split('\n');
+    const footer = JSON.parse(lines.at(-1)!) as Record<string, unknown>;
+    delete footer['self'];
+    const body = lines.slice(0, -1);
+    footer['sha256'] = sealOf(body);
+    expect(parseHdlab([...body, JSON.stringify(footer)].join('\n') + '\n').integrity).toBe('VERIFIED');
   });
 
   it('refuses malformed files with the line that is wrong', () => {

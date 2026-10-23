@@ -379,15 +379,16 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
     expect(replayed.diagnoses.map((d) => [d.id, d.confidence, d.evidence])).toEqual(sys.diagnoses.map((d) => [d.id, d.confidence, d.evidence]));
   });
 
-  it.runIf(DOGD)('identity: the same board through dogd twice, and after a restart, is one identity by its chip id', async () => {
+  it.runIf(DOGD)('identity: the same board through dogd twice, and after a restart, is one identity by its chip id; a simulated source never enters the index', async () => {
     type Attached = { id: string | null; strength: string | null; fingerprint: { chip_id: string | null; legacy_id: string | null } };
     type Known = { id: string; chip_id: string | null; strength: string };
     const data = `/tmp/dogd-id-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    const once = async (): Promise<{ attached: Attached; known: Known[] }> => {
+    // The firmware core on a TCP port stands for a board: the operator declares it physical.
+    const once = async (origin: 'physical' | 'simulated' = 'physical'): Promise<{ attached: Attached | null; known: Known[] }> => {
       const port = 43000 + Math.floor(Math.random() * 2000);
       const fw = await spawn(BIN!, ['--fast', '--scenario', 'healthy', '--seconds', '3', '--tcp', String(port), '--wait-hello', '1', '--chip', '7cdfa13a1f2c']);
       await new Promise<void>((r) => fw.stderr.on('data', (b) => new TextDecoder().decode(b).includes('LISTEN') && r()));
-      const dogd = await spawn(DOGD!, ['serve', '--listen', '127.0.0.1:0', '--source', `tcp:127.0.0.1:${port}`, '--source-origin', 'simulated', '--data', data]);
+      const dogd = await spawn(DOGD!, ['serve', '--listen', '127.0.0.1:0', '--source', `tcp:127.0.0.1:${port}`, '--source-origin', origin, '--data', data]);
       try {
         const base = await new Promise<string>((r) => {
           let s = '';
@@ -402,6 +403,9 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
           const d = (await fetch(`${base}/v1/devices`).then((r) => r.json())) as { attached: Attached[]; known: Known[] };
           const a = d.attached.find((x) => x.fingerprint.chip_id === '7cdfa13a1f2c');
           if (a) return { attached: a, known: d.known };
+          // a simulated source: once dogd has its hello (kept after the stream ends), the index is read as it is
+          const link = (await fetch(`${base}/v1/link`).then((r) => r.json())) as { device: unknown };
+          if (origin === 'simulated' && link.device) return { attached: null, known: d.known };
           if (Date.now() > deadline) throw new Error('dogd never identified the firmware');
           await new Promise((r) => setTimeout(r, 20));
         }
@@ -410,11 +414,13 @@ describe.runIf(BIN)('firmware core (host build)', { timeout: 60_000 }, () => {
         fw.kill();
       }
     };
+    const simulated = await once('simulated');
+    expect(simulated.known.filter((k) => k.chip_id === '7cdfa13a1f2c')).toEqual([]);
     const first = await once();
-    expect(first.attached.strength).toBe('EXCELLENT');
-    expect(first.attached.fingerprint.legacy_id).toBe('HD-HOST01');
+    expect(first.attached!.strength).toBe('EXCELLENT');
+    expect(first.attached!.fingerprint.legacy_id).toBe('HD-HOST01');
     const second = await once(); // another connection, another dogd process, same index
-    expect(second.attached.id).toBe(first.attached.id);
+    expect(second.attached!.id).toBe(first.attached!.id);
     expect(second.known.filter((k) => k.chip_id === '7cdfa13a1f2c')).toHaveLength(1);
-  });
+  }, 40_000);
 });

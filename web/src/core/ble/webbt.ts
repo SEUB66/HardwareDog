@@ -16,7 +16,7 @@
  */
 
 import type { BleObservation } from './model';
-import { shortUuid } from './model';
+import { capList, shortUuid } from './model';
 
 export interface BtDataView {
   buffer: ArrayBufferLike;
@@ -99,7 +99,7 @@ export function fromAdvertisement(e: BtAdvertisingEvent, at: number, mono: numbe
     rssi: typeof e.rssi === 'number' ? e.rssi : null,
     txPower: typeof e.txPower === 'number' ? e.txPower : null,
     connectable: null,
-    services: (e.uuids ?? []).map((u) => shortUuid(u)),
+    services: capList(e.uuids ?? []).map((u) => shortUuid(u)),
     manufacturer: [...(e.manufacturerData ?? new Map<number, BtDataView>())].map(([company, v]) => ({ company, data: bytesOf(v) })),
     serviceData: [...(e.serviceData ?? new Map<string, BtDataView>())].map(([uuid, v]) => ({ uuid: shortUuid(uuid), data: bytesOf(v) })),
   };

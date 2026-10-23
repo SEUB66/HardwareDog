@@ -198,6 +198,29 @@ function* candidates(item: AnnotationInput, w: number, b: Bounds, o: LayoutOptio
   }
 }
 
+/**
+ * The vertical scale of a chart: the declared domain, grown by whole steps
+ * to follow the signal up to four spans beyond it. A value further out (a
+ * broken sample, a hostile file) is counted OUT OF RANGE and drawn at the
+ * edge, never rescaled to; at most a dozen tick lines, whatever the span.
+ */
+export function chartScale(values: readonly number[], domain: readonly [number, number], step: number): { lo: number; hi: number; outOfRange: number; ticks: number[] } {
+  let [lo, hi] = domain;
+  const span = domain[1] - domain[0];
+  const floor = domain[0] - 4 * span;
+  const ceil = domain[1] + 4 * span;
+  let outOfRange = 0;
+  for (const v of values) {
+    if (!Number.isFinite(v) || v < floor || v > ceil) outOfRange++;
+    else if (v < lo) lo = Math.floor(v / step) * step;
+    else if (v > hi) hi = Math.ceil(v / step) * step;
+  }
+  const tickStep = step * Math.max(1, Math.ceil((hi - lo) / step / 12));
+  const ticks: number[] = [];
+  for (let k = 0; k <= Math.round((hi - lo) / tickStep); k++) ticks.push(Math.round((lo + k * tickStep) / step) * step);
+  return { lo, hi, outOfRange, ticks };
+}
+
 /** Evenly spaced time ticks with at least `minGap` px between labels. */
 export function timeTicks(start: number, end: number, plotWidth: number, minGap: number): number[] {
   const span = end - start;

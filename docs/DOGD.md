@@ -260,7 +260,14 @@ dogd --source tcp:127.0.0.1:5055 --source-origin simulated
 
 The interface records sessions through dogd with `source: "DOGD"` and the
 origin dogd reports (`GET /v1/link`), fixed before the first frame. A
-simulated source stays labeled SIMULATED everywhere.
+simulated source stays labeled SIMULATED everywhere, and never enters the
+identity index of real hardware (`dogd devices --known`): its chip id is
+invented.
+
+A TCP source that does not answer within 5 s is said to be unreachable. A
+connected one is probed after 10 s of silence (every 5 s, 3 probes): a
+Wi-Fi Hardware Dog that loses power sends no FIN, and its link goes LOST
+instead of reading ONLINE forever.
 
 ---
 
@@ -322,7 +329,7 @@ own page: [`IDENTITY.md`](IDENTITY.md). A port name is never an identity.
 
 - dogd stores hdlog v2 files, under their own recording id only.
 - It checks each file with the same integrity algorithm as the interface
-  (seals, footer hash, counts) and records the status. Cross-checked by
+  (seals, footer hashes, counts, end time) and records the status. Cross-checked by
   tests on both sides with the same files.
 - Files are written to a temporary name, flushed to disk, then renamed: a
   crash never leaves half a recording under the real name.

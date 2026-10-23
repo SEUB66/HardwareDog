@@ -160,8 +160,8 @@ static void put_opt(line_t *l, const char *s) {
     else puts_(l, "null");
 }
 
-static uint32_t now(hdp_device_t *d) {
-    uint32_t t = d->hal.now_ms(d->hal.ctx);
+static uint64_t now(hdp_device_t *d) {
+    uint64_t t = d->hal.now_ms(d->hal.ctx);
     if (t < d->last_t) t = d->last_t; /* HDP rule 2: t never goes backwards */
     d->last_t = t;
     return t;
@@ -172,7 +172,7 @@ static void begin(hdp_device_t *d, line_t *l, const char *type) {
     l->overflow = false;
     puts_(l, "{\"type\":\"");
     puts_(l, type);
-    putf(l, "\",\"t\":%lu", (unsigned long)now(d));
+    putf(l, "\",\"t\":%llu", (unsigned long long)now(d));
 }
 
 static void send(hdp_device_t *d, line_t *l) {
@@ -852,7 +852,7 @@ void hdp_start(hdp_device_t *d) {
     if (observes(d, HDP_CAP_UART)) send_uart_config(d);
     if (observes(d, HDP_CAP_NET)) send_net(d);
     if (observes(d, HDP_CAP_POWER)) ina_start(d);
-    uint32_t t = now(d);
+    uint64_t t = now(d);
     d->next_sample = t;
     d->next_net = d->cfg.net_ms ? t + d->cfg.net_ms : 0;
     if (!observes(d, HDP_CAP_I2C)) d->i2c_watch_ms = 0;
@@ -910,7 +910,7 @@ void hdp_uart_error(hdp_device_t *d, const char *kind) {
 }
 
 void hdp_poll(hdp_device_t *d) {
-    uint32_t t = now(d);
+    uint64_t t = now(d);
     if (d->i2c_watch_ms && t >= d->next_i2c) {
         scan_i2c(d, true);
         d->next_i2c = t + d->i2c_watch_ms;

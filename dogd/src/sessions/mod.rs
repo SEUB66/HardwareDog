@@ -99,8 +99,9 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
     let mut counts = [0u64; 6];
     let mut entries = 0u64;
     let mut device: Value = Value::Null;
-    let mut footer: Option<(Value, usize)> = None;
+    let mut footer: Option<(Value, usize, &[u8])> = None;
     let mut last_at = i64::MIN;
+    let mut ended_at: Option<f64> = None;
 
     for (n, line) in lines.iter().enumerate().skip(1) {
         let at = n + 1;
@@ -142,7 +143,7 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
                 continue;
             }
             if let Some(end) = e.get("end") {
-                footer = Some((end.clone(), at));
+                footer = Some((end.clone(), at, line));
                 continue;
             }
         }
@@ -154,6 +155,7 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
             return Err(format!("line {at}: time goes backwards"));
         }
         last_at = t as i64;
+        ended_at = Some(t);
         let kinds: Vec<usize> = (0..6).filter(|&k| e.get(KINDS[k]).is_some()).collect();
         if kinds.len() != 1 {
             return Err(format!(
@@ -178,7 +180,7 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
     if hdlog == 1 {
         return Ok(out);
     }
-    if let Some((end, at)) = &footer {
+    if let Some((end, at, text)) = &footer {
         let at = format!("line {at}");
         if block_lines > 0 {
             out.problems.push(format!(
@@ -216,6 +218,32 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
                 "{at}: footer device does not match the hello frame"
             ));
         }
+        let ended = ended_at.unwrap_or(out.started_at as f64);
+        if end.get("endedAt").and_then(Value::as_f64) != Some(ended) {
+            out.problems.push(format!(
+                "{at}: footer endedAt does not match the last entry"
+            ));
+        }
+        if !matches!(
+            end.get("closed").and_then(Value::as_str),
+            Some("NORMAL" | "RECOVERED" | "SNAPSHOT")
+        ) {
+            out.problems
+                .push(format!("{at}: footer closed is not a closing"));
+        }
+        match footer_self(text) {
+            Some((body, hash)) if sha256_hex(body) != hash => out.problems.push(format!(
+                "{at}: the footer line changed after it was written"
+            )),
+            Some(_) => {}
+            None if header.get("footerSealed") == Some(&Value::Bool(true))
+                || end.get("self").is_some() =>
+            {
+                out.problems
+                    .push(format!("{at}: the footer line is not sealed"))
+            }
+            None => {}
+        }
         out.ended_at = end.get("endedAt").and_then(Value::as_i64);
         out.closure = end
             .get("closed")
@@ -238,6 +266,21 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
     }
     .into();
     Ok(out)
+}
+
+/// The footer's own seal: the line ends `,"self":"<64 hex>"}}` and the hash
+/// is the sha256 of every byte before `,"self"` (web/src/core/session.ts).
+fn footer_self(line: &[u8]) -> Option<(&[u8], &str)> {
+    const TAIL: usize = r#","self":""#.len() + 64 + r#""}}"#.len();
+    if line.len() < TAIL || !line.starts_with(br#"{"end":{"#) {
+        return None;
+    }
+    let (body, tail) = line.split_at(line.len() - TAIL);
+    let tail = std::str::from_utf8(tail).ok()?;
+    let hash = tail.strip_prefix(r#","self":""#)?.strip_suffix(r#""}}"#)?;
+    hash.bytes()
+        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        .then_some((body, hash))
 }
 
 #[cfg(test)]
@@ -315,6 +358,77 @@ mod tests {
 
         let extra = format!("{text}{{\"at\":1,\"mark\":\"late\"}}\n");
         assert!(inspect(extra.as_bytes()).unwrap().problems[0].contains("after the footer"));
+    }
+
+    /// A footer that seals its own line, as the interface writes it now:
+    /// `,"self":"<sha256 of the line before it>"` as its last field.
+    fn seal_footer(text: &str) -> String {
+        let (body, footer) = text.trim_end().rsplit_once('\n').unwrap();
+        let open = footer.strip_suffix("}}").unwrap();
+        format!(
+            "{body}\n{open},\"self\":\"{}\"}}}}\n",
+            sha256_hex(open.as_bytes())
+        )
+    }
+
+    #[test]
+    fn the_footer_line_is_sealed_too() {
+        let legacy = String::from_utf8(case("HD-C002.hdlog")).unwrap();
+        let sealed = seal_footer(&legacy);
+        let i = inspect(sealed.as_bytes()).unwrap();
+        assert_eq!(i.integrity, "VERIFIED", "{:?}", i.problems);
+
+        // how it closed, and when, cannot change
+        let snapshot = sealed.replacen("\"closed\":\"NORMAL\"", "\"closed\":\"SNAPSHOT\"", 1);
+        let i = inspect(snapshot.as_bytes()).unwrap();
+        assert_eq!(i.integrity, "MODIFIED");
+        assert!(
+            i.problems[0].contains("footer line changed"),
+            "{:?}",
+            i.problems
+        );
+        let invented = legacy.replacen("\"closed\":\"NORMAL\"", "\"closed\":\"DONE\"", 1);
+        assert!(inspect(invented.as_bytes()).unwrap().problems[0].contains("not a closing"));
+        let ended = legacy.replacen("\"endedAt\":", "\"endedAt\":1", 1);
+        assert!(inspect(ended.as_bytes()).unwrap().problems[0].contains("endedAt"));
+
+        // dropping the seal gives back the older file: still read as one
+        let (head, _) = sealed.rsplit_once(",\"self\":").unwrap();
+        assert_eq!(format!("{head}}}}}\n"), legacy);
+    }
+
+    /// The smallest file the interface writes now: a header that says its
+    /// footer seals itself, two marks, one seal, the footer.
+    fn written(self_sealed: bool) -> String {
+        let header = r#"{"hdlog":2,"recording":"0123456789abcdef0123456789abcdef","id":"HD-T","startedAt":1000,"origin":"PHYSICAL","source":"WEB SERIAL","footerSealed":true}"#;
+        let block = "{\"at\":1001,\"mark\":\"a\"}\n{\"at\":1002,\"mark\":\"b\"}\n";
+        let chain = sha256_hex(
+            format!("{}{block}", sha256_hex(format!("{header}\n").as_bytes())).as_bytes(),
+        );
+        let body = format!(
+            "{header}\n{block}{{\"seal\":{{\"n\":1,\"lines\":2,\"sha256\":\"{chain}\"}}}}\n"
+        );
+        let end = format!(
+            r#"{{"end":{{"closed":"NORMAL","startedAt":1000,"endedAt":1002,"entries":2,"frames":0,"rejects":0,"commands":0,"marks":2,"thresholds":0,"lost":0,"seals":1,"device":null,"sha256":"{}"}}}}"#,
+            sha256_hex(body.as_bytes())
+        );
+        if self_sealed {
+            seal_footer(&format!("{body}{end}\n"))
+        } else {
+            format!("{body}{end}\n")
+        }
+    }
+
+    #[test]
+    fn a_footer_sealed_header_requires_the_seal() {
+        let i = inspect(written(true).as_bytes()).unwrap();
+        assert_eq!(i.integrity, "VERIFIED", "{:?}", i.problems);
+        let i = inspect(written(false).as_bytes()).unwrap();
+        assert_eq!(i.integrity, "MODIFIED");
+        assert!(i.problems[0].contains("not sealed"), "{:?}", i.problems);
+        let renamed = written(true).replacen(",\"self\":\"", ",\"selF\":\"", 1);
+        assert!(inspect(renamed.as_bytes()).unwrap().problems[0].contains("not sealed"));
+        assert_eq!(footer_self(b"{\"end\":{}}"), None);
     }
 
     #[test]

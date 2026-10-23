@@ -352,12 +352,23 @@ export interface DocLine {
 }
 
 /**
+ * Text from a device or a file, as one visible line: a line break, a
+ * control or a direction override would start a forged line (a fake
+ * RESULT) or reorder the words, so each is written out as an escape
+ * (\n, \u{202E}): the same characters in TXT, HTML and PDF.
+ */
+const UNPRINTABLE = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
+const ESCAPES: Record<string, string> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
+export const printable = (s: string): string =>
+  s.replace(UNPRINTABLE, (c) => ESCAPES[c] ?? `\\u{${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}}`);
+
+/**
  * The report as styled lines. TXT, HTML and PDF are all made from this,
  * so no format can say something another one does not.
  */
 export function reportLines(r: Report, options: { banner?: boolean } = {}): DocLine[] {
   const out: DocLine[] = [];
-  const line = (text: string, style: LineStyle = 'normal') => out.push({ text, style });
+  const line = (text: string, style: LineStyle = 'normal') => out.push({ text: printable(text), style });
   const blank = () => line('');
   const kv = (k: string, v: string) => line(`${k.padEnd(22)}${v}`);
   const section = (title: string) => {

@@ -74,13 +74,20 @@ export interface BleDevice {
   /** The payload before the last change, per field, for the inspector's comparison. */
   previous: Map<string, Uint8Array>;
   payloadChanges: number;
+  /** Advertised entries past BLE_LIMITS.maxEntries: counted, not kept (said in the inspector). */
+  truncated: number;
 }
 
 export const BLE_LIMITS = {
   maxDevices: 2000,
   rssiPoints: 600,
   maxPayload: 512,
+  /** Advertised service UUIDs, manufacturer entries and service data kept per device: the rest is counted, not kept. */
+  maxEntries: 64,
 } as const;
+
+/** One advertisement is bounded too: an advertiser cannot make one observation cost more than this. */
+export const capList = <T>(list: readonly T[]): T[] => list.slice(0, BLE_LIMITS.maxEntries);
 
 /** Estimated presence from the last time seen. An estimate, named so. */
 export type Presence = 'PRESENT' | 'RECENT' | 'GONE';
@@ -177,6 +184,7 @@ export class BleScanModel {
         serviceData: new Map(),
         previous: new Map(),
         payloadChanges: 0,
+        truncated: 0,
       };
       this.devices.set(key, d);
     }
@@ -197,11 +205,20 @@ export class BleScanModel {
       d.rssiHistory.push({ mono: o.mono, rssi: o.rssi });
       if (d.rssiHistory.length > BLE_LIMITS.rssiPoints) d.rssiHistory.splice(0, d.rssiHistory.length - BLE_LIMITS.rssiPoints);
     }
-    for (const s of o.services) if (!d.services.includes(s)) d.services.push(s);
+    d.truncated += Math.max(0, o.services.length - BLE_LIMITS.maxEntries);
+    for (const s of capList(o.services)) {
+      if (d.services.includes(s)) continue;
+      if (d.services.length < BLE_LIMITS.maxEntries) d.services.push(s);
+      else d.truncated++;
+    }
     let changed = false;
     const keep = (field: string, map: Map<string | number, Uint8Array>, k: string | number, data: Uint8Array) => {
       const bytes = data.length > BLE_LIMITS.maxPayload ? data.slice(0, BLE_LIMITS.maxPayload) : data;
       const before = map.get(k);
+      if (!before && map.size >= BLE_LIMITS.maxEntries) {
+        d!.truncated++;
+        return;
+      }
       if (!same(before, bytes)) {
         if (before) {
           d!.previous.set(field, before);
@@ -211,8 +228,8 @@ export class BleScanModel {
         changed = true;
       }
     };
-    for (const m of o.manufacturer) keep(`m:${m.company}`, d.manufacturer as Map<string | number, Uint8Array>, m.company, m.data);
-    for (const s of o.serviceData) keep(`s:${s.uuid}`, d.serviceData as Map<string | number, Uint8Array>, s.uuid, s.data);
+    for (const m of capList(o.manufacturer)) keep(`m:${m.company}`, d.manufacturer as Map<string | number, Uint8Array>, m.company, m.data);
+    for (const s of capList(o.serviceData)) keep(`s:${s.uuid}`, d.serviceData as Map<string | number, Uint8Array>, s.uuid, s.data);
     this.changed();
     return { device: d, changed };
   }

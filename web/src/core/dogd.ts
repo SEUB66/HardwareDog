@@ -39,11 +39,15 @@ export interface DogdLink {
   reason: string | null;
 }
 
+/** dogd answers on this machine in milliseconds: past this, it is hung, and that is said. */
+const DOGD_ANSWER_MS = 4000;
+
 async function getJson<T>(url: string): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(url, { cache: 'no-store' });
-  } catch {
+    res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(DOGD_ANSWER_MS) });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'TimeoutError') throw new Error(`dogd at ${new URL(url).host} did not answer within ${DOGD_ANSWER_MS / 1000} s: it is starting, or hung. Restart it: docs/DOGD.md`);
     throw new Error(`no dogd at ${new URL(url).host}. Start it on this computer: dogd serve --source host (its network), or --source serial:PORT (a probe). docs/DOGD.md`);
   }
   if (!res.ok) throw new Error(`dogd: ${res.status} ${await res.text()}`);
@@ -84,6 +88,17 @@ export async function connectDogd(base = DOGD_URL): Promise<Transport> {
 /** Whether a session's evidence came through dogd (its store then keeps the file). */
 export const viaDogd = (t: Transport | null): boolean =>
   t instanceof DogdTransport || (t instanceof PackTransport && t.links.every((l) => l.kind === 'DOGD'));
+
+/**
+ * Why the HDP socket closed, in words that name who dropped: dogd gives a
+ * reason when it closes on purpose (the device behind it was lost, the
+ * client was too slow); with none and code 1006, dogd itself went away.
+ */
+export function dogdClosed(code: number, reason: string): string {
+  if (reason) return reason;
+  if (code === 1006) return 'dogd stopped answering: it quit or was stopped, or the connection to it dropped';
+  return `dogd closed the HDP socket (${code})`;
+}
 
 /** Hand a finished .hdlog to dogd's local store. The file is the evidence; dogd indexes it. */
 export async function dogdStore(recording: string, hdlog: string, base = DOGD_URL): Promise<void> {
@@ -152,7 +167,7 @@ export class DogdTransport implements Transport {
 
     await new Promise<void>((resolve, reject) => {
       socket.onopen = () => resolve();
-      socket.onclose = (e) => reject(new Error(e.reason || `dogd closed the HDP socket (${e.code})`));
+      socket.onclose = (e) => reject(new Error(dogdClosed(e.code, e.reason)));
       socket.onerror = () => reject(new Error('dogd HDP socket failed'));
     });
     socket.onmessage = (e) => {
@@ -160,7 +175,7 @@ export class DogdTransport implements Transport {
     };
     socket.onclose = (e) => {
       this.socket = null;
-      if (!this.closing) sink.lost(e.reason || `dogd closed the HDP socket (${e.code})`);
+      if (!this.closing) sink.lost(dogdClosed(e.code, e.reason));
     };
     socket.onerror = null;
     this.send({ cmd: 'hello', proto: PROTOCOL_VERSION });

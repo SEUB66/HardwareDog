@@ -7,8 +7,7 @@
  */
 
 import { useMemo, useState } from 'preact/hooks';
-import { bleClues } from '../../core/camera/clues';
-import { buildReport } from '../../core/camera/report';
+import { bleForReport, buildReport } from '../../core/camera/report';
 import type { Lab } from '../../core/lab/context';
 import { instantOp } from '../../core/lab/events';
 import { browserLang } from '../../core/lab/rules';
@@ -30,25 +29,28 @@ export function CameraReport({ lab, usb }: { lab: Lab; usb: UsbReading | null })
   const [maskNetwork, setMask] = useState(true);
   const [hidePersonal, setHide] = useState(false);
   const iface = net.interfaces.find((i) => i.name === (net.status?.iface ?? net.iface));
+  const devices = [...net.model.devices.values()];
+  const bleInput = bleForReport(lab.ble, insp.created);
   const report = useMemo(
     () =>
       buildReport(
         {
           inspection: insp,
-          devices: [...net.model.devices.values()],
-          notes: net.notes,
+          devices,
+          notes: net.liveNotes(),
           network: {
             iface: net.status?.iface ?? null,
             network: iface?.network ?? null,
             methods: net.status?.methods ?? [],
             state: net.state,
             detail: net.status?.detail ?? '',
-            origin: net.origin,
+            // what the devices are, not what the source is now (DEMO picked after a real scan changes nothing listed)
+            origin: devices.some((d) => d.origin === 'SIMULATED') || (!devices.length && net.origin === 'SIMULATED') ? 'SIMULATED' : 'PHYSICAL',
             ran: !!net.status && net.status.scan > 0,
             lost: net.lost,
             scanNotes: net.model.notes.map((n) => `${n.method}: ${n.summary}`),
           },
-          ble: { ran: lab.ble.model.devices.size > 0 || lab.ble.scanning, source: lab.ble.sourceKind, origin: lab.ble.origin, clues: bleClues(lab.ble.model.devices.values()) },
+          ble: bleInput,
           usb: { ran: !!usb, supported: usb?.supported ?? false, clues: usb?.clues ?? [] },
           generated: Date.now(),
           lang: browserLang(),

@@ -246,8 +246,23 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
     })
 }
 
+/// Whether a link's hello names a board to remember in the identity index:
+/// not this computer (it has no chip id), not a simulator (its identity is
+/// invented, and simulated data never passes for real hardware).
+pub fn remembers_identity(source: &Source, origin: Origin) -> bool {
+    !matches!(source, Source::Host) && origin == Origin::Physical
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_physical_boards_enter_the_identity_index() {
+        let tcp = Source::Tcp("10.0.0.5:4782".into());
+        assert!(remembers_identity(&tcp, Origin::Physical));
+        assert!(!remembers_identity(&tcp, Origin::Simulated));
+        assert!(!remembers_identity(&Source::Host, Origin::Physical));
+    }
+
     use super::*;
 
     fn args(s: &str) -> Vec<String> {

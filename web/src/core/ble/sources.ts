@@ -11,7 +11,7 @@
 
 import { dogdBleObservations, dogdBleScan, dogdBleStatus, type DogdBleObservation } from '../dogd';
 import type { LabClock } from '../lab/events';
-import { shortUuid, type BleObservation, type BleSourceKind } from './model';
+import { capList, shortUuid, type BleObservation, type BleSourceKind } from './model';
 import { BleError, bluetoothApi, fromAdvertisement, type BtAdvertisingEvent, type BtScan } from './webbt';
 
 export interface BleSink {
@@ -89,9 +89,9 @@ export function fromDogd(o: DogdBleObservation, dogdNowMono: number, clock: LabC
     rssi: o.rssi,
     txPower: o.tx_power,
     connectable: null,
-    services: o.uuids.map((u) => shortUuid(u)),
-    manufacturer: Object.entries(o.manufacturer).map(([c, h]) => ({ company: Number(c), data: fromHex(h) })),
-    serviceData: Object.entries(o.service_data).map(([u, h]) => ({ uuid: shortUuid(u), data: fromHex(h) })),
+    services: capList(o.uuids).map((u) => shortUuid(u)),
+    manufacturer: capList(Object.entries(o.manufacturer)).map(([c, h]) => ({ company: Number(c), data: fromHex(h) })),
+    serviceData: capList(Object.entries(o.service_data)).map(([u, h]) => ({ uuid: shortUuid(u), data: fromHex(h) })),
   };
 }
 
