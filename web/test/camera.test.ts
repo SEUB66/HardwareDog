@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CATALOG, emptyFilter, filterFamilies } from '../src/core/camera/catalog';
 import { BLE_SIGNATURES, bleClues, bleLabel, usbClues } from '../src/core/camera/clues';
 import { demoLanApi } from '../src/core/camera/demo';
-import { Inspections, priority, type Inspection, type PhotoRecord } from '../src/core/camera/inspection';
+import { Inspections, PHOTO_LIMITS, priority, type Inspection, type PhotoRecord } from '../src/core/camera/inspection';
 import { classify, emptyNote, NetModel, type NetDevice } from '../src/core/camera/model';
 import { CameraNet, DOGD_HOWTO, type LanApi } from '../src/core/camera/net';
 import { bleForReport, buildReport, CONCLUSION, conclusionOpen, type BleView, type ReportInput } from '../src/core/camera/report';
@@ -409,6 +409,21 @@ describe('guided inspection', () => {
     expect(insp.find(item.id)!.item.status).toBe('TO_EXAMINE');
     insp.update(item.id, { status: 'CONFIRMED_DOCUMENTED', observations: 'lens behind the grille, recording light on' });
     expect(insp.find(item.id)!.item.status).toBe('CONFIRMED_DOCUMENTED');
+  });
+
+  it('a photo is an image of bounded size; a refused one is an error to show, never dropped silently', async () => {
+    const { insp } = make();
+    insp.start('');
+    const item = insp.addItem(insp.addRoom('bedroom').id, 'usb-charger')!;
+    await expect(insp.addPhoto(item.id, new Blob(['x'], { type: 'text/html' }), 1, 1)).rejects.toThrow(/not an image/);
+    const huge = { type: 'image/jpeg', size: PHOTO_LIMITS.maxBytes + 1 } as Blob;
+    await expect(insp.addPhoto(item.id, huge, 1, 1)).rejects.toThrow(/more than 25 MB/);
+    const full: typeof insp.photos = Object.assign(Object.create(insp.photos), { put: async () => Promise.reject(Object.assign(new Error('quota'), { name: 'QuotaExceededError' })) });
+    const strict = new Inspections(new LabBus(), new MemoryKv<Inspection>(), full);
+    strict.start('');
+    const other = strict.addItem(strict.addRoom('bedroom').id, 'usb-charger')!;
+    await expect(strict.addPhoto(other.id, new Blob(['x'], { type: 'image/jpeg' }), 1, 1)).rejects.toThrow('quota');
+    expect(strict.find(other.id)!.item.photos).toEqual([]);
   });
 
   it('erasing the documentation of a confirmed object withdraws the confirmation, on the timeline', () => {

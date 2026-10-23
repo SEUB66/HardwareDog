@@ -345,7 +345,16 @@ const done = (tx: IDBTransaction): Promise<void> =>
   });
 
 /** IndexedDB backend, or null when the browser refuses storage. */
-export async function idbBackend(factory: IDBFactory | null = globalThis.indexedDB ?? null): Promise<ArchiveBackend | null> {
+/** The browser's IndexedDB; null when there is none or it is refused (a sandboxed frame throws on access). */
+export function browserIndexedDb(): IDBFactory | null {
+  try {
+    return globalThis.indexedDB ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function idbBackend(factory: IDBFactory | null = browserIndexedDb()): Promise<ArchiveBackend | null> {
   if (!factory) return null;
   let db: IDBDatabase;
   try {

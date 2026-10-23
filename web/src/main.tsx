@@ -18,6 +18,7 @@ import { BUILD } from './core/ascii';
 import { createLab } from './core/lab/context';
 import { pwa } from './core/pwa';
 import { App } from './ui/App';
+import { StartFailed } from './ui/StartFailed';
 
 // Offline after one visit, installable where the browser offers it; updates wait for the person.
 pwa.start(import.meta.env.PROD);
@@ -26,9 +27,18 @@ pwa.start(import.meta.env.PROD);
 // browser refuses storage. Opening the archive takes a few milliseconds.
 // The lab (Flipper, Bluetooth, the companion TV) is created once, for every screen.
 const reduced = () => document.documentElement.dataset['motion'] === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches;
-void Promise.all([SessionArchive.open(), createLab(`hwdog-web ${BUILD}`, reduced)]).then(([archive, lab]) => {
-  // The static introduction (for a first paint and for readers without JavaScript) gives way to the interface.
-  document.getElementById('intro')?.remove();
-  document.getElementById('intro-css')?.remove();
-  render(<App archive={archive} lab={lab} />, document.getElementById('app')!);
-});
+void Promise.all([SessionArchive.open(), createLab(`hwdog-web ${BUILD}`, reduced)]).then(
+  ([archive, lab]) => {
+    // The static introduction (for a first paint and for readers without JavaScript) gives way to the interface.
+    document.getElementById('intro')?.remove();
+    document.getElementById('intro-css')?.remove();
+    render(<App archive={archive} lab={lab} />, document.getElementById('app')!);
+  },
+  (e: unknown) => {
+    // Never the introduction forever with nothing said: what failed, and what to try.
+    console.error(e);
+    const app = document.getElementById('app')!;
+    document.getElementById('intro')?.before(app);
+    render(<StartFailed error={e} />, app);
+  },
+);

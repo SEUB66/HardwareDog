@@ -15,17 +15,20 @@ import { FEATURES } from '../core/features';
 import type { Lab } from '../core/lab/context';
 import { browserLang } from '../core/lab/rules';
 import { RetroTv } from './lab/RetroTv';
+import { useModal } from './useModal';
 import type { TvPlacement } from './lab/TvHost';
 
 export function WhatsNew({ lab, placement, reducedMotion, onGo, onClose }: { lab: Lab; placement: TvPlacement; reducedMotion: boolean; onGo: (s: Screen) => void; onClose: () => void }) {
   const lang = browserLang();
   const close = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const [first, ...rest] = FEATURES;
   // The tap that skipped the boot screen must not land on this screen as a
   // click (a ghost click on a phone): taps count after a short moment.
   const opened = useRef(performance.now());
   const settled = () => performance.now() - opened.current > 450;
   const go = (s: Screen) => settled() && onGo(s);
+  useModal(dialog);
   useEffect(() => {
     close.current?.focus();
     // The CRT comes on with the screen, as asked: a TV left off is switched on once here.
@@ -42,7 +45,7 @@ export function WhatsNew({ lab, placement, reducedMotion, onGo, onClose }: { lab
   if (!first) return null;
   return (
     <div class="whatsnew-backdrop" onClick={(e) => e.target === e.currentTarget && settled() && onClose()}>
-      <div class="whatsnew" role="dialog" aria-modal="true" aria-labelledby="whatsnew-title">
+      <div ref={dialog} class="whatsnew" role="dialog" aria-modal="true" aria-labelledby="whatsnew-title">
         <header class="whatsnew-head">
           <h2 id="whatsnew-title">{lang === 'fr' ? 'NOUVEAUTÉS' : 'WHAT’S NEW'}</h2>
           <button class="btn" ref={close} onClick={() => settled() && onClose()} aria-label={lang === 'fr' ? 'Fermer les nouveautés' : 'Close what’s new'}>

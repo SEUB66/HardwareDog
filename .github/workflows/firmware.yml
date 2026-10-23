@@ -20,7 +20,7 @@ jobs:
   core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: build core (host)
         run: |
           cmake -S firmware/host -B firmware/host/build -DCMAKE_BUILD_TYPE=Debug
@@ -29,8 +29,8 @@ jobs:
         run: ctest --test-dir firmware/host/build --output-on-failure
       - name: build dogd
         working-directory: dogd
-        run: cargo build
-      - uses: actions/setup-node@v4
+        run: cargo build --locked
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -49,15 +49,15 @@ jobs:
   esp32s3:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: ESP-IDF build
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/esp-idf-ci-action@e6f5c74232b1ccd4c97ed641f1e48553853f1fd5 # v1.2.0
         with:
           esp_idf_version: v5.4.1
           target: esp32s3
           path: firmware
       - name: ESP-IDF build, wired port (W5500) and I2C watch
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/esp-idf-ci-action@e6f5c74232b1ccd4c97ed641f1e48553853f1fd5 # v1.2.0
         with:
           esp_idf_version: v5.4.1
           target: esp32s3
@@ -65,7 +65,7 @@ jobs:
           command: idf.py -B build-w5500 -D SDKCONFIG=build-w5500/sdkconfig -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.ci.w5500" build
       # Reproducible: the same sources, built again elsewhere, give the same image.
       - name: ESP-IDF build again, compared byte for byte
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/esp-idf-ci-action@e6f5c74232b1ccd4c97ed641f1e48553853f1fd5 # v1.2.0
         with:
           esp_idf_version: v5.4.1
           target: esp32s3

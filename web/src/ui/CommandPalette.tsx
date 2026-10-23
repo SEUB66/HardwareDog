@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { COMMANDS, execute, type CommandContext } from '../core/commands';
+import { useModal } from './useModal';
 
 export interface PaletteEntry {
   input: string;
@@ -22,6 +23,8 @@ export function CommandPalette({ context, log, onLog, onClose, typeAhead }: Pale
   const [recall, setRecall] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
   const out = useRef<HTMLPreElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  useModal(dialog);
 
   const submit = (line: string) => {
     if (line.trim()) onLog({ input: line, ...execute(line, context) });
@@ -86,7 +89,7 @@ export function CommandPalette({ context, log, onLog, onClose, typeAhead }: Pale
 
   return (
     <div class="overlay" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div class="palette" role="dialog" aria-modal="true" aria-label="Command">
+      <div ref={dialog} class="palette" role="dialog" aria-modal="true" aria-label="Command">
         <div class="prompt">
           <span class="pink" aria-hidden="true">
             &gt;

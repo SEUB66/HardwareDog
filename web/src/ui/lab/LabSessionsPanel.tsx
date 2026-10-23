@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'preact/hooks';
 import type { Lab } from '../../core/lab/context';
 import { LAB_SOURCES, instantOp, type LabEvent, type LabSource } from '../../core/lab/events';
-import { compare, labReport, near, parseHdlab, splitAt, toHdlab, type LabSessionData } from '../../core/lab/session';
+import { HDLAB_LIMITS, compare, labReport, near, parseHdlab, splitAt, toHdlab, type LabSessionData } from '../../core/lab/session';
 import { labStoreProblem } from '../../core/lab/store';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
@@ -200,9 +200,14 @@ export function LabSessionsPanel({ lab, onReplayBle }: { lab: Lab; onReplayBle?:
             accept=".hdlab,application/x-ndjson"
             hidden
             onChange={async (e) => {
-              const f = (e.target as HTMLInputElement).files?.[0];
+              const input = e.target as HTMLInputElement;
+              const f = input.files?.[0];
+              // Cleared at once: the same file can be picked again after an error.
+              input.value = '';
               if (!f) return;
               try {
+                // The size is known before reading: a file too large is never loaded into the page.
+                if (f.size > HDLAB_LIMITS.maxBytes) throw new Error(`${f.name} is ${f.size} bytes: more than ${HDLAB_LIMITS.maxBytes} for an .hdlab`);
                 s.openText(await f.text());
                 setError(null);
               } catch (x) {
