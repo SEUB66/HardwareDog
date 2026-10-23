@@ -18,19 +18,19 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: format
         working-directory: dogd
         run: cargo fmt --check
       - name: lint
         working-directory: dogd
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: unit tests
         working-directory: dogd
-        run: cargo test
+        run: cargo test --locked
       - name: build
         working-directory: dogd
-        run: cargo build
+        run: cargo build --locked
       # LVL 100: the same sources and lockfile give the same binary, wherever it is built.
       - name: release built twice, compared byte for byte
         working-directory: dogd
@@ -70,7 +70,7 @@ jobs:
           if bash web/public/install; then echo "installed despite a wrong sum"; exit 1; fi
           if [ -e /usr/bin/dogd ]; then echo "dogd is there"; exit 1; fi
           kill "$srv" || true
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -92,7 +92,7 @@ jobs:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # The recordings must arrive byte for byte (LF, as sealed).
       - name: evidence is checked out unchanged
         shell: bash
@@ -101,7 +101,7 @@ jobs:
           ! grep -q $'\r' cases/*/*.hdlog
       - name: lint
         working-directory: dogd
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: unit tests
         working-directory: dogd
-        run: cargo test
+        run: cargo test --locked

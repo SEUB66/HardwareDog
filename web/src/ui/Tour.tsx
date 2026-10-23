@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useModal } from './useModal';
 
 /** One stop of the tour: a part of the screen and what it is for. */
 export interface TourStop {
@@ -86,6 +87,8 @@ export function Tour({ stops = TOUR, onEnd }: { stops?: readonly TourStop[]; onE
   const [at, setAt] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
   const next = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  useModal(dialog);
   const stop = shown[at];
   const last = at === shown.length - 1;
 
@@ -144,7 +147,7 @@ export function Tour({ stops = TOUR, onEnd }: { stops?: readonly TourStop[]; onE
         : { bottom: Math.max(vh - box.top + pad + 12, 12), left: Math.min(Math.max(box.left, 12), window.innerWidth - 432) };
 
   return (
-    <div class="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+    <div ref={dialog} class="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title">
       {box && (
         <div
           class="tour-light"

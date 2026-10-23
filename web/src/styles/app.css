@@ -41,6 +41,12 @@ select {
   outline-offset: 1px;
 }
 
+/* The workspace takes focus after a screen change only so Tab continues there
+   (and a screen reader says the screen): it is not a control, so no frame. */
+.work:focus-visible {
+  outline: none;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

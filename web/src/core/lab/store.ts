@@ -12,6 +12,8 @@
  *   hwdog-lab / photos     id -> PhotoRecord      photos taken during an inspection, never sent anywhere
  */
 
+import { browserIndexedDb } from '../archive';
+
 export interface KvBackend<T> {
   readonly kind: 'INDEXEDDB' | 'MEMORY';
   all(): Promise<T[]>;
@@ -133,7 +135,7 @@ class IdbKv<T> implements KvBackend<T> {
 let shared: Promise<IDBDatabase | null> | null = null;
 
 /** A store of the lab database; memory when IndexedDB is not there or refuses. */
-export async function openLabStore<T>(name: LabStoreName, factory: IDBFactory | undefined = globalThis.indexedDB): Promise<KvBackend<T>> {
+export async function openLabStore<T>(name: LabStoreName, factory: IDBFactory | undefined = browserIndexedDb() ?? undefined): Promise<KvBackend<T>> {
   if (!factory) return new MemoryKv<T>();
   shared ??= openDb(factory).catch(() => null);
   const db = await shared;

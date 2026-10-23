@@ -41,6 +41,13 @@ sudo apt install ./hwdog-dogd_*_amd64.deb          # arm64 on a Pi or an ARM lap
 dogd serve --source host                           # this computer: network and USB
 ```
 
+The sum says the file is the one published. Who built it, from which
+commit, is said by its signed build provenance (GitHub CLI, optional):
+
+```sh
+gh attestation verify hwdog-dogd_*_amd64.deb --repo SEUB66/HardwareDog
+```
+
 Then in the interface: **TOOLS → NETWORK · USB → WATCH THIS COMPUTER** (on the home, nothing connected).
 
 To start it with your session instead of by hand:
@@ -96,8 +103,12 @@ commit give the same `.deb`.
 
 ## A RELEASE (maintainers)
 
-A tag `dogd-vX.Y.Z` matching `dogd/Cargo.toml` builds the packages for
-amd64 and arm64 on Ubuntu 22.04 (glibc 2.35: runs on current Kali,
-Debian 12 and Ubuntu 22.04 and later), installs each one, checks it
-starts, and publishes them with `SHA256SUMS` on the Releases page
-(`.github/workflows/release.yml`).
+A tag `dogd-vX.Y.Z` matching `dogd/Cargo.toml`, on a commit already on
+`main`, runs dogd's format, lint and tests (`--locked`), then builds the
+packages for amd64 and arm64 on Ubuntu 22.04 (glibc 2.35: runs on current
+Kali, Debian 12 and Ubuntu 22.04 and later), installs each one, checks it
+starts, and publishes them with `SHA256SUMS` and a signed build provenance
+for each file on the Releases page (`.github/workflows/release.yml`). A tag
+on any other commit, or a red test, publishes nothing. The workflows' actions
+are pinned by commit; Dependabot proposes their updates
+(`.github/dependabot.yml`).

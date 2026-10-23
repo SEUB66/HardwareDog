@@ -15,6 +15,9 @@ import { newOp, type LabBus, type LabOrigin } from '../lab/events';
 import type { KvBackend } from '../lab/store';
 import { family, type Room } from './catalog';
 
+/** A photo kept in this browser: an image, of a phone camera's size at most; its marks, as many as a photo can show. */
+export const PHOTO_LIMITS = { maxBytes: 25 * 1024 * 1024, maxMarks: 40, maxNote: 300 } as const;
+
 export const ITEM_STATUSES = ['TO_EXAMINE', 'EXAMINED_NOTHING_NOTED', 'NEEDS_CHECK', 'CONFIRMED_DOCUMENTED', 'NOT_VERIFIED'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
@@ -249,6 +252,8 @@ export class Inspections {
   async addPhoto(itemId: string, data: Blob, width: number, height: number): Promise<PhotoRecord | null> {
     const found = this.find(itemId);
     if (!found) return null;
+    if (data.type && !data.type.startsWith('image/')) throw new Error(`not an image (${data.type})`);
+    if (data.size > PHOTO_LIMITS.maxBytes) throw new Error(`${Math.round(data.size / 1024 / 1024)} MB is more than ${PHOTO_LIMITS.maxBytes / 1024 / 1024} MB for one photo`);
     const rec: PhotoRecord = { id: id('photo'), itemId, at: Date.now(), type: data.type || 'image/jpeg', width, height, data, annotations: [] };
     await this.photos.put(rec.id, rec);
     found.item.photos.push(rec.id);
@@ -260,7 +265,7 @@ export class Inspections {
   async annotate(photoId: string, annotations: Annotation[]): Promise<void> {
     const rec = await this.photos.get(photoId);
     if (!rec) return;
-    rec.annotations = annotations.slice(0, 40).map((a) => ({ x: Math.min(1, Math.max(0, a.x)), y: Math.min(1, Math.max(0, a.y)), note: a.note.slice(0, 300) }));
+    rec.annotations = annotations.slice(0, PHOTO_LIMITS.maxMarks).map((a) => ({ x: Math.min(1, Math.max(0, a.x)), y: Math.min(1, Math.max(0, a.y)), note: a.note.slice(0, PHOTO_LIMITS.maxNote) }));
     await this.photos.put(photoId, rec);
     this.changed(false);
   }

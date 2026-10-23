@@ -241,3 +241,26 @@ describe('archive failures', () => {
     expect(archive.persistent).toBe(false);
   });
 });
+
+describe('storage refused at the door (audit 2026-10)', () => {
+  it('an indexedDB that throws on access gives memory backends, never a failed start', async () => {
+    const { SessionArchive: Archive } = await import('../src/core/archive');
+    const { openLabStore, resetLabStore } = await import('../src/core/lab/store');
+    const before = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+    Object.defineProperty(globalThis, 'indexedDB', {
+      configurable: true,
+      get() {
+        throw Object.assign(new Error('access denied in this frame'), { name: 'SecurityError' });
+      },
+    });
+    try {
+      resetLabStore();
+      expect((await Archive.open(100)).persistent).toBe(false);
+      expect((await openLabStore('sessions')).kind).toBe('MEMORY');
+    } finally {
+      if (before) Object.defineProperty(globalThis, 'indexedDB', before);
+      else Reflect.deleteProperty(globalThis, 'indexedDB');
+      resetLabStore();
+    }
+  });
+});
