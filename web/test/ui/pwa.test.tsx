@@ -7,12 +7,20 @@ function fakeWorkers(controlled = true) {
   const target = new EventTarget();
   const posted: unknown[] = [];
   const reg = Object.assign(new EventTarget(), { waiting: { postMessage: (m: unknown) => void posted.push(m) } as { postMessage(m: unknown): void } | null, installing: null, update: async () => {} });
-  const sw = Object.assign(target, { controller: controlled ? {} : null, register: async () => reg });
+  let registered!: () => void;
+  const done = new Promise<void>((r) => (registered = r));
+  const sw = Object.assign(target, { controller: controlled ? {} : null, register: async () => (registered(), reg) });
   Object.defineProperty(navigator, 'serviceWorker', { value: sw, configurable: true });
-  return { sw, reg, posted, takeOver: () => sw.dispatchEvent(new Event('controllerchange')) };
+  // registration waits for the page's load and an idle moment: settle once it happened
+  const settle = async () => {
+    await done;
+    await new Promise((r) => setTimeout(r, 0));
+  };
+  return { sw, reg, posted, settle, takeOver: () => sw.dispatchEvent(new Event('controllerchange')) };
 }
 
-const settle = () => new Promise((r) => setTimeout(r, 0));
+/** Registration runs once the page is quiet (core/net.ts); here, at once. */
+const now = (fn: () => void) => fn();
 
 afterEach(() => {
   Reflect.deleteProperty(navigator, 'serviceWorker');
@@ -23,9 +31,9 @@ describe('PWA update (audit 2026-10)', () => {
   it('another tab started the new version: this one says so, and RELOAD reloads', async () => {
     const w = fakeWorkers();
     let reloads = 0;
-    const p = new Pwa(() => void reloads++);
+    const p = new Pwa(() => void reloads++, now);
     p.start(true);
-    await settle();
+    await w.settle();
     expect(p.update).toBe(true);
     // the other tab pressed RELOAD: the worker took over this page too, and is no longer waiting
     w.reg.waiting = null;
@@ -40,9 +48,9 @@ describe('PWA update (audit 2026-10)', () => {
   it('RELOAD here: the waiting worker is asked, the page reloads once it took over', async () => {
     const w = fakeWorkers();
     let reloads = 0;
-    const p = new Pwa(() => void reloads++);
+    const p = new Pwa(() => void reloads++, now);
     p.start(true);
-    await settle();
+    await w.settle();
     p.applyUpdate();
     p.applyUpdate();
     expect(w.posted).toEqual(['hwdog:activate']);
@@ -53,9 +61,9 @@ describe('PWA update (audit 2026-10)', () => {
 
   it('a new version that never takes over is said, and RELOAD works again', async () => {
     const w = fakeWorkers();
-    const p = new Pwa(() => {});
+    const p = new Pwa(() => {}, now);
     p.start(true);
-    await settle();
+    await w.settle();
     vi.useFakeTimers();
     p.applyUpdate();
     vi.advanceTimersByTime(TAKEOVER_MS + 1);
@@ -67,9 +75,9 @@ describe('PWA update (audit 2026-10)', () => {
   it("the first visit's worker claiming the page is no update", async () => {
     const w = fakeWorkers(false);
     w.reg.waiting = null;
-    const p = new Pwa(() => {});
+    const p = new Pwa(() => {}, now);
     p.start(true);
-    await settle();
+    await w.settle();
     w.takeOver();
     expect(p.elsewhere).toBe(false);
     expect(p.update).toBe(false);

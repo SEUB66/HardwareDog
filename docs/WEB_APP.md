@@ -47,8 +47,9 @@ offer can be hidden; Hardware Dog works the same without installing.
 ```text
 WORKS OFFLINE, after one complete visit online (the service worker installed):
   the tool (diagnostic.html, also with ?demo), the landing page and the
-  architecture page; the code, styles, fonts, icons, the TVs and the
-  companion's scenes; the demo; sessions, reports and exports already in this
+  architecture page; the code (every lab section included), styles, fonts,
+  icons, the TVs and the companion's scenes; the demo; sessions, reports and
+  exports already in this
   browser (IndexedDB, as before: they never go through the cache)
   pictures shown once (banners, posters) are kept and shown again
 DOES NOT WORK OFFLINE
@@ -64,6 +65,57 @@ NEVER CACHED
 
 The interface already says when a function needs dogd or a device; the
 home says when the browser is offline ("what is loaded keeps working").
+
+## A POOR CONNECTION
+
+What the interface needs first comes first; what only makes later faster
+waits, and is skipped where the connection asks to spare data
+(web/src/core/net.ts):
+
+```text
+FIRST          the tool's code without the lab sections (Flipper, Bluetooth,
+               Camera Sniffer load when opened, ui/lazyScreen.tsx); during
+               the boot screen, when the network has nothing else to do,
+               What's New's picture and its TV (frame and scenes) are asked
+               for, so they are there when the boot ends
+LATER          once the interface is up, its pictures are in and no download
+               finished for 2.5 s (at the latest 30 s after the load): the
+               service worker's offline copy, the other TV and its scenes,
+               the lab sections, the next banner
+NEVER DOUBLE   the worker keeps the build files the page already loaded
+               (from the HTTP cache: their names carry their hash) and asks
+               only for pages and public files afresh; the TV's knob is cut
+               from the frame the browser chose, not a second size
+FRUGAL         Save-Data on, or a 2G-class link: nothing is fetched ahead
+               (other TV, next banner, lab sections); the offline copy still
+               installs once the page is quiet
+SIZES          pictures come at the size the screen shows them (srcset):
+               1200 px variants of the lab banners for phones, the creator
+               photos at 500/750/1000, a 240 px avatar, a 480 px lockup;
+               app icons as palette PNG (a third of the bytes, same pixels)
+FAILED         a lab section that fails to download is retried twice on its
+               own (1 s, 3 s) under a fresh address (a browser keeps a failed
+               module import failed), then says so with RETRY and RELOAD;
+               the first download of the tool, slow or failed, is said in
+               the static introduction (public/boot-watch.js) with RELOAD
+```
+
+Measured on a phone (390 px, DPR 3) under Chromium's throttling, first
+visit, service worker blocked (what the page itself fetches):
+
+```text
+                         FAST 3G (1.6 Mb/s, 150 ms)   SLOW 3G (400 kb/s, 400 ms)
+                         before      after            before      after
+tool's code in           1.5 s       1.3 s            5.6 s       5.0 s
+What's New picture in    18.9 s      3.2 s            36.6 s      12.3 s
+its TV in                21.4 s      4.5 s            > 40 s      18.8 s
+startup code (gzip)      208 kB      174 kB
+```
+
+The boot screen ends about 15 s after the start: with these changes What's
+New opens complete on Fast 3G. Pictures: every picture of the pages is
+WebP; the app icons stay PNG and the favicon ICO (what systems read), the
+social preview images JPEG (what link previews read).
 
 ## UPDATES
 
@@ -89,6 +141,7 @@ visit (`/sw.js` is served `no-cache`).
 
 ```text
 /sw.js                  Cache-Control: no-cache
+/boot-watch.js          (default: revalidated) kept by the worker for offline
 /assets/*               Cache-Control: public, max-age=31536000, immutable
 /manifest.webmanifest   Content-Type: application/manifest+json; no-cache
 ```

@@ -25,6 +25,7 @@
 import type { Anim, Stage, Subject } from '../../core/lab/companion';
 import atlasUrl from '../../../../assets/brand/web/hd-companion-scenes.webp';
 import atlasJson from '../../../../assets/brand/web/hd-companion-scenes.json';
+import { track } from '../../core/net';
 
 export const SCREEN_W = 136;
 export const SCREEN_H = 100;
@@ -184,6 +185,7 @@ function frames(): HTMLImageElement | null {
     atlas = new Image();
     atlas.decoding = 'async';
     atlas.src = atlasUrl;
+    track(atlas);
   }
   return atlas.complete && atlas.naturalWidth > 0 ? atlas : null;
 }

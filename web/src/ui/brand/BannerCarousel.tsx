@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { carousel, go, hold, next, pause, play, prev, ROTATE_MS, swipe, turns, type CarouselState, type HoldReason } from '../../core/carousel';
 import type { Lang } from '../../core/lab/rules';
+import { frugal } from '../../core/net';
 import { BANNER_H, BANNER_W, type BannerSlide } from './slides';
 
 const WORDS: Record<Lang, { prev: string; next: string; pause: string; play: string; slide: (i: number, n: number, t: string) => string }> = {
@@ -82,12 +83,12 @@ export function BannerCarousel({ slides, label, lang, reducedMotion, busy = fals
     return () => clearTimeout(t);
   }, [rotating, s.moves]);
 
-  // the slide shown is fetched; the next one too, once the shown one is in
+  // the slide shown is fetched; the next one too, once the shown one is in (not on a frugal connection: it comes when shown)
   useEffect(() => {
     setFetched((f) => (f.includes(s.index) ? f : [...f, s.index]));
   }, [s.index]);
   const warmNext = (i: number) => {
-    if (i !== s.index) return;
+    if (i !== s.index || frugal()) return;
     const n = (i + 1) % slides.length;
     setFetched((f) => (f.includes(n) ? f : [...f, n]));
   };

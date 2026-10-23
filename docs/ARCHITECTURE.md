@@ -57,6 +57,8 @@ web/src/core/        no UI, no DOM rendering, fully unit tested
   sha256.ts          SHA-256, synchronous (works on plain HTTP too)
   cases.ts           recording -> regression case, case checker
   archive.ts         sessions streamed to IndexedDB, retention, export
+  net.ts             a poor connection: what waits until the page is quiet,
+                     what is skipped when the connection asks to spare data
   system.ts          single source of truth, diagnostic rules
   trace.ts           chronological timeline, pause without data loss
   diagnostics.ts     deterministic diagnostic engine, session facts
@@ -66,7 +68,8 @@ web/src/core/        no UI, no DOM rendering, fully unit tested
   format.ts          units and timestamps
   ascii.ts           ASCII identity
 
-web/src/ui/          Preact components, one file per screen; rendered in
+web/src/ui/          Preact components, one file per screen (the lab sections
+                     load when opened: ui/lazyScreen.tsx); rendered in
                      tests (web/test/ui, happy-dom): the real App on memory
                      storage, modals, screen changes, TRACE, the TV, updates
 web/src/styles/      design tokens (spec 06, 07) and panel styles

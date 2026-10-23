@@ -35,9 +35,9 @@ import { Home } from './home/Home';
 import { browserLang } from '../core/lab/rules';
 import { SimBanner } from './components/SimBanner';
 import { Tour } from './Tour';
-import { WhatsNew } from './WhatsNew';
+import { WhatsNew, preloadWhatsNew } from './WhatsNew';
 import { Boundary } from './components/Boundary';
-import { CameraSniffer, type CameraTool } from './camera/CameraSniffer';
+import type { CameraTool } from './camera/CameraSniffer';
 import { isNewScreen } from '../core/features';
 import { Tag } from './components/Tag';
 import { useClock, useSystem } from './hooks';
@@ -56,9 +56,12 @@ import { hideTip, installTips } from './tips';
 import { explain } from '../core/glossary';
 import type { Lab } from '../core/lab/context';
 import { instantOp } from '../core/lab/events';
-import { BluetoothLab, type BleTool } from './lab/BluetoothLab';
-import { FlipperLab, type FlipperTool } from './lab/FlipperLab';
+import type { BleTool } from './lab/BluetoothLab';
+import type { FlipperTool } from './lab/FlipperLab';
+import { lazyScreen, prefetchLater } from './lazyScreen';
+import { releaseLater } from '../core/net';
 import { TvDocked, TvFloating, TvPlacement, useTvPower } from './lab/TvHost';
+import { preloadTv } from './lab/RetroTv';
 import { deviceLink } from '../core/lab/device';
 import { UpdateNote } from './Pwa';
 
@@ -168,6 +171,17 @@ const isTyping = (el: EventTarget | null) =>
   el instanceof HTMLElement && (el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName));
 /** Space on these is theirs (press, open, scroll), not the trace's. */
 const ownsSpace = (el: EventTarget | null) => el instanceof HTMLElement && el.matches('button, a, summary, [role="button"], [tabindex]');
+// The lab sections load when opened (or earlier, once the page is quiet): the interface opens without them.
+// A retry imports the address the failed import named (`url`): see lazyScreen.tsx.
+const LABS = {
+  FLIPPER: lazyScreen('FLIPPER LAB', (url?: string): Promise<typeof import('./lab/FlipperLab')> => (url ? import(/* @vite-ignore */ url) : import('./lab/FlipperLab')), (m) => m.FlipperLab),
+  BLE: lazyScreen('BLUETOOTH LAB', (url?: string): Promise<typeof import('./lab/BluetoothLab')> => (url ? import(/* @vite-ignore */ url) : import('./lab/BluetoothLab')), (m) => m.BluetoothLab),
+  CAMERA: lazyScreen('CAMERA SNIFFER', (url?: string): Promise<typeof import('./camera/CameraSniffer')> => (url ? import(/* @vite-ignore */ url) : import('./camera/CameraSniffer')), (m) => m.CameraSniffer),
+};
+const FlipperLab = LABS.FLIPPER.Screen;
+const BluetoothLab = LABS.BLE.Screen;
+const CameraSniffer = LABS.CAMERA.Screen;
+
 /** A dialog above the screen (what's new, the tour, a poster full screen): the keyboard is its own. */
 const dialogOpen = () => document.querySelector('[role="dialog"][aria-modal="true"]:not(.palette)') !== null;
 
@@ -299,6 +313,17 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
 
   // Every label with a glossary entry explains itself on hover, focus or tap.
   useEffect(() => installTips(), []);
+  useEffect(() => prefetchLater(Object.values(LABS)), []);
+  // The boot screen leaves the network idle: what the interface opens with (What's New and
+  // its TV) is asked for meanwhile, so it is there when the boot ends.
+  useEffect(() => {
+    preloadTv(lab.companion.profile);
+    if (whatsNew) preloadWhatsNew();
+  }, []);
+  // Up after the boot screen: what was held for later may start once the page is quiet.
+  useEffect(() => {
+    if (!booting) releaseLater();
+  }, [booting]);
   useEffect(() => hideTip(), [screen]);
 
   // Theme and motion are system settings, applied to the document root.

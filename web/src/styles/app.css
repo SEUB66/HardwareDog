@@ -1346,3 +1346,8 @@ button.link {
   min-width: 0;
   max-width: 100%;
 }
+
+/* A lab section still downloading, or whose download failed (ui/lazyScreen.tsx). */
+.lazy-screen {
+  padding: 24px 4px;
+}
