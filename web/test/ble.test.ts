@@ -4,7 +4,7 @@ import { BLE_LIMITS, BleScanModel, presence, shortUuid, viewDevices, type BleObs
 import { BleService, observationOf, payloadParams } from '../src/core/ble/service';
 import { fromDogd } from '../src/core/ble/sources';
 import { formatValue, parseValue } from '../src/core/ble/values';
-import { LabBus } from '../src/core/lab/events';
+import { LabBus, type LabEvent } from '../src/core/lab/events';
 import { LabRecorder, parseHdlab, toHdlab } from '../src/core/lab/session';
 import { FakeTime } from './lab-helpers';
 
@@ -262,5 +262,97 @@ describe('stopping and picking never leave anything running behind', () => {
     expect(calls).toContain('gatt.disconnect');
     expect(calls).toContain('server.disconnect');
     expect(g.state).toBe('DISCONNECTED');
+  });
+});
+
+describe('BLE values and replays a hand-edited file cannot break (audit 2026-10)', () => {
+  it('an f32 out of range is refused, never sent as Infinity or 0', () => {
+    expect(() => parseValue('1e40', 'f32le')).toThrow(/too large for f32le/);
+    expect(() => parseValue('-1e39', 'f32be')).toThrow(/too large/);
+    expect(() => parseValue('1e-50', 'f32le')).toThrow(/sent as 0/);
+    expect([...parseValue('0 -0 1.5 3.4e38', 'f32le')].length).toBe(16);
+    expect(formatValue(parseValue('0.1', 'f32le'), 'f32le')).toBe('0.10000000149011612');
+  });
+
+  it('a malformed payload pair or measure is left out, and the replay says how many it could not read', async () => {
+    const ev = (params: Record<string, string | number | boolean | null>, measures?: unknown) => ({ seq: 1, at: 0, mono: 0, source: 'BLE', tool: 'ble.scan', type: 'observe', severity: 'INFO', message: '', origin: 'PHYSICAL', params, measures }) as LabEvent;
+    const o = observationOf(ev({ id: 'X', mfr: '004C;XYZ=01;004C=0215;12345=00;0006=ABC', svc: 'FEAA;FEAA=20', addressType: 'weird' }, [{ name: 'rssi', value: 'loud' }]))!;
+    expect(o.manufacturer).toEqual([{ company: 0x004c, data: Uint8Array.of(2, 0x15) }]);
+    expect(o.serviceData).toEqual([{ uuid: 'FEAA', data: Uint8Array.of(0x20) }]);
+    expect(o.rssi).toBeNull();
+    expect(o.addressType).toBeNull();
+    expect(observationOf(ev({ id: 'Y' }, 'not a list'))!.rssi).toBeNull();
+
+    const time = new FakeTime();
+    const ble = new BleService(new LabBus(time));
+    let changes = 0;
+    ble.subscribe(() => void changes++);
+    const broken = { ...ev({ id: 'Z' }), get params(): never { throw new Error('unreadable'); } };
+    const n = await ble.replay({ header: { name: 'edited' }, integrity: 'MODIFIED', events: [ev({ id: 'A' }), broken, ev({ id: 'B' })] } as never);
+    expect(n).toBe(2);
+    expect(ble.replaySkipped).toBe(1);
+    expect(ble.model.devices.size).toBe(2);
+    expect(changes).toBeGreaterThan(0);
+  });
+});
+
+describe('GATT notifications over a link that comes and goes (audit 2026-10)', () => {
+  /** One device, one service, one notifying characteristic the test drives. */
+  function fakeDevice() {
+    const char = Object.assign(new EventTarget(), {
+      uuid: '00002a37-0000-1000-8000-00805f9b34fb',
+      properties: { broadcast: false, read: false, writeWithoutResponse: false, write: false, notify: true, indicate: false, authenticatedSignedWrites: false, reliableWrite: false, writableAuxiliaries: false },
+      value: null as { buffer: ArrayBuffer; byteOffset: number; byteLength: number } | null,
+      starts: 0,
+      stops: 0,
+      readValue: async () => ({ buffer: new ArrayBuffer(0), byteOffset: 0, byteLength: 0 }),
+      startNotifications: async () => (char.starts++, char),
+      stopNotifications: async () => (char.stops++, char),
+      getDescriptors: async () => [],
+      push(bytes: number[]) {
+        char.value = { buffer: Uint8Array.from(bytes).buffer, byteOffset: 0, byteLength: bytes.length };
+        char.dispatchEvent(new Event('characteristicvaluechanged'));
+      },
+    });
+    const device = Object.assign(new EventTarget(), { id: 'DEV1', name: 'HR strap' }) as EventTarget & { id: string; name: string; gatt: unknown };
+    const server = {
+      connected: false,
+      connect: async () => ((server.connected = true), server),
+      disconnect: () => void (server.connected = false),
+      getPrimaryServices: async () => [{ uuid: '0000180d-0000-1000-8000-00805f9b34fb', isPrimary: true, getCharacteristics: async () => [char] }],
+    };
+    device.gatt = server;
+    const drop = () => ((server.connected = false), device.dispatchEvent(new Event('gattserverdisconnected')));
+    return { char, device, drop };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis.navigator, 'bluetooth');
+  });
+
+  it('start, values, stop; a dropped link leaves no handler behind', async () => {
+    const { GattSession } = await import('../src/core/ble/gatt');
+    const { char, device, drop } = fakeDevice();
+    Object.defineProperty(globalThis.navigator, 'bluetooth', { value: { requestDevice: async () => device }, configurable: true });
+    const g = await GattSession.pick(new LabBus(new FakeTime()), []);
+    await g.connect();
+    const c = g.services[0]!.chars[0]!;
+    await g.notify(c, true);
+    await g.notify(c, true); // a second START adds no second handler
+    char.push([0x00, 72]);
+    expect(g.history.filter((h) => h.kind === 'notify')).toHaveLength(1);
+    await g.notify(c, false);
+    char.push([0x00, 73]);
+    expect(g.history.filter((h) => h.kind === 'notify')).toHaveLength(1);
+    expect(char.stops).toBe(1);
+
+    await g.notify(c, true);
+    drop();
+    expect(g.state).toBe('DISCONNECTED');
+    expect(c.notifying).toBe(false);
+    char.push([0x00, 74]);
+    expect(g.history.filter((h) => h.kind === 'notify')).toHaveLength(1);
+    await expect(g.notify(c, true)).rejects.toMatchObject({ code: 'InvalidStateError' });
+    expect(g.history.at(-1)!.text).toMatch(/the device disconnected/);
   });
 });

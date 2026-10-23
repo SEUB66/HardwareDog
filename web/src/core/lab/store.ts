@@ -6,7 +6,8 @@
  * leaves the machine.
  *
  *   hwdog-lab / sessions   id -> { meta, text }   .hdlab files
- *   hwdog-lab / library    id -> LibraryItem      files copied from a Flipper
+ *   hwdog-lab / library    id -> LibraryEntry     files copied from a Flipper: what, from where, notes
+ *   hwdog-lab / library-data id -> Uint8Array    their bytes, apart: a list never loads every file
  *   hwdog-lab / camera     id -> Inspection       Camera Sniffer inspections (rooms, objects, notes)
  *   hwdog-lab / photos     id -> PhotoRecord      photos taken during an inspection, never sent anywhere
  */
@@ -14,6 +15,7 @@
 export interface KvBackend<T> {
   readonly kind: 'INDEXEDDB' | 'MEMORY';
   all(): Promise<T[]>;
+  count(): Promise<number>;
   get(id: string): Promise<T | undefined>;
   put(id: string, value: T): Promise<void>;
   remove(id: string): Promise<void>;
@@ -24,6 +26,9 @@ export class MemoryKv<T> implements KvBackend<T> {
   private map = new Map<string, T>();
   async all(): Promise<T[]> {
     return [...this.map.values()];
+  }
+  async count(): Promise<number> {
+    return this.map.size;
   }
   async get(id: string): Promise<T | undefined> {
     return this.map.get(id);
@@ -37,7 +42,7 @@ export class MemoryKv<T> implements KvBackend<T> {
 }
 
 const DB = 'hwdog-lab';
-const STORES = ['sessions', 'library', 'camera', 'photos'] as const;
+const STORES = ['sessions', 'library', 'library-data', 'camera', 'photos'] as const;
 export type LabStoreName = (typeof STORES)[number];
 
 /** Why the lab works in memory only, when it does (null: it does not, or no reason known). */
@@ -47,10 +52,12 @@ export const labStoreProblem = (): string | null => problem;
 function openDb(factory: IDBFactory, blockedWait = 4000): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     // 2: Camera Sniffer's stores; an older database gets them on upgrade, its data untouched.
-    const req = factory.open(DB, 2);
+    // 3: library bytes in their own store; items copied before move there, once.
+    const req = factory.open(DB, 3);
     let late: ReturnType<typeof setTimeout> | null = null;
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (ev) => {
       for (const s of STORES) if (!req.result.objectStoreNames.contains(s)) req.result.createObjectStore(s);
+      if (ev.oldVersion > 0 && ev.oldVersion < 3) splitLibrary(req.transaction!);
     };
     req.onsuccess = () => {
       if (late) clearTimeout(late);
@@ -69,6 +76,24 @@ function openDb(factory: IDBFactory, blockedWait = 4000): Promise<IDBDatabase> {
       }, blockedWait);
     };
   });
+}
+
+/** Move each library item's bytes to library-data, in the upgrade's own transaction. */
+function splitLibrary(tx: IDBTransaction): void {
+  const items = tx.objectStore('library');
+  const bytes = tx.objectStore('library-data');
+  const walk = items.openCursor();
+  walk.onsuccess = () => {
+    const c = walk.result;
+    if (!c) return;
+    const v = c.value as { data?: unknown } | null;
+    if (v && v.data instanceof Uint8Array) {
+      const { data, ...meta } = v;
+      bytes.put(data, c.key);
+      c.update(meta);
+    }
+    c.continue();
+  };
 }
 
 class IdbKv<T> implements KvBackend<T> {
@@ -90,6 +115,9 @@ class IdbKv<T> implements KvBackend<T> {
 
   all(): Promise<T[]> {
     return this.request('readonly', (s) => s.getAll() as IDBRequest<T[]>);
+  }
+  count(): Promise<number> {
+    return this.request('readonly', (s) => s.count());
   }
   get(id: string): Promise<T | undefined> {
     return this.request('readonly', (s) => s.get(id) as IDBRequest<T | undefined>);

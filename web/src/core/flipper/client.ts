@@ -3,8 +3,11 @@
  *
  * One command on the wire at a time, each with its own id; a reply is
  * matched by id, a streamed reply (has_next) is collected until its end.
- * Every command has an inactivity timeout and can be cancelled; a reply to
- * a cancelled command is drained, never mistaken for the next one.
+ * Every command has an inactivity timeout, an overall deadline and a cap
+ * on its reply parts, and can be cancelled; a reply to a cancelled command
+ * is drained, never mistaken for the next one. A device that streams
+ * without end (a broken one, or a gadget posing as a Flipper) fails the
+ * command; it never grows the page's memory or keeps it waiting.
  *
  * Errors keep the device's own code (ERROR_STORAGE_NOT_EXIST...). Codes
  * Hardware Dog produces itself are named HD_* or TIMEOUT / ABORTED /
@@ -39,7 +42,12 @@ export class RpcError extends Error {
 }
 
 export const RPC_LIMITS = {
+  /** Silence after which a command fails: each reply part restarts it. */
   timeoutMs: 6000,
+  /** A command's whole reply, however lively: ten silences. Transfers get more for their size. */
+  deadlineMs: 60_000,
+  /** Reply parts one command accepts: a 16 MiB read is 32 768 parts of 512 bytes. */
+  maxParts: 40_000,
   /** Bytes per storage write frame. */
   writeChunk: 512,
   /** Largest file read into memory. */
@@ -68,16 +76,21 @@ export const parentOf = (path: string): string => {
 
 interface Pending {
   id: number;
+  /** Kept only when no onPart consumer takes them. */
   parts: MainMessage[];
+  count: number;
   resolve: (m: MainMessage[]) => void;
   reject: (e: Error) => void;
   timer: ReturnType<typeof setTimeout> | null;
+  deadline: ReturnType<typeof setTimeout> | null;
   timeoutMs: number;
   onPart?: (m: MainMessage) => void;
 }
 
 export interface CallOptions {
   timeoutMs?: number;
+  /** The whole reply's time limit (RPC_LIMITS.deadlineMs). */
+  deadlineMs?: number;
   signal?: AbortSignal;
   onPart?: (m: MainMessage) => void;
 }
@@ -126,7 +139,12 @@ export class FlipperRpc {
       else if (!m.hasNext) this.abandoned.delete(m.commandId);
       return;
     }
-    p.parts.push(m);
+    if (++p.count > RPC_LIMITS.maxParts) {
+      if (m.hasNext) this.abandoned.add(p.id);
+      this.finish(p, new RpcError('HD_TOO_MANY', `more than ${RPC_LIMITS.maxParts} reply parts`));
+      return;
+    }
+    if (!p.onPart || m.status !== 0) p.parts.push(m);
     this.arm(p);
     if (m.status !== 0) {
       if (!m.hasNext) this.finish(p, new RpcError(statusName(m.status), `the Flipper answered ${statusName(m.status)}`));
@@ -154,6 +172,7 @@ export class FlipperRpc {
   private finish(p: Pending, error: Error | null): void {
     if (this.current !== p) return;
     if (p.timer !== null) clearTimeout(p.timer);
+    if (p.deadline !== null) clearTimeout(p.deadline);
     this.current = null;
     if (error) p.reject(error);
     else p.resolve(p.parts);
@@ -173,8 +192,13 @@ export class FlipperRpc {
     const id = this.nextId++;
     if (this.nextId > 0xffff_fff0) this.nextId = 1;
     return new Promise<MainMessage[]>((resolve, reject) => {
-      const p: Pending = { id, parts: [], resolve, reject, timer: null, timeoutMs: options.timeoutMs ?? RPC_LIMITS.timeoutMs, onPart: options.onPart };
+      const p: Pending = { id, parts: [], count: 0, resolve, reject, timer: null, deadline: null, timeoutMs: options.timeoutMs ?? RPC_LIMITS.timeoutMs, onPart: options.onPart };
       this.current = p;
+      const deadlineMs = options.deadlineMs ?? RPC_LIMITS.deadlineMs;
+      p.deadline = setTimeout(() => {
+        this.abandoned.add(id);
+        this.finish(p, new RpcError('TIMEOUT', `the answer took longer than ${deadlineMs / 1000} s`));
+      }, deadlineMs);
       const abort = () => {
         this.abandoned.add(id);
         this.finish(p, new RpcError('ABORTED', 'cancelled'));
@@ -219,6 +243,9 @@ const one = <K extends Content['kind']>(parts: MainMessage[], kind: K): Extract<
   if (!c) throw new RpcError('HD_UNEXPECTED', `expected ${kind} in the reply`);
   return c as Extract<Content, { kind: K }>;
 };
+
+/** The slowest a Flipper moves a file (8 KiB/s, far below its USB speed): sets a transfer's deadline. */
+const SLOWEST_BYTES_PER_MS = 8;
 
 export interface ProgressFn {
   (done: number, total: number | null): void;
@@ -302,6 +329,7 @@ export class FlipperClient {
       { kind: 'storage_read_request', path: p },
       {
         signal: options.signal,
+        deadlineMs: RPC_LIMITS.deadlineMs + st.size / SLOWEST_BYTES_PER_MS,
         onPart: (m) => {
           if (m.content.kind !== 'storage_read_response' || !m.content.file?.data) return;
           chunks.push(m.content.file.data);
@@ -333,7 +361,7 @@ export class FlipperClient {
     if (existing && !options.overwrite) throw new RpcError('HD_COLLISION', `${p} already exists (${existing.size} bytes): not overwritten`);
     const parts: Content[] = [];
     for (let at = 0; at < data.length || parts.length === 0; at += RPC_LIMITS.writeChunk) parts.push({ kind: 'storage_write_request', path: p, data: data.subarray(at, at + RPC_LIMITS.writeChunk) });
-    await this.rpc.call(parts, { timeoutMs: RPC_LIMITS.timeoutMs * 2 });
+    await this.rpc.call(parts, { timeoutMs: RPC_LIMITS.timeoutMs * 2, deadlineMs: RPC_LIMITS.deadlineMs + data.length / SLOWEST_BYTES_PER_MS });
     options.onProgress?.(data.length, data.length);
   }
 

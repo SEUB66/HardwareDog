@@ -13,9 +13,9 @@
 
 import { Fragment } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { joinPath, parentOf } from '../../core/flipper/client';
+import { RPC_LIMITS, RpcError, joinPath, parentOf } from '../../core/flipper/client';
 import { compareParsed, parseFlipperFile, type ParsedFile } from '../../core/flipper/formats';
-import { safeFileName, searchLibrary, type LibraryItem, type LibrarySort } from '../../core/flipper/library';
+import { safeFileName, searchLibrary, type LibraryEntry, type LibraryItem, type LibrarySort } from '../../core/flipper/library';
 import { GPIO_PINS, type FlipperFile, type GpioPin } from '../../core/flipper/rpc';
 import { describeDevice } from '../../core/flipper/service';
 import type { Lab } from '../../core/lab/context';
@@ -174,7 +174,16 @@ function Device({ lab }: { lab: Lab }) {
   );
 }
 
-function Files({ lab, onPreview, preview }: { lab: Lab; onPreview: (p: { name: string; path: string; data: Uint8Array } | null) => void; preview: { name: string; path: string; data: Uint8Array } | null }) {
+/** A file read from the device, with the device it came from: a demo file never passes for a real one. */
+interface Preview {
+  name: string;
+  path: string;
+  data: Uint8Array;
+  origin: 'PHYSICAL' | 'SIMULATED' | null;
+}
+
+/** Remounted for each device and link state (key): WRITE MODE is never carried over to another device. */
+function Files({ lab, onPreview, preview }: { lab: Lab; onPreview: (p: Preview | null) => void; preview: Preview | null }) {
   const v = lab.flipper.view;
   const { run, error, busy } = useAction();
   const [writeMode, setWriteMode] = useState(false);
@@ -185,10 +194,12 @@ function Files({ lab, onPreview, preview }: { lab: Lab; onPreview: (p: { name: s
   const open = (f: FlipperFile) => {
     const p = joinPath(v.cwd, f.name);
     if (f.type === 'DIR') void run(() => lab.flipper.list(p));
-    else void run(async () => onPreview({ name: f.name, path: p, data: await lab.flipper.read(p) }));
+    else void run(async () => onPreview({ name: f.name, path: p, data: await lab.flipper.read(p), origin: v.origin }));
   };
   const upload = (file: File) =>
     void run(async () => {
+      // The size is known before reading: a file too large is never loaded into the page.
+      if (file.size > RPC_LIMITS.maxWrite) throw new RpcError('HD_TOO_LARGE', `${file.name} is ${file.size} bytes: more than ${RPC_LIMITS.maxWrite}`);
       const data = new Uint8Array(await file.arrayBuffer());
       const target = joinPath(v.cwd, file.name);
       const exists = v.entries?.some((e) => e.name === file.name);
@@ -242,7 +253,17 @@ function Files({ lab, onPreview, preview }: { lab: Lab; onPreview: (p: { name: s
           </button>
           <label class="btn file-btn">
             UPLOAD FILE…
-            <input type="file" hidden onChange={(e) => (e.target as HTMLInputElement).files?.[0] && upload((e.target as HTMLInputElement).files![0]!)} />
+            <input
+              type="file"
+              hidden
+              onChange={(e) => {
+                const input = e.target as HTMLInputElement;
+                const file = input.files?.[0];
+                // Cleared at once: picking the same file again uploads it again.
+                input.value = '';
+                if (file) upload(file);
+              }}
+            />
           </label>
         </div>
       )}
@@ -317,6 +338,7 @@ function Files({ lab, onPreview, preview }: { lab: Lab; onPreview: (p: { name: s
           {preview ? (
             <>
               <div class="actions">
+                {preview.origin === 'SIMULATED' && <Tag status="WARN" label="DEMO FILE" />}
                 <button class="btn" disabled={busy} onClick={() => void run(() => lab.flipper.copyToLibrary(preview.path))}>
                   COPY TO LIBRARY
                 </button>
@@ -339,7 +361,7 @@ function Files({ lab, onPreview, preview }: { lab: Lab; onPreview: (p: { name: s
 }
 
 function Library({ lab, picked, onPick }: { lab: Lab; picked: string[]; onPick: (ids: string[]) => void }) {
-  const [items, setItems] = useState<LibraryItem[]>([]);
+  const [items, setItems] = useState<LibraryEntry[]>([]);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<LibrarySort>('newest');
   const [open, setOpen] = useState<string | null>(null);
@@ -412,9 +434,25 @@ function Library({ lab, picked, onPick }: { lab: Lab; picked: string[]; onPick: 
   );
 }
 
-function LibraryItemView({ lab, item, onChange }: { lab: Lab; item: LibraryItem; onChange: () => void }) {
+/** One item's bytes, read when it is opened: the list never holds them. */
+function useItemData(lab: Lab, id: string | undefined): { data: Uint8Array | null; error: string | null } {
+  const [got, setGot] = useState<{ id: string; data: Uint8Array | null; error: string | null } | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let live = true;
+    lab.flipper.library.open(id).then(
+      (item) => live && setGot({ id, data: item?.data ?? null, error: item ? null : 'removed from the library' }),
+      (e: unknown) => live && setGot({ id, data: null, error: errorInfo(e).message }),
+    );
+    return () => void (live = false);
+  }, [lab, id]);
+  return got && got.id === id ? got : { data: null, error: null };
+}
+
+function LibraryItemView({ lab, item, onChange }: { lab: Lab; item: LibraryEntry; onChange: () => void }) {
   const [notes, setNotes] = useState(item.notes);
   const [tags, setTags] = useState(item.tags.join(' '));
+  const { data, error } = useItemData(lab, item.id);
   useEffect(() => {
     setNotes(item.notes);
     setTags(item.tags.join(' '));
@@ -444,7 +482,7 @@ function LibraryItemView({ lab, item, onChange }: { lab: Lab; item: LibraryItem;
         <button class="btn primary" onClick={save}>
           SAVE NOTES
         </button>
-        <button class="btn" onClick={() => download(item.name, 'application/octet-stream', item.data.slice())}>
+        <button class="btn" disabled={!data} onClick={() => data && download(item.name, 'application/octet-stream', data.slice())}>
           SAVE FILE AS…
         </button>
         <button
@@ -456,14 +494,20 @@ function LibraryItemView({ lab, item, onChange }: { lab: Lab; item: LibraryItem;
           REMOVE COPY
         </button>
       </div>
-      <FilePreview name={item.name} data={item.data} />
+      {error && <p class="note warn">{error}</p>}
+      {data && <FilePreview name={item.name} data={data} />}
     </div>
   );
 }
 
 function Compare({ lab, picked }: { lab: Lab; picked: string[] }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
-  useEffect(() => void lab.flipper.library.list().then(setItems, () => {}), [lab, picked.join()]);
+  // Only the two picked captures are read, bytes included.
+  useEffect(() => {
+    let live = true;
+    void Promise.all(picked.map((id) => lab.flipper.library.open(id).catch(() => null))).then((got) => live && setItems(got.filter((x): x is LibraryItem => !!x)));
+    return () => void (live = false);
+  }, [lab, picked.join()]);
   const [a, b] = picked.map((id) => items.find((i) => i.id === id)).filter((x): x is LibraryItem => !!x);
   if (!a || !b) return <p class="note">Pick two captures in LIBRARY (the CMP column): they are compared here, field by field.</p>;
   let pa: ParsedFile | null = null;
@@ -554,8 +598,11 @@ export function FlipperLab({ lab, placement, reducedMotion, tool, onTool }: { la
   const v = lab.flipper.view;
   const d = describeDevice(v.info);
   const { run, error, busy } = useAction();
-  const [preview, setPreview] = useState<{ name: string; path: string; data: Uint8Array } | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  // Another device, or the same one lost: what was read from the previous one is not shown as this one's.
+  const device = `${v.link}|${v.label ?? ''}|${v.origin ?? ''}`;
+  useEffect(() => setPreview(null), [device]);
   const linkTag =
     v.link === 'CONNECTED' ? <Tag status="PASS" label="CONNECTED" /> : v.link === 'CONNECTING' ? <Tag status="UNKNOWN" label="CONNECTING" /> : v.link === 'DISCONNECTED' && v.reason === 'lost' ? <Tag status="FAIL" label="LINK LOST" /> : <Tag status="UNKNOWN" label={v.link === 'UNKNOWN' ? 'NOT CONNECTED' : v.link} />;
   const serial = typeof navigator !== 'undefined' && 'serial' in navigator;
@@ -632,7 +679,7 @@ export function FlipperLab({ lab, placement, reducedMotion, tool, onTool }: { la
           </nav>
           <div class="lab-workspace">
             {tool === 'DEVICE' && <Device lab={lab} />}
-            {tool === 'FILES' && <Files lab={lab} preview={preview} onPreview={setPreview} />}
+            {tool === 'FILES' && <Files key={device} lab={lab} preview={preview} onPreview={setPreview} />}
             {tool === 'LIBRARY' && <Library lab={lab} picked={picked} onPick={setPicked} />}
             {tool === 'COMPARE' && <Compare lab={lab} picked={picked} />}
             {tool === 'GPIO' && <Gpio lab={lab} />}
