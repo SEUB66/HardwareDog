@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { LabBus, type LabEventInput } from '../src/core/lab/events';
 import { HDLAB_LIMITS, LabRecorder, compare, labReport, near, parseHdlab, splitAt, toHdlab } from '../src/core/lab/session';
 import { FakeTime } from './lab-helpers';
+import { LabSessions, type StoredLabSession } from '../src/core/lab/manager';
+import { MemoryKv } from '../src/core/lab/store';
 import { sha256 } from '../src/core/sha256';
 
 /** The seal of an .hdlab body, written out: every line with its LF. */
@@ -96,5 +98,55 @@ describe('lab sessions (.hdlab)', () => {
     expect(report).toContain('[ERROR_STORAGE_NOT_EXIST]');
     expect(report).toContain('DEMO data');
     expect(report).toContain('not a distance');
+  });
+});
+
+describe('lab sessions kept safe (audit 2026-10)', () => {
+  it('two sessions started in the same second have two ids, in UTC', () => {
+    const time = new FakeTime();
+    const bus = new LabBus(time);
+    const a = new LabRecorder(bus, '', 'test');
+    a.stop();
+    const b = new LabRecorder(bus, '', 'test');
+    expect(a.header.id).not.toBe(b.header.id);
+    expect(a.header.id).toMatch(/^LAB-\d{8}T\d{6}\.\d{3}Z-[0-9a-f]{4}$/);
+  });
+
+  it('a refused save keeps the session, open and exportable; the list holds no text', async () => {
+    const time = new FakeTime();
+    const bus = new LabBus(time);
+    const kv = new MemoryKv<StoredLabSession>();
+    const s = new LabSessions(bus, kv, 'test');
+    s.start('ok');
+    bus.emit(base);
+    await s.stop();
+    expect(s.stored).toHaveLength(1);
+    expect('text' in s.stored[0]!).toBe(false);
+    const full: typeof kv = Object.assign(Object.create(kv), { put: async () => Promise.reject(Object.assign(new Error('quota'), { name: 'QuotaExceededError' })) });
+    const t = new LabSessions(bus, full, 'test');
+    t.start('big');
+    bus.emit(base);
+    await expect(t.stop()).rejects.toThrow(/EXPORT .HDLAB keeps it/);
+    expect(t.unsaved?.error).toMatch(/QuotaExceededError/);
+    expect(t.opened?.header.name).toBe('big');
+    expect(parseHdlab(t.unsavedText()!).integrity).toBe('VERIFIED');
+  });
+
+  it('an event with a mistyped optional field is refused, with its line', () => {
+    const { rec } = session();
+    const lines = toHdlab(rec.stop()).trimEnd().split('\n');
+    const ev = JSON.parse(lines[1]!) as Record<string, unknown>;
+    for (const broken of [{ measures: 'x' }, { measures: [{ name: 'rssi', value: 'loud', unit: 'dBm', provenance: 'MEASURED' }] }, { progress: { done: 'a' } }, { device: 42 }, { params: { a: { b: 1 } } }, { decoded: { decoder: 'x' } }]) {
+      const text = [lines[0], JSON.stringify({ ...ev, ...broken })].join('\n') + '\n';
+      expect(() => parseHdlab(text), JSON.stringify(broken)).toThrow(/line 2/);
+    }
+  });
+
+  it('the same payloads seen in another order did not change', () => {
+    const adv = (raw: string): LabEventInput => ({ ...base, device: 'A', raw });
+    const time = new FakeTime();
+    const bus = new LabBus(time);
+    const events = [adv('AAE='), adv('AAI='), adv('AAI='), adv('AAE=')].map((e) => bus.emit(e));
+    expect(compare(events.slice(0, 2), events.slice(2)).bleBoth[0]!.payloadChanged).toBe(false);
   });
 });

@@ -12,6 +12,8 @@ export interface SessionsPanelProps {
   /** Key of the session being recorded now. */
   activeKey: string | null;
   persistent: boolean;
+  /** The browser agreed to keep it (storage.persist): otherwise it may evict it under disk pressure. */
+  kept?: boolean;
   /** Last problem opening a file, shown under the list. */
   message: string | null;
   onReplay: (key: string) => void;
@@ -35,7 +37,7 @@ const finding = (d: string) => d.replace(/_/g, ' ').replace(':', ' ');
  * Sessions recorded in this browser. A session can be replayed here, or
  * saved as .hdlog and replayed by anyone, without the device.
  */
-export function SessionsPanel({ list, activeKey, persistent, message, onReplay, onSave, onRemove, onOpen }: SessionsPanelProps) {
+export function SessionsPanel({ list, activeKey, persistent, kept, message, onReplay, onSave, onRemove, onOpen }: SessionsPanelProps) {
   const file = useRef<HTMLInputElement>(null);
   // Deleting takes two clicks: a recorded fault may be the only evidence.
   const [armed, setArmed] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function SessionsPanel({ list, activeKey, persistent, message, onReplay, 
     <Panel title="SESSIONS" aside={`${list.length} recorded`}>
       <KV
         rows={[
-          ['ARCHIVE', persistent ? 'THIS BROWSER ONLY' : <Tag status="WARN" label="MEMORY ONLY, LOST ON RELOAD" />],
+          ['ARCHIVE', !persistent ? <Tag status="WARN" label="MEMORY ONLY, LOST ON RELOAD" /> : kept ? 'THIS BROWSER ONLY, KEPT' : <Tag status="WARN" label="THIS BROWSER ONLY, MAY BE EVICTED: SAVE WHAT MATTERS" />],
           ['SIZE', bytes(total)],
         ]}
       />

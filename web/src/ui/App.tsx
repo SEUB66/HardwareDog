@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ArchiveWriter, SessionArchive, SessionMeta } from '../core/archive';
+import { persistStorage, storagePersisted } from '../core/archive';
 import { BUILD } from '../core/ascii';
 import { caseFrom } from '../core/cases';
 import { SCREENS, type CommandContext, type Screen } from '../core/commands';
@@ -140,11 +141,17 @@ function newSession(transport: Transport | null, archive: SessionArchive): Sessi
     { keep: false }, // the archive holds it; memory stays flat on long sessions
   );
   system.recorder = recorder;
+  // Real hardware evidence: ask the browser to keep it, not evict it under disk pressure.
+  if (transport.origin === 'PHYSICAL') void persistStorage().then((kept) => (archiveKept = kept));
   const writer = archive.record(recorder, () => system.diagnoses.map((d) => `${d.id}:${d.confidence}`), {
     onError: (reason) => system.recordingStopped(reason),
   });
   return { system, transport, key: ++sessionCounter, writer };
 }
+
+/** Whether the browser agreed to keep the archive (navigator.storage.persist): said on SETUP. */
+let archiveKept = false;
+void storagePersisted().then((kept) => (archiveKept = kept));
 
 function download(name: string, type: string, content: string | Uint8Array) {
   const url = URL.createObjectURL(new Blob([content as BlobPart], { type }));
@@ -761,6 +768,7 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
               list: archived,
               activeKey: session.writer?.error ? null : (session.writer?.meta.key ?? null),
               persistent: archive.persistent,
+              kept: archiveKept,
               message: sessionMessage,
               onReplay: (key) => void replayArchived(key),
               onSave: (key) => void saveArchived(key),

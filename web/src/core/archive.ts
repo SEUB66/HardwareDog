@@ -53,6 +53,8 @@ export interface ArchiveBackend {
   append(meta: SessionMeta, seq: number, text: string): Promise<void>;
   chunks(key: string): Promise<string[]>;
   remove(key: string): Promise<void>;
+  /** Replace a session's meta and every chunk with one, atomically: never a moment with neither. */
+  replace(meta: SessionMeta, text: string): Promise<void>;
 }
 
 const utf8 = new TextEncoder();
@@ -258,8 +260,7 @@ export class SessionArchive {
       if (recovered.startsWith(stored)) {
         await this.backend.append(meta, (await this.backend.chunks(m.key)).length, recovered.slice(stored.length));
       } else {
-        await this.backend.remove(m.key);
-        await this.backend.append(meta, 0, recovered.slice(headerLine.length));
+        await this.backend.replace(meta, recovered.slice(headerLine.length));
       }
       done.push(m.key);
     }
@@ -320,6 +321,10 @@ export function memoryBackend(): ArchiveBackend {
       metas.delete(key);
       chunks.delete(key);
     },
+    async replace(meta, text) {
+      metas.set(meta.key, structuredClone(meta));
+      chunks.set(meta.key, text ? [text] : []);
+    },
   };
 }
 
@@ -376,5 +381,36 @@ export async function idbBackend(factory: IDBFactory | null = globalThis.indexed
       tx.objectStore('chunks').delete(range(key));
       await done(tx);
     },
+    async replace(meta, text) {
+      const tx = db.transaction(['sessions', 'chunks'], 'readwrite');
+      tx.objectStore('chunks').delete(range(meta.key));
+      tx.objectStore('sessions').put(meta);
+      if (text) tx.objectStore('chunks').put({ key: meta.key, seq: 0, text });
+      await done(tx);
+    },
   };
+}
+
+/**
+ * Ask the browser to keep this site's storage (recordings of real
+ * hardware) instead of evicting it under disk pressure. True: kept; false:
+ * best effort, the browser may evict it (said where the sessions are).
+ */
+/** Whether the browser already keeps this site's storage. */
+export async function storagePersisted(): Promise<boolean> {
+  try {
+    return (await (globalThis.navigator as Navigator | undefined)?.storage?.persisted?.()) ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export async function persistStorage(): Promise<boolean> {
+  const s = (globalThis.navigator as Navigator | undefined)?.storage;
+  if (!s?.persist) return false;
+  try {
+    return (await s.persisted?.()) || (await s.persist());
+  } catch {
+    return false;
+  }
 }

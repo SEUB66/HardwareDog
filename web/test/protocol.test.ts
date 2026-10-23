@@ -66,3 +66,16 @@ describe('LineSplitter', () => {
     expect(lines).toEqual(['ok']);
   });
 });
+
+describe('the decoder holds to the schema (audit 2026-10)', () => {
+  const rejects = (o: object) => expect(decodeFrame(JSON.stringify(o)).ok, JSON.stringify(o)).toBe(false);
+  it('another protocol version, or integers out of range, are reported, never kept', () => {
+    rejects({ type: 'hello', t: 0, proto: 2, device: 'HD', rev: 'A', fw: '1' });
+    rejects({ type: 'usb.attach', t: 1, speed: 'FULL', vid: 70000, pid: 1, cls: 'CDC', power: 'BUS', manufacturer: null, product: null, serial: null });
+    rejects({ type: 'usb.attach', t: 1, speed: 'FULL', vid: 1.5, pid: 1, cls: 'CDC', power: 'BUS', manufacturer: null, product: null, serial: null });
+    rejects({ type: 'uart.config', t: 1, port: 'UART0', baud: 100, bits: 8, parity: 'NONE', stop: 1 });
+    rejects({ type: 'i2c.scan', t: 1, speed: 100000, devices: [], every_ms: -5 });
+    expect(decodeFrame('{"type":"hello","t":0,"proto":1,"device":"HD","rev":"A","fw":"1"}')).toMatchObject({ ok: true, frame: { proto: 1 } });
+    expect(decodeFrame('{"type":"hello","t":0,"proto":2,"device":"HD","rev":"A","fw":"1"}')).toMatchObject({ ok: false, error: 'hello proto 2: this interface speaks HDP v1' });
+  });
+});
