@@ -28,7 +28,7 @@ import { errorInfo } from '../../core/lab/events';
 import { browserLang } from '../../core/lab/rules';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
-import { SessionStrip } from '../lab/FlipperLab';
+import { SessionStrip } from '../lab/SessionStrip';
 import { TvDocked, type TvPlacement } from '../lab/TvHost';
 import { useRev } from '../lab/useRev';
 import { CameraObjects } from './CameraObjects';

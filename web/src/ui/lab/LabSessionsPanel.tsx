@@ -11,7 +11,7 @@ import { HDLAB_LIMITS, compare, labReport, near, parseHdlab, splitAt, toHdlab, t
 import { labStoreProblem } from '../../core/lab/store';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
-import { download } from './FlipperLab';
+import { download } from './download';
 import { EventRow } from './LabLog';
 import { useRev } from './useRev';
 

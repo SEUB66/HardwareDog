@@ -11,11 +11,10 @@
  * a delete needs one, a recursive delete needs two.
  */
 
-import { Fragment } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { RPC_LIMITS, RpcError, joinPath, parentOf } from '../../core/flipper/client';
 import { compareParsed, parseFlipperFile, type ParsedFile } from '../../core/flipper/formats';
-import { safeFileName, searchLibrary, type LibraryEntry, type LibraryItem, type LibrarySort } from '../../core/flipper/library';
+import { searchLibrary, type LibraryEntry, type LibraryItem, type LibrarySort } from '../../core/flipper/library';
 import { GPIO_PINS, type FlipperFile, type GpioPin } from '../../core/flipper/rpc';
 import { describeDevice } from '../../core/flipper/service';
 import type { Lab } from '../../core/lab/context';
@@ -25,9 +24,12 @@ import { Tag } from '../components/Tag';
 import { FilePreview } from './FilePreview';
 import { LabLog } from './LabLog';
 import { LabSessionsPanel } from './LabSessionsPanel';
+import { download } from './download';
+import { SessionStrip } from './SessionStrip';
 import { TvDocked, type TvPlacement } from './TvHost';
 import { useRev } from './useRev';
 import banner800 from '../../../../assets/brand/web/hd-flipper-lab-banner-800.webp';
+import banner1200 from '../../../../assets/brand/web/hd-flipper-lab-banner-1200.webp';
 import banner1600 from '../../../../assets/brand/web/hd-flipper-lab-banner-1600.webp';
 
 export const FLIPPER_TOOLS = ['DEVICE', 'FILES', 'LIBRARY', 'COMPARE', 'GPIO', 'LOG', 'SESSIONS'] as const;
@@ -47,17 +49,6 @@ const bytes = (n: number | bigint) => {
   const v = Number(n);
   return v < 1024 ? `${v} B` : v < 1024 ** 2 ? `${(v / 1024).toFixed(1)} KiB` : v < 1024 ** 3 ? `${(v / 1024 ** 2).toFixed(1)} MiB` : `${(v / 1024 ** 3).toFixed(2)} GiB`;
 };
-
-export function download(name: string, type: string, content: BlobPart) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = safeFileName(name);
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 /** Runs an action, keeps its error for the screen (the log and the TV get it from the bus). */
 function useAction() {
@@ -609,7 +600,7 @@ export function FlipperLab({ lab, placement, reducedMotion, tool, onTool }: { la
   return (
     <div class="lab flipper-lab">
       <header class="lab-banner">
-        <img src={banner800} srcset={`${banner800} 800w, ${banner1600} 1600w`} sizes="(max-width: 900px) 100vw, 900px" alt="Flipper Lab: the Hardware Dog robot dog and the Flipper dolphin in a retro electronics lab" width={800} height={320} decoding="async" />
+        <img src={banner800} srcset={`${banner800} 800w, ${banner1200} 1200w, ${banner1600} 1600w`} sizes="(max-width: 900px) 100vw, 900px" alt="Flipper Lab: the Hardware Dog robot dog and the Flipper dolphin in a retro electronics lab" width={800} height={320} decoding="async" />
         <div class="lab-banner-state">
           <span class={`light ${v.link === 'CONNECTED' ? 'ONLINE' : v.link === 'CONNECTING' ? 'CONNECTING' : v.reason === 'lost' ? 'LOST' : 'OFFLINE'}`} aria-hidden="true" />
           FLIPPER {linkTag}
@@ -691,50 +682,6 @@ export function FlipperLab({ lab, placement, reducedMotion, tool, onTool }: { la
           <TvDocked companion={lab.companion} registry={lab.registry} placement={placement} reducedMotion={reducedMotion} />
           <SessionStrip lab={lab} />
         </aside>
-      </div>
-    </div>
-  );
-}
-
-/** The recording, always in reach: REC, a marker, a note. */
-export function SessionStrip({ lab }: { lab: Lab }) {
-  useRev(lab.sessions);
-  const [text, setText] = useState('');
-  const r = lab.sessions.recorder;
-  const rec = r?.recording ?? false;
-  return (
-    <div class="session-strip">
-      <div class="actions">
-        {rec ? (
-          <button class="btn rec on" onClick={() => void lab.sessions.stop()} title="Stop and keep the lab session in this browser">
-            ■ STOP · {r!.events.length} ev{r!.lost ? ` · ${r!.lost} LOST` : ''}
-          </button>
-        ) : (
-          <button class="btn rec" onClick={() => lab.sessions.start('')} title="Record every lab event (Flipper, BLE, markers) on one timeline">
-            ● REC LAB SESSION
-          </button>
-        )}
-      </div>
-      <form
-        class="actions"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (lab.sessions.mark(text)) setText('');
-        }}
-      >
-        <input class="input" placeholder="marker: button pressed, cable plugged…" value={text} onInput={(e) => setText((e.target as HTMLInputElement).value)} aria-label="Marker text" />
-        <button class="btn" type="submit">
-          MARK
-        </button>
-      </form>
-      <div class="quick-marks">
-        {['button pressed', 'cable plugged', 'cable unplugged', 'power cycled'].map((m) => (
-          <Fragment key={m}>
-            <button class="btn small" onClick={() => lab.sessions.mark(m)}>
-              {m}
-            </button>
-          </Fragment>
-        ))}
       </div>
     </div>
   );

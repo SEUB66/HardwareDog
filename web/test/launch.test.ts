@@ -253,7 +253,8 @@ describe('the service worker of a build', () => {
     expect(list).toContain('assets/ibm-plex-mono-latin-400-normal-x.woff2');
     expect(list).toContain('assets/hd-tv-turquoise-560-x.webp');
     expect(list).toContain('manifest.webmanifest');
-    expect(list).toContain('icon-maskable-512.png');
+    expect(list).toContain('icon-maskable-192.png');
+    expect(PRECACHE_PUBLIC.test('icon-512.png') || PRECACHE_PUBLIC.test('icon-maskable-512.png')).toBe(false);
     expect(list).not.toContain('assets/ibm-plex-mono-latin-400-normal-x.woff');
     expect(list).not.toContain('assets/home-empty.js'); // never written: it would fail the whole install
     expect(list).not.toContain('assets/camera-sniffer-01-power-connections-2400-x.webp');
@@ -277,6 +278,7 @@ describe('the service worker of a build', () => {
 /** The worker run in a small fake of its environment: what it answers, and what it leaves alone. */
 async function runWorker() {
   const listeners: Record<string, (e: unknown) => void> = {};
+  const installed: { url: string; init?: { cache?: string } }[] = [];
   const stores = new Map<string, Map<string, string>>([
     ['hwdog-old', new Map()],
     ['other-app', new Map()],
@@ -295,7 +297,14 @@ async function runWorker() {
     open: async (name: string) => {
       if (!stores.has(name)) stores.set(name, new Map());
       const s = stores.get(name)!;
-      return { addAll: async (rs: unknown[]) => rs.forEach((r) => s.set(key(r), `cached ${key(r)}`)), put: async (r: unknown) => void s.set(key(r), `cached ${key(r)}`) };
+      return {
+        addAll: async (rs: unknown[]) =>
+          rs.forEach((r) => {
+            installed.push(r as { url: string });
+            s.set(key(r), `cached ${key(r)}`);
+          }),
+        put: async (r: unknown) => void s.set(key(r), `cached ${key(r)}`),
+      };
     },
     keys: async () => [...stores.keys()],
     delete: async (name: string) => stores.delete(name),
@@ -340,7 +349,7 @@ async function runWorker() {
     listeners['fetch']!({ request: { method: 'GET', mode: 'cors', url, ...extra }, respondWith: (x: Promise<{ body: string }>) => (answer = x) });
     return answer as Promise<{ body: string }> | null;
   };
-  return { listeners, stores, network, wait, request, skipped: () => skipped, claimed: () => claimed };
+  return { listeners, stores, network, installed, wait, request, skipped: () => skipped, claimed: () => claimed };
 }
 
 describe('the service worker, running', () => {
@@ -358,6 +367,16 @@ describe('the service worker, running', () => {
     expect(w.skipped()).toBe(0);
     w.listeners['message']!({ data: 'hwdog:activate' });
     expect(w.skipped()).toBe(1);
+  });
+
+  it('keeps the build files the page already has from the HTTP cache; asks for pages and public files afresh', async () => {
+    const w = await runWorker();
+    await w.wait(w.listeners['install']!, {});
+    const mode = (path: string) => w.installed.find((r) => r.url === `${ORIGIN}/${path}`)?.init?.cache ?? 'default';
+    expect(mode('assets/diagnostic-abc.js')).toBe('default');
+    expect(mode('assets/hd-tv-turquoise-560-x.webp')).toBe('default');
+    expect(mode('diagnostic.html')).toBe('reload');
+    expect(mode('manifest.webmanifest')).toBe('reload');
   });
 
   it('opens the tool from its cache (with a query too), leaves dogd, other hosts, POST and the installer alone', async () => {
