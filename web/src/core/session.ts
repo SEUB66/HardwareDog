@@ -12,7 +12,7 @@
  *   {"at":1759242061300,"lost":"serial stream ended"}            link lost
  *   {"at":1759242061400,"dog":"D2","frame":{...}}               v3: a pack, one Dog per line
  *   {"seal":{"n":1,"lines":5,"sha256":"..."}}                    hash chain over the lines above
- *   {"end":{"closed":"NORMAL","entries":5,...,"sha256":"..."}}   footer, written once, last
+ *   {"end":{"closed":"NORMAL","entries":5,...,"sha256":"...","self":"..."}}   footer, written once, last
  *
  * `at` is host wall-clock time in ms. Frames are stored as received, so a
  * replay feeds them back through the real decoder: a recording is
@@ -20,7 +20,9 @@
  *
  * INTEGRITY, NOT DRM. Seals chain SHA-256 hashes over the lines, so any
  * byte changed after recording is detected, even in a file whose
- * recording never finished. The footer hashes everything before it. A
+ * recording never finished. The footer hashes everything before it, and
+ * its own line up to its last field ("self"): no byte of the file is left
+ * out. A header with "footerSealed" says the footer must seal itself. A
  * hash proves the bytes did not change since they were sealed; it does
  * not prove who wrote them (anyone can recompute it). Signatures by the
  * device key come later, with the firmware.
@@ -79,6 +81,8 @@ export interface SessionHeader {
   thresholds?: Thresholds;
   /** v3: the Dogs of the pack, in order. `source` is then PACK. */
   dogs?: DogHeader[];
+  /** The footer seals its own line ("self"): a reader refuses one that does not. Absent in older files. */
+  footerSealed?: true;
 }
 
 /** In a v3 file, frame, reject, cmd and lost lines name their Dog. */
@@ -122,6 +126,8 @@ export interface Footer {
   dogs?: Record<string, { id: string; rev: string; fw: string } | null>;
   /** sha256 of every byte of the file before this line, hex. */
   sha256: string;
+  /** sha256 of this line up to `,"self"`, hex: the footer's own seal. Absent in older files. */
+  self?: string;
 }
 
 export type IntegrityStatus = 'VERIFIED' | 'RECOVERED' | 'INCOMPLETE' | 'MODIFIED' | 'UNVERIFIED';
@@ -190,6 +196,7 @@ export const newHeader = (
   ruleset: RULESET_VERSION,
   ...(fields.thresholds ? { thresholds: fields.thresholds } : {}),
   ...(fields.dogs ? { dogs: fields.dogs.map((d) => ({ id: d.id, source: d.source, endpoint: d.endpoint, origin: originOf(d.source, d.origin) })) } : {}),
+  footerSealed: true,
 });
 
 // ------------------------------------------------------------------ recorder
@@ -261,7 +268,7 @@ export function fitEntry(e: SessionEntry): SessionEntry {
   return e;
 }
 
-type Counts = Omit<Footer, 'closed' | 'startedAt' | 'endedAt' | 'seals' | 'device' | 'dogs' | 'sha256'>;
+type Counts = Omit<Footer, 'closed' | 'startedAt' | 'endedAt' | 'seals' | 'device' | 'dogs' | 'sha256' | 'self'>;
 
 const emptyCounts = (): Counts => ({ entries: 0, frames: 0, rejects: 0, commands: 0, marks: 0, thresholds: 0, lost: 0 });
 
@@ -358,8 +365,23 @@ export class HdlogSealer {
       ...(this.dogs ? { dogs: { ...this.dogs } } : {}),
       sha256: this.payload.clone().hex(),
     };
-    return JSON.stringify({ end }) + '\n';
+    return sealFooter(JSON.stringify({ end })) + '\n';
   }
+}
+
+export const CLOSINGS: readonly Footer['closed'][] = ['NORMAL', 'RECOVERED', 'SNAPSHOT'];
+
+/** `{"end":{...}}` → `{"end":{...,"self":"<sha256 of the text before ,"self">"}}`. */
+export function sealFooter(line: string): string {
+  const body = line.slice(0, -2);
+  return `${body},"self":"${sha256(body)}"}}`;
+}
+
+/** The footer's own seal, read from its line as written: null when it has none. */
+const SELF = /^(\{"end":\{.*),"self":"([0-9a-f]{64})"\}\}$/;
+function footerSelf(line: string): { body: string; hash: string } | null {
+  const m = SELF.exec(line);
+  return m ? { body: m[1]!, hash: m[2]! } : null;
 }
 
 /** A complete, finalized .hdlog file. A replayed recording comes back unchanged. */
@@ -503,6 +525,7 @@ export function parseHdlog(text: string): Recording {
   const entries: SessionEntry[] = [];
   let footer: Footer | null = null;
   let footerLine = 0;
+  let footerText = '';
   let last = -Infinity;
   // Integrity state (v2)
   let chain = sha256(raw[0]! + '\n');
@@ -548,6 +571,7 @@ export function parseHdlog(text: string): Recording {
       if (!isObj(e['end'])) throw new HdlogError(`${where}: malformed footer`);
       footer = e['end'] as unknown as Footer;
       footerLine = n + 1;
+      footerText = line;
       continue;
     }
     if (typeof e['at'] !== 'number' || !Number.isFinite(e['at'])) throw new HdlogError(`${where}: entry without "at"`);
@@ -577,10 +601,16 @@ export function parseHdlog(text: string): Recording {
     const where = `line ${footerLine}`;
     if (unsealed > 0) problems.push(`${where}: ${unsealed} entries before the footer are not sealed`);
     if (footer.sha256 !== payload.hex()) problems.push(`${where}: footer hash does not match the file`);
-    const expected: Partial<Footer> = { ...counts, seals, startedAt: header.startedAt };
+    const endedAt = entries.length > 0 ? entries.at(-1)!.at : header.startedAt;
+    const expected: Partial<Footer> = { ...counts, seals, startedAt: header.startedAt, endedAt };
     for (const [k, v] of Object.entries(expected)) {
       if (footer[k as keyof Footer] !== v) problems.push(`${where}: footer says ${k} = ${String(footer[k as keyof Footer])}, file has ${String(v)}`);
     }
+    if (!CLOSINGS.includes(footer.closed)) problems.push(`${where}: footer says closed = ${String(footer.closed)}, not a closing`);
+    const self = footerSelf(footerText);
+    if (self) {
+      if (sha256(self.body) !== self.hash) problems.push(`${where}: the footer line changed after it was written`);
+    } else if (header.footerSealed === true || 'self' in footer) problems.push(`${where}: the footer line is not sealed`);
     if (JSON.stringify(footer.device) !== JSON.stringify(device)) problems.push(`${where}: footer device does not match the hello frame`);
     if (dogHellos && JSON.stringify(footer.dogs ?? null) !== JSON.stringify(dogHellos)) problems.push(`${where}: footer Dogs do not match their hello frames`);
   }

@@ -68,6 +68,7 @@ const TERMS: Record<string, string> = {
   'NETWORK/INTERNET': 'Can the device reach beyond the local network?',
   'NETWORK/LATENCY': 'Round-trip time of a probe, in milliseconds, as reported by the device. Lower is better.',
   'NETWORK/PACKET LOSS': 'Share of probe packets that never came back. Anything above 0 % on a local network is suspicious.',
+  'NETWORK/LOSS': 'Share of probe packets that never came back, in the last report. Anything above 0 % on a local network is suspicious.',
 
   // SERIAL: the target UART
   'SERIAL/PORT': 'Serial port (UART) Hardware Dog listens on.',

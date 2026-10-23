@@ -253,6 +253,56 @@ describe('a console session in the System', () => {
   });
 });
 
+describe('FIND BAUD', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** A board that prints a line every 200 ms at `speaks`: read at any other rate, the bytes come out garbled. */
+  function talkingBoard(speaks: number | null) {
+    const port = new FakePort();
+    const junk = new Uint8Array([0xe0, 0x00, 0xfe, 0x80, 0x1c, 0xf8, 0x00, 0x80, 0xe6, 0x78, 0x0a]);
+    const timer = setInterval(() => {
+      if (speaks === null || !port.readable) return;
+      port.feed(port.opens.at(-1) === speaks ? 'I (1203) app: sensor ready\r\n' : junk);
+    }, 200);
+    return { port, stop: () => clearInterval(timer) };
+  }
+
+  async function search(speaks: number | null, from = 115200) {
+    const board = talkingBoard(speaks);
+    const sys = new System(memoryStore(), () => Date.now());
+    expect(await sys.connect(new ConsoleTransport(board.port, from, () => Date.now()))).toBe(true);
+    expect(sys.findBaud()).toBeNull();
+    expect(sys.findBaud()).toMatch(/already looking/);
+    for (let n = 0; n < 200 && sys.baudSearching !== null; n++) await vi.advanceTimersByTimeAsync(100);
+    board.stop();
+    return { sys, port: board.port, said: sys.trace.all().map((e) => `${e.message}${e.value ? ` ${e.value}` : ''}`) };
+  }
+
+  it('finds the rate a board speaks, and leaves the port there', async () => {
+    const { sys, port, said } = await search(74880);
+    expect(sys.serial.baud).toBe(74880);
+    expect(port.opens.at(-1)).toBe(74880);
+    // the usual rates first: 115200, 9600, then 74880 settles it
+    expect(port.opens).toEqual([115200, 9600, 74880]);
+    expect(said.join('\n')).toMatch(/baud rate found: 74880 .*readable line/);
+    await sys.disconnect();
+  });
+
+  it('says so when no rate reads as text, and goes back to where it was', async () => {
+    const { sys, port, said } = await search(null, 57600);
+    expect(sys.serial.baud).toBe(57600);
+    expect(port.opens.at(-1)).toBe(57600);
+    expect(said.join('\n')).toMatch(/no baud rate gave readable text nothing received at any rate/);
+    await sys.disconnect();
+  });
+
+  it('needs a live serial line', async () => {
+    const sys = new System(memoryStore(), () => Date.now());
+    expect(sys.findBaud()).toMatch(/no device link/);
+  });
+});
+
 describe('a console session as evidence', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

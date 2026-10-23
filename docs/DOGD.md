@@ -322,7 +322,7 @@ own page: [`IDENTITY.md`](IDENTITY.md). A port name is never an identity.
 
 - dogd stores hdlog v2 files, under their own recording id only.
 - It checks each file with the same integrity algorithm as the interface
-  (seals, footer hash, counts) and records the status. Cross-checked by
+  (seals, footer hashes, counts, end time) and records the status. Cross-checked by
   tests on both sides with the same files.
 - Files are written to a temporary name, flushed to disk, then renamed: a
   crash never leaves half a recording under the real name.

@@ -1,4 +1,4 @@
-import { clock, duration, hex, milliamps, ms, volts } from '../../core/format';
+import { clock, duration, hex, milliamps, ms, percent, volts } from '../../core/format';
 import { NO_HARDWARE_DOG, type System } from '../../core/system';
 import { Empty } from '../components/Empty';
 import { ErrorBlock } from '../components/ErrorBlock';
@@ -95,6 +95,7 @@ export function Status({ system }: { system: System }) {
               ['DHCP', <Tag status={net.dhcp} />],
               ['DNS', <Tag status={net.dns.status} />],
               ['LATENCY', ms(net.latencyMs), true],
+              ['LOSS', percent(net.packetLoss)],
             ]}
           />
         </Panel>

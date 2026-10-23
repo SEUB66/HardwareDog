@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { DogdTransport, dogdLink, dogdStore } from '../src/core/dogd';
+import { DogdTransport, dogdClosed, dogdLink, dogdStore } from '../src/core/dogd';
 import type { DeviceFrame, HostCommand } from '../src/core/protocol';
 import type { ScenarioId } from '../src/core/scenarios';
 import { SessionRecorder, newHeader, parseHdlog, toHdlog } from '../src/core/session';
@@ -197,6 +197,14 @@ const timeline = (sys: System) =>
     .map((e) => `${e.t} #${e.seq ?? ''} ${e.source} ${e.severity} ${e.message} ${e.value ?? ''}`);
 
 const diagnosis = (sys: System) => sys.diagnoses.map((d) => ({ id: d.id, confidence: d.confidence, evidence: d.evidence }));
+
+describe('a dropped dogd link names who dropped it', () => {
+  it('the device behind dogd, a slow client, or dogd itself', () => {
+    expect(dogdClosed(4002, 'device link lost: serial stream ended')).toBe('device link lost: serial stream ended');
+    expect(dogdClosed(1006, '')).toMatch(/^dogd stopped answering/);
+    expect(dogdClosed(1011, '')).toBe('dogd closed the HDP socket (1011)');
+  });
+});
 
 describe.runIf(BIN)('dogd (real binary)', { timeout: 60_000 }, () => {
   let device: Awaited<ReturnType<typeof tcpDevice>>;

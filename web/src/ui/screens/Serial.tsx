@@ -61,8 +61,17 @@ export function Serial({ system }: { system: System }) {
                 </option>
               ))}
             </select>
-            <button class="btn" type="submit" disabled={!system.online}>
+            <button class="btn" type="submit" disabled={!system.online || system.baudSearching !== null}>
               APPLY
+            </button>
+            <button
+              class="btn"
+              type="button"
+              disabled={!system.online || system.baudSearching !== null}
+              title="Try each usual rate and keep the one whose lines read as text. The device has to be talking."
+              onClick={() => setMessage(system.findBaud())}
+            >
+              {system.baudSearching !== null ? `TRYING ${system.baudSearching}…` : 'FIND BAUD'}
             </button>
           </form>
         </Panel>

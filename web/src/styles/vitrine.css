@@ -277,7 +277,7 @@ h1 {
   text-shadow: 0 0 6px rgba(140, 255, 176, 0.5);
 }
 .crt-motto b { color: #d8ffe4; }
-.crt-boot { font-size: 11px; font-size: min(13px, calc(100cqi / 33)); line-height: 1.55; color: rgba(140, 255, 176, 0.88); text-shadow: 0 0 6px rgba(140, 255, 176, 0.45); }
+.crt-boot { font-size: 10px; font-size: min(12.5px, calc(100cqi / 36)); line-height: 1.55; color: rgba(140, 255, 176, 0.88); text-shadow: 0 0 6px rgba(140, 255, 176, 0.45); }
 /* linear, not steps(1): after a 2 s delay Chrome lands the last frame at 0.9999…, which steps(1) floors to 0 */
 .crt-boot > span { display: block; opacity: 0; animation: boot-line 0.01s linear forwards; }
 .crt-boot > span:nth-child(1) { animation-delay: 0.3s; }
@@ -292,6 +292,7 @@ h1 {
 .crt-boot > span:nth-child(10) { animation-delay: 1.74s; }
 .crt-boot > span:nth-child(11) { animation-delay: 2s; }
 .crt-boot b { color: #d8ffe4; }
+.crt-boot .w { color: var(--orange); text-shadow: 0 0 6px rgba(255, 159, 67, 0.45); }
 .crt-gap { margin-top: 0.9em; }
 .cursor { display: inline-block; width: 0.62em; height: 1.05em; margin-left: 0.2em; vertical-align: -0.18em; background: currentColor; box-shadow: 0 0 8px rgba(140, 255, 176, 0.7); animation: blink 1.05s steps(1) infinite; }
 

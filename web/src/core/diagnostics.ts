@@ -426,7 +426,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
         observed: [`${errorsText(e, f.uart.framingAtBaud.filter((x) => x.kind === 'garbled').length)} at ${f.uart.baud} baud, on ${pct(e, f.uart.rxAtBaud)} % of received lines.`],
         correlation: null,
         cause: 'The target UART runs at another baud rate (or data / parity / stop bits differ).',
-        next: 'Try common rates on SERIAL: 9600, 57600, 115200, 921600. Errors stop at the right one.',
+        next: 'FIND BAUD on SERIAL tries the usual rates and keeps the one whose lines read as text (or pick one: 9600, 57600, 115200, 921600).',
         since: f.uart.framingAtBaud[0]!.t,
         evidence: evidence(...f.uart.framingAtBaud.map((x) => x.seq)),
       });

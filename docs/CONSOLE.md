@@ -49,6 +49,14 @@ SEEN           every console line, timestamped by this computer
                target resets: an ESP-IDF "rst:0x.. (REASON)" line
                wrong baud rate: framing errors when the port reports them,
                and lines that do not read as text (garbled)
+FIND BAUD      SERIAL -> FIND BAUD (or `serial find`): the port is opened
+               at 115200, 9600, 74880, 57600, 38400, 19200, 230400,
+               460800, 921600 in turn, 1.5 s each; the rate whose lines
+               read as text is kept (4 clean lines and none garbled end
+               the search at once). Every rate tried is a command and a
+               uart.config on the timeline. The board has to be talking:
+               a silent one gives no answer, and the port goes back to its
+               rate. Same with a probe's UART (it answers uart.config)
                the board unplugged: the link is lost, said and recorded
 DIAGNOSED      TARGET_RESET_LOOP, SERIAL_CONFIGURATION_MISMATCH
                (DIAGNOSTICS.md)

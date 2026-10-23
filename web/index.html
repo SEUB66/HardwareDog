@@ -76,7 +76,7 @@
          /   (_____/
         /_____/   \</span></pre>
 <p class="crt-motto">hardware companion // <b>SNIFF THE PROBLEM.</b></p>
-<pre class="crt-boot"><span>Booting core systems...</span><span><b>[ OK ]</b> power monitor</span><span><b>[ OK ]</b> usb interface</span><span><b>[ OK ]</b> serial interface</span><span><b>[ OK ]</b> network probe</span><span><b>[ OK ]</b> event pipeline</span><span><b>[ OK ]</b> trace engine</span><span><b>[ OK ]</b> diagnostics rules</span><span class="crt-gap">Device ID : HD-001    Firmware : 0.1.0</span><span>Mode      : LOCAL     Session  : READY</span><span class="crt-prompt">Type HELP for commands <i class="cursor"></i></span></pre>
+<pre class="crt-boot"><span>INITIALIZING...</span><span><b>[ OK ]</b> EVENT BUS</span><span><b>[ OK ]</b> LOCAL STORAGE</span><span><b>[ OK ]</b> TRACE ENGINE</span><span><b>[ OK ]</b> DIAGNOSTIC RULES  16 loaded</span><span><b class="w">[WARN]</b> HARDWARE INTERFACE  not connected: choose a source</span><span class="crt-gap">SOURCE       NONE</span><span>DEVICE       --</span><span>MODE         LOCAL</span><span>SESSION      WAITING FOR A SOURCE</span><span class="crt-prompt"><b class="w">SYSTEM READY / NOT CONNECTED</b> <i class="cursor"></i></span></pre>
         </div>
       </div>
     </div>
@@ -84,7 +84,7 @@
       <ul class="specs">
         <li data-en="FREE FOR PERSONAL USE">GRATUIT POUR USAGE PERSONNEL</li>
         <li>SOURCE-AVAILABLE</li>
-        <li data-en="WORKS OFFLINE">FONCTIONNE HORS LIGNE</li>
+        <li data-en="OFFLINE AFTER ONE VISIT">HORS LIGNE APRÈS UNE VISITE</li>
       </ul>
       <span class="dio-rail-end" aria-hidden="true">SNIFF THE HARDWARE. NOT THE HUMAN.</span>
     </div>
@@ -102,7 +102,7 @@
     <article class="mod a-cyan">
       <div class="mod-top"><span class="mod-num">01</span><i class="led"></i></div>
       <h3>LOCAL FIRST</h3>
-      <p data-en="No account, no subscription, no telemetry. Works 100 % offline: the cloud is never required.">Aucun compte, aucun abonnement, aucune télémétrie. Fonctionne 100 % hors ligne : le cloud n’est jamais requis.</p>
+      <p data-en="No account, no subscription, no telemetry. After one visit, the tool works 100 % offline: the cloud is never required.">Aucun compte, aucun abonnement, aucune télémétrie. Après une visite, l’outil fonctionne 100 % hors ligne : le cloud n’est jamais requis.</p>
       <dl class="mod-screen kv">
         <div><dt>ACCOUNT</dt><dd>NONE</dd></div>
         <div><dt>SUBSCRIPTION</dt><dd>NONE</dd></div>
@@ -132,19 +132,19 @@
     <article class="mod a-green">
       <div class="mod-top"><span class="mod-num">04</span><i class="led"></i></div>
       <h3>DENSE, NOT NOISY</h3>
-      <p data-en="Maximum relevant information, minimum confusion. Eight readings, one glance.">Le maximum d’information utile, le minimum de confusion. Huit mesures, un coup d’œil.</p>
+      <p data-en="Maximum relevant information, minimum confusion. Eight readings of the STATUS screen, one glance.">Le maximum d’information utile, le minimum de confusion. Huit mesures de l’écran STATUS, un coup d’œil.</p>
       <div class="mod-screen gauges">
         <dl>
-          <div><dt>VBUS</dt><dd>5.038 V</dd></div>
-          <div><dt>IBUS</dt><dd>0.289 A</dd></div>
-          <div><dt>USB</dt><dd>ATTACHED</dd></div>
-          <div><dt>LINK</dt><dd>1000 FULL</dd></div>
+          <div><dt>VOLTAGE</dt><dd>5.04 V</dd></div>
+          <div><dt>CURRENT</dt><dd>289 mA</dd></div>
+          <div><dt>USB</dt><dd>CONNECTED</dd></div>
+          <div><dt>LINK</dt><dd>UP</dd></div>
           <div><dt>DHCP</dt><dd>PASS</dd></div>
           <div><dt>DNS</dt><dd>PASS</dd></div>
-          <div><dt>RTT</dt><dd>10 ms</dd></div>
-          <div><dt>LOSS</dt><dd>0 %</dd></div>
+          <div><dt>LATENCY</dt><dd>10 ms</dd></div>
+          <div><dt>LOSS</dt><dd>0.0%</dd></div>
         </dl>
-        <p class="gauges-src">HD-C017 · t+9.100 s · SIMULATED</p>
+        <p class="gauges-src">STATUS · HD-C017 · t+9.100 s · SIMULATED</p>
       </div>
     </article>
   </div>
@@ -179,15 +179,15 @@
     <div class="console">
       <div class="readout">
         <div class="say a-cream say-idle" id="say-idle"><p class="say-tag">CH 01 // IDLE / READY</p><p class="say-text" data-en="Nothing plugged in, nothing measured. Hardware Dog opens NOT CONNECTED and waits for you to pick a source.">Rien de branché, rien de mesuré. Hardware Dog s’ouvre NOT CONNECTED et attend que vous choisissiez une source.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN THE TOOL ↗">OUVRIR L’OUTIL ↗</a></div>
-        <div class="say a-cyan say-usb" id="say-usb"><p class="say-tag">CH 02 // USB / ENUMERATE</p><p class="say-text" data-en="Enumeration, descriptors, VID/PID, speed. Every connect and disconnect lands on the timeline, timestamped.">Énumération, descripteurs, VID/PID, vitesse. Chaque branchement et chaque débranchement arrive sur la chronologie, horodaté.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T005">DEMO // HD-T005 INTERMITTENT USB ↗</a></div>
-        <div class="say a-cyan say-serial" id="say-serial"><p class="say-tag">CH 03 // SERIAL / LIVE</p><p class="say-text" data-en="Any board’s serial console in the browser: every line timestamped, target resets, wrong baud rates. No probe needed.">La console série de n’importe quelle carte dans le navigateur : chaque ligne horodatée, les resets de la cible, les mauvais débits. Sans sonde.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T004">DEMO // HD-T004 SERIAL FRAMING ↗</a></div>
-        <div class="say a-orange say-bluetooth" id="say-bluetooth"><p class="say-tag">CH 04 // BLUETOOTH / SCAN</p><p class="say-text" data-en="Our own BLE scanner: the devices around you and their GATT services, decoded locally. Web Bluetooth, or dogd on Linux.">Notre propre scanner BLE : les appareils autour de vous et leurs services GATT, décodés en local. Web Bluetooth, ou dogd sous Linux.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN BLUETOOTH LAB ↗">OUVRIR BLUETOOTH LAB ↗</a></div>
+        <div class="say a-cyan say-usb" id="say-usb"><p class="say-tag">CH 02 // USB / ENUMERATE</p><p class="say-text" data-en="With dogd on Linux: every USB device of this computer, VID/PID, speed, class and interfaces. Every connect and disconnect lands on the timeline, timestamped.">Avec dogd sous Linux : chaque appareil USB de cet ordinateur, VID/PID, vitesse, classe et interfaces. Chaque branchement et chaque débranchement arrive sur la chronologie, horodaté.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T005">DEMO // HD-T005 INTERMITTENT USB ↗</a></div>
+        <div class="say a-cyan say-serial" id="say-serial"><p class="say-tag">CH 03 // SERIAL / LIVE</p><p class="say-text" data-en="Any board’s serial console in the browser: every line timestamped, target resets; a wrong baud rate is caught, and FIND BAUD finds the right one. No probe needed.">La console série de n’importe quelle carte dans le navigateur : chaque ligne horodatée, les resets de la cible ; un mauvais débit est repéré, et FIND BAUD trouve le bon. Sans sonde.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T004">DEMO // HD-T004 SERIAL FRAMING ↗</a></div>
+        <div class="say a-orange say-bluetooth" id="say-bluetooth"><p class="say-tag">CH 04 // BLUETOOTH / SCAN</p><p class="say-text" data-en="Our own BLE scanner, decoded locally: with dogd on Linux, every device around you; in Chrome, the device you pick and its GATT services.">Notre propre scanner BLE, décodé en local : avec dogd sous Linux, tous les appareils autour de vous ; dans Chrome, l’appareil que vous choisissez et ses services GATT.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN BLUETOOTH LAB ↗">OUVRIR BLUETOOTH LAB ↗</a></div>
         <div class="say a-cyan say-network" id="say-network"><p class="say-tag">CH 05 // NETWORK / TEST</p><p class="say-text" data-en="Link, DHCP, gateway, DNS, internet, latency, loss: checked in order, so the step that fails has a name.">Lien, DHCP, passerelle, DNS, internet, latence, pertes : vérifiés dans l’ordre, pour que l’étape qui casse ait un nom.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T002">DEMO // HD-T002 DHCP FAILURE ↗</a></div>
-        <div class="say a-cyan say-camera" id="say-camera"><p class="say-tag">CH 06 // CAMERA SNIFFER / INSPECT</p><p class="say-text" data-en="Clues of hidden cameras on a network you choose, over Bluetooth and USB, then a guided inspection. A scan with no clue proves nothing, and it says so.">Des indices de caméras cachées sur un réseau que vous choisissez, en Bluetooth et en USB, puis une inspection guidée. Un scan sans indice ne prouve rien, et il le dit.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN CAMERA SNIFFER ↗">OUVRIR CAMERA SNIFFER ↗</a></div>
+        <div class="say a-cyan say-camera" id="say-camera"><p class="say-tag">CH 06 // CAMERA SNIFFER / INSPECT</p><p class="say-text" data-en="Clues of hidden cameras over Bluetooth, and on a network you choose and over USB with dogd on Linux, then a guided inspection. A scan with no clue proves nothing, and it says so.">Des indices de caméras cachées en Bluetooth, et sur un réseau que vous choisissez et en USB avec dogd sous Linux, puis une inspection guidée. Un scan sans indice ne prouve rien, et il le dit.</p><a class="say-go" href="./diagnostic.html" data-en="OPEN CAMERA SNIFFER ↗">OUVRIR CAMERA SNIFFER ↗</a></div>
         <div class="say a-orange say-analyze" id="say-analyze"><p class="say-tag">CH 07 // TRACE / CORRELATE</p><p class="say-text" data-en="Deterministic rules read the timeline. Observation, correlation and hypothesis stay apart.">Des règles déterministes lisent la chronologie. Observation, corrélation et hypothèse restent séparées.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T016">DEMO // HD-T016 ROUTER LOSES POWER ↗</a></div>
         <div class="say a-green say-success" id="say-success"><p class="say-tag">CH 08 // DIAGNOSIS / PASS</p><p class="say-text" data-en="A healthy baseline must stay healthy: no false positive is allowed on the reference scenario.">Une référence saine doit rester saine : aucun faux positif n’est toléré sur le scénario de base.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T000">DEMO // HD-T000 HEALTHY BASELINE ↗</a></div>
         <div class="say a-magenta say-error" id="say-error"><p class="say-tag">CH 09 // ERROR / FAULT</p><p class="say-text" data-en="A real failure is shown as one: what was observed, when, and what to check next.">Une vraie panne est montrée comme telle : ce qui a été observé, quand, et quoi vérifier ensuite.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T010">DEMO // HD-T010 USB NOT ENUMERATED ↗</a></div>
-        <div class="say a-magenta say-disconnected" id="say-disconnected"><p class="say-tag">CH 10 // ERROR / DISCONNECTED</p><p class="say-text" data-en="The link dropped. Hardware Dog says which one: the device, dogd or the browser’s network. Never a vague OFFLINE.">Le lien est tombé. Hardware Dog dit lequel : l’appareil, dogd ou le réseau du navigateur. Jamais un vague OFFLINE.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T011">DEMO // HD-T011 NO NETWORK LINK ↗</a></div>
+        <div class="say a-magenta say-disconnected" id="say-disconnected"><p class="say-tag">CH 10 // ERROR / DISCONNECTED</p><p class="say-text" data-en="The link dropped. Hardware Dog says which one: the device behind dogd, dogd itself, or the browser’s serial port. Never a vague OFFLINE.">Le lien est tombé. Hardware Dog dit lequel : l’appareil derrière dogd, dogd lui-même, ou le port série du navigateur. Jamais un vague OFFLINE.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T011">DEMO // HD-T011 NO NETWORK LINK ↗</a></div>
         <div class="say a-cyan say-replay" id="say-replay"><p class="say-tag">CH 11 // SESSION / REPLAY</p><p class="say-text" data-en="Open an .hdlog: the incident plays again through the same decoder and the same rules. Without the hardware.">Ouvrez un .hdlog : l’incident rejoue dans le même décodeur, avec les mêmes règles. Sans le matériel.</p><a class="say-go" href="#hdlog">.HDLOG ↓</a></div>
         <div class="say a-green say-export" id="say-export"><p class="say-tag">CH 12 // EXPORT / DONE</p><p class="say-text" data-en="TXT, JSON, HTML and PDF reports, built on your machine. You decide what leaves it, and when.">Rapports TXT, JSON, HTML et PDF, générés sur votre machine. Vous décidez de ce qui en sort, et quand.</p><a class="say-go" href="./diagnostic.html?demo" data-en="TRY THE DEMO ↗">ESSAYER LA DÉMO ↗</a></div>
         <div class="say a-cyan say-power" id="say-power"><p class="say-tag">CH 13 // POWER / ANALYZE</p><p class="say-text" data-en="Voltage, current, peaks and drops, measured by the probe’s INA226 (still in development) or played by the simulator.">Tension, courant, pics et chutes, mesurés par l’INA226 de la sonde (encore en développement) ou joués par le simulateur.</p><a class="say-go" href="./diagnostic.html?scenario=HD-T001">DEMO // HD-T001 USB UNDERVOLTAGE ↗</a></div>
@@ -225,7 +225,7 @@
 
     <div class="lanes">
       <div class="lane a-cyan">
-        <p class="lane-id"><b>POWER</b><span data-en="voltage, current, peaks, drops, USB power negotiation">tension, courant, pics, chutes, négociation d’alimentation USB</span></p>
+        <p class="lane-id"><b>POWER</b><span data-en="voltage, current, peaks, drops (the probe’s INA226)">tension, courant, pics, chutes (INA226 de la sonde)</span></p>
         <div class="track">
           <svg class="spark" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true"><path class="spark-thr" d="M0 61.5H1000"/><path class="spark-v" d="M0 16 8 17 17 17 25 16 33 16 42 17 50 84 58 85 67 85 75 84 83 85 92 85 100 84 108 84 117 84 125 85 133 86 142 85 150 84 158 85 167 85 175 85 183 85 192 12 200 13 208 13 217 12 225 12 233 13 242 12 250 12 258 13 267 12 275 12 283 12 292 12 300 13 308 13 317 11 325 12 333 13 342 12 350 12 358 12 367 13 375 12 383 13 392 12 400 13 408 13 417 12 425 13 433 13 442 13 450 12 458 13 467 12 475 12 483 13 492 13 500 12 508 13 517 12 525 13 533 12 542 13 550 12 558 12 567 13 575 12 583 12 592 12 600 13 608 13 617 12 625 12 633 12 642 12 650 13 658 12 667 13 675 15 683 14 692 13 700 14 708 14 717 14 725 14 733 14 742 15 750 13 758 14 767 14 775 14 783 14 792 14 800 13 808 14 817 15 825 15 833 14 842 15 850 15 858 15 867 13 875 14 883 14 892 13 900 14 908 13 917 15 925 14 933 14 942 13 950 14 958 13 967 17 975 16 983 16 992 17 1000 16"/><path class="spark-dip" d="M42 17 50 84 58 85 67 85 75 84 83 85 92 85 100 84 108 84 117 84 125 85 133 86 142 85 150 84 158 85 167 85 175 85 183 85 192 12"/></svg>
           <span class="spark-label t-dip-label">▼ 4.603 V · 0.726 A</span>
@@ -313,15 +313,15 @@
         <span class="file-flags"><span class="chip-ok">✓ VERIFIED</span><span class="chip-warn">SIMULATED</span></span>
       </figcaption>
       <ol class="file-body" aria-label="Extrait du fichier HD-C017.hdlog" data-en-label="Excerpt of the file HD-C017.hdlog">
-        <li><span class="ln" aria-hidden="true">1</span><code>{"hdlog":2,"proto":1,"id":"HD-20260930-1421","origin":"<mark class="t-orange">SIMULATED</mark>","scenario":"HD-T016",…}</code></li>
-        <li><span class="ln" aria-hidden="true">2</span><code>{"frame":{"type":"hello","device":"HD-001","fw":"0.1.0","caps":["power","usb","uart","i2c","net","probe"]}}</code></li>
+        <li><span class="ln" aria-hidden="true">1</span><code>{"hdlog":2,"proto":1,"recording":"86167fed…","id":"HD-20260930-1421",…,"origin":"<mark class="t-orange">SIMULATED</mark>",…,"scenario":"HD-T016",…}</code></li>
+        <li><span class="ln" aria-hidden="true">2</span><code>{"at":1790778060000,"frame":{"type":"hello","t":0,"proto":1,"device":"HD-001","rev":"A","fw":"0.1.0","caps":["power","usb","uart","i2c","net","probe"]}}</code></li>
         <li class="file-skip"><span class="ln" aria-hidden="true"></span><code>⋮</code></li>
-        <li class="hot"><span class="ln" aria-hidden="true">475</span><code>{"frame":{"type":"power","t":9120,"v":<mark class="t-magenta">4.603</mark>,"i":0.7261}}</code></li>
-        <li class="hot"><span class="ln" aria-hidden="true">480</span><code>{"frame":{"type":"<mark class="t-magenta">usb.detach</mark>","t":9204}}</code></li>
-        <li class="hot"><span class="ln" aria-hidden="true">493</span><code>{"frame":{"type":"net.status","t":9455,"link":{"up":<mark class="t-magenta">false</mark>,…}}}</code></li>
+        <li class="hot"><span class="ln" aria-hidden="true">475</span><code>{"at":1790778069100,"frame":{"type":"power","t":9120,"v":<mark class="t-magenta">4.603</mark>,"i":0.7261}}</code></li>
+        <li class="hot"><span class="ln" aria-hidden="true">480</span><code>{"at":1790778069200,"frame":{"type":"<mark class="t-magenta">usb.detach</mark>","t":9204}}</code></li>
+        <li class="hot"><span class="ln" aria-hidden="true">493</span><code>{"at":1790778069400,"frame":{"type":"net.status","t":9455,"link":{"up":<mark class="t-magenta">false</mark>,…}}</code></li>
         <li class="file-skip"><span class="ln" aria-hidden="true"></span><code>⋮</code></li>
         <li><span class="ln" aria-hidden="true">2345</span><code>{"<mark class="t-green">seal</mark>":{"n":1,"lines":2343,"sha256":"ffdbf897bc415985b0c440a7dfa7dff9ef30c7b971214d77c9a902e58bccd3b4"}}</code></li>
-        <li><span class="ln" aria-hidden="true">2346</span><code>{"end":{"closed":"NORMAL","frames":2343,"rejects":0,"lost":0,"seals":1,…}}</code></li>
+        <li><span class="ln" aria-hidden="true">2346</span><code>{"end":{"closed":"NORMAL",…,"frames":2343,"rejects":0,…,"lost":0,"seals":1,…}}</code></li>
       </ol>
       <div class="file-foot"><span>SHA-256 (FILE)</span><code>75a2ae64a065c15269914c58ecb368b59a25a5dedb935fd7650ecc383c3af059</code></div>
     </figure>
@@ -344,13 +344,13 @@
     <article class="tool a-cyan">
       <p class="tool-id">CAMERA SNIFFER <i class="led"></i></p>
       <h3 data-en="Hidden cameras: clues, without a cloud app.">Caméras cachées : des indices, sans app cloud.</h3>
-      <p data-en="Looks for camera clues on a network you choose (with dogd), over Bluetooth and USB, and guides a physical inspection object by object. It says what it observes: a scan with no clue does not prove there is no camera.">Repère des indices de caméras sur un réseau que vous choisissez (avec dogd), en Bluetooth et en USB, et guide une inspection physique objet par objet. Il dit ce qu’il observe : un scan sans indice ne prouve pas qu’il n’y a aucune caméra.</p>
+      <p data-en="Looks for camera clues over Bluetooth, on a network you choose and over USB (with dogd on Linux), and guides a physical inspection object by object. It says what it observes: a scan with no clue does not prove there is no camera.">Repère des indices de caméras en Bluetooth, sur un réseau que vous choisissez et en USB (avec dogd sous Linux), et guide une inspection physique objet par objet. Il dit ce qu’il observe : un scan sans indice ne prouve pas qu’il n’y a aucune caméra.</p>
       <code>OBSERVED ≠ CONFIRMED</code>
     </article>
     <article class="tool a-orange">
       <p class="tool-id">BLUETOOTH LAB <i class="led"></i></p>
       <h3 data-en="A Bluetooth LE scanner in your browser.">Un scanner Bluetooth LE dans le navigateur.</h3>
-      <p data-en="The Bluetooth LE devices around you, through Web Bluetooth where the browser allows it, or dogd on Linux.">Les appareils Bluetooth LE autour de vous, par Web Bluetooth quand le navigateur le permet, ou par dogd sous Linux.</p>
+      <p data-en="With dogd on Linux, every Bluetooth LE device around you. In Chrome, the device you pick in its list, and its GATT services: the browser’s full scan is still experimental.">Avec dogd sous Linux, tous les appareils Bluetooth LE autour de vous. Dans Chrome, l’appareil que vous choisissez dans sa liste, et ses services GATT : le scan complet du navigateur est encore expérimental.</p>
       <code>BLE / GATT</code>
     </article>
     <article class="tool a-magenta">
@@ -362,7 +362,7 @@
     <article class="tool a-green">
       <p class="tool-id"><span data-en="USB · NETWORK · SERIAL">USB · RÉSEAU · SÉRIE</span> <i class="led"></i></p>
       <h3 data-en="A board’s console, this computer’s network.">La console d’une carte, le réseau de cet ordinateur.</h3>
-      <p data-en="Any board’s serial console in the browser; this computer’s network and USB devices through dogd, the optional local daemon. The Hardware Dog probe is still in development.">La console série de n’importe quelle carte dans le navigateur ; le réseau et les périphériques USB de cet ordinateur par dogd, le daemon local optionnel. La sonde Hardware Dog est encore en développement.</p>
+      <p data-en="Any board’s serial console in the browser; this computer’s network through dogd, the optional local daemon, and its USB devices (dogd on Linux). The Hardware Dog probe is still in development.">La console série de n’importe quelle carte dans le navigateur ; le réseau de cet ordinateur par dogd, le daemon local optionnel, et ses périphériques USB (dogd sous Linux). La sonde Hardware Dog est encore en développement.</p>
       <code>WEB SERIAL / DOGD</code>
     </article>
   </div>

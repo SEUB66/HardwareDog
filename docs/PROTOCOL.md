@@ -271,7 +271,8 @@ VERSION        2 for one device, 3 for a pack of Dogs (v1 files are still
 FORMAT         newline-delimited JSON, UTF-8, LF line endings
 LINE 1         header: provenance, never rewritten
 THEN           entries in arrival order, sealed in blocks by seal lines
-LAST           footer: counts + SHA-256 of everything before it
+LAST           footer: counts + SHA-256 of everything before it, and of
+               its own line ("self")
 CLOCK          "at" = host wall-clock time in ms, never goes backwards
 REFERENCE      web/src/core/session.ts (writer, reader, verifier, replay)
 CASES          cases/<category>/*.hdlog + *.case.json (LIBRARY.md)
@@ -413,7 +414,8 @@ finished still proves that every sealed line is intact.
 {"end":{"closed":"NORMAL","startedAt":1790778060000,"endedAt":1790778089900,
  "entries":1557,"frames":1557,"rejects":0,"commands":0,"marks":0,
  "thresholds":0,"lost":0,"seals":1,
- "device":{"id":"HD-001","rev":"A","fw":"0.1.0"},"sha256":"0d2e8483..."}}
+ "device":{"id":"HD-001","rev":"A","fw":"0.1.0"},"sha256":"0d2e8483...",
+ "self":"5b1f07c2..."}}
 ```
 
 ```text
@@ -421,13 +423,21 @@ closed       NORMAL     closed by the recorder at the end of the session
              RECOVERED  closed later, after an unclean stop (tab closed,
                         crash): only sealed lines are kept
              SNAPSHOT   exported while the session was still recording
+endedAt      the "at" of the last entry (startedAt when there is none)
 sha256       sha256 of every byte of the file before the footer line
+self         sha256 of the footer line itself, every byte before
+             ,"self": always its last field, the line ends "}}
 ```
+
+The header of a file written since 2026-10 says `"footerSealed":true`: its
+footer must carry `self`. Older files have neither, and are read as before;
+every footer is still checked against the file (counts, seals, endedAt,
+device, sha256), only `closed` relies on `self`.
 
 ### integrity
 
-A reader checks every seal, the footer hash and every count, and gives the
-file one status. Problems do not hide the data: a modified file is still
+A reader checks every seal, the footer hashes and every count, and gives
+the file one status. Problems do not hide the data: a modified file is still
 shown, with the warning and the line numbers.
 
 ```text

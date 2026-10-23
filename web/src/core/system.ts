@@ -32,7 +32,7 @@ import type { Confidence, Diagnosis, DiagnosisId, SessionFacts } from './diagnos
 import type { HostCommand } from './protocol';
 import type { Integrity, SessionHeader, SessionRecorder } from './session';
 import { ReplayTransport } from './session';
-import { FACT_LIMIT, NET_HISTORY, NET_POWER_WINDOW_MS, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
+import { DIAGNOSIS_IDS, FACT_LIMIT, NET_HISTORY, NET_POWER_WINDOW_MS, RUNNING_CURRENT, diagnose, emptyFacts, parseResetLine } from './diagnostics';
 
 const describeThresholds = (t: Thresholds) =>
   `UV ${volts(t.undervoltageThreshold)}  OC ${t.overcurrentThreshold.toFixed(2)} A  WINDOW ${t.correlationWindowMs} ms`;
@@ -88,13 +88,28 @@ export interface LinkError {
   detail: string;
 }
 
-/** Rules the instrument evaluates continuously. Shown on SETUP. */
-export const RULES = [
-  'UNDERVOLTAGE      rail below threshold, with hysteresis',
-  'OVERCURRENT       draw above threshold',
-  'USB/POWER CORR    disconnect within window of an undervoltage',
-  'UART FRAMING      repeated framing errors -> baud mismatch hypothesis',
-] as const;
+/** What each diagnosis rule looks for, in a line (DIAGNOSTICS.md has the thresholds). Every rule: the compiler checks. */
+const RULE_TEXT: Record<DiagnosisId, string> = {
+  POWER_INSTABILITY: 'USB disconnects right after a voltage drop',
+  SUPPLY_SAG: 'voltage drops, no disconnect after them',
+  OVERCURRENT: 'draw above the current limit',
+  USB_INTERMITTENT: 'disconnects the supply does not explain',
+  USB_NOT_ENUMERATED: 'the target draws current, no USB device appears',
+  TARGET_RESET_LOOP: 'repeated target resets, not power-on or brownout',
+  SERIAL_CONFIGURATION_MISMATCH: 'framing errors or garbled lines: wrong baud rate',
+  NO_LINK: 'no network link',
+  DHCP_FAILURE: 'link up, no address',
+  GATEWAY_UNREACHABLE: 'an address, no answer from the gateway',
+  DNS_FAILURE: 'names do not resolve',
+  UPSTREAM_FAILURE: 'names resolve, the internet does not answer',
+  NETWORK_UNSTABLE: 'every layer passes; latency swings or packet loss',
+  NETWORK_POWER_LOSS: 'the link drops after a voltage drop or a reset',
+  I2C_DEVICE_DISAPPEARED: 'an I2C address stops answering scans',
+  I2C_BUS_INSTABILITY: 'I2C faults: line held low, timeout, arbitration lost',
+};
+
+/** The rules the instrument evaluates continuously, one line each. Shown at boot and on SETUP. */
+export const RULES: readonly string[] = DIAGNOSIS_IDS.map((id) => `${id.padEnd(30)}${RULE_TEXT[id]}`);
 
 const POWER_WINDOW_MS = 15_000;
 /** A Hardware Dog says hello as soon as its port opens: past this, the port is something else. */
@@ -103,6 +118,18 @@ export const HELLO_WAIT_MS = 3_000;
 export const NO_HARDWARE_DOG = 'NO HARDWARE DOG ON THIS PORT';
 const HYSTERESIS_V = 0.05;
 const SERIAL_LINES = 500;
+
+/**
+ * FIND BAUD: the rates tried, the usual ones first, and how long each one
+ * listens. A rate is kept when its lines read as text; the first one with
+ * enough clean lines and none garbled ends the search.
+ */
+export const BAUD_SEARCH = [115200, 9600, 74880, 57600, 38400, 19200, 230400, 460800, 921600] as const;
+export const BAUD_LISTEN_MS = 1500;
+/** How long a source has to confirm a new rate (its uart.config frame). */
+const BAUD_CONFIRM_MS = 2000;
+/** Clean lines that settle the search at once. */
+const BAUD_SURE_LINES = 4;
 
 type Listener = () => void;
 
@@ -272,6 +299,10 @@ export class System {
   private overcurrent = false;
   private framingErrorTimes: number[] = [];
   private lastBaudHypothesisAt = -Infinity;
+  /** FIND BAUD at work: the rate on trial and what it read. */
+  private baudTrial: { baud: number; lines: number; bad: number } | null = null;
+  /** The rate FIND BAUD is trying now, null when no search runs. Shown on SERIAL. */
+  baudSearching: number | null = null;
   private lastFrameErrorLogAt = -Infinity;
   private suppressedFrameErrors = 0;
   private probeCounter = 0;
@@ -791,6 +822,7 @@ export class System {
         break;
       }
       case 'uart.rx':
+        if (this.baudTrial && this.serial.baud === this.baudTrial.baud) this.baudTrial.lines++;
         this.serial.rxBytes += utf8Length(f.data) + 1;
         this.pushSerial({ t, dir: 'RX', text: f.data });
         this.log(t, 'UART', 'INFO', f.data.length > 120 ? f.data.slice(0, 117) + '...' : f.data);
@@ -1052,6 +1084,7 @@ export class System {
 
   private onUartError(t: number, kind: string): void {
     this.serial.errors++;
+    if (this.baudTrial && this.serial.baud === this.baudTrial.baud && kind !== 'overrun' && kind !== 'break') this.baudTrial.bad++;
     this.log(t, 'UART', 'WARN', `${kind} error`);
     // A line that does not read as text (a console read by this browser) is the same clue.
     if (kind === 'framing') this.remember(this.facts.uart.framingAtBaud, { t, seq: this.seq });
@@ -1329,6 +1362,68 @@ export class System {
     this.framingErrorTimes = [];
     this.changed();
     return null;
+  }
+
+  /**
+   * FIND BAUD: try each usual rate on the live port, listen, keep the one
+   * whose lines read as text. Every rate tried is a command and a
+   * uart.config on the timeline; nothing is guessed from a single line.
+   * The device has to be talking (a boot log, a prompt, a sensor stream):
+   * a silent one gives no answer, and that is said. Null when it started.
+   */
+  findBaud(listenMs = BAUD_LISTEN_MS): string | null {
+    if (this.baudSearching !== null) return 'already looking for the baud rate';
+    const err = this.requireLink('find baud', 'uart');
+    if (err) return err;
+    if (!this.observes('uart')) return 'find baud: this source does not observe a serial line';
+    void this.searchBaud(listenMs);
+    return null;
+  }
+
+  private async searchBaud(listenMs: number): Promise<void> {
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const transport = this.transport;
+    const still = () => this.online && this.transport === transport;
+    const from = this.serial.baud;
+    const tried: { baud: number; lines: number; bad: number }[] = [];
+    this.log(this.now(), 'USER', 'INFO', 'find baud', `trying ${BAUD_SEARCH.join(' ')}, ${listenMs} ms each`);
+    try {
+      for (const baud of BAUD_SEARCH) {
+        if (!still()) return;
+        this.baudSearching = baud;
+        this.changed();
+        if (this.serial.baud !== baud) {
+          this.send({ cmd: 'uart.config', baud });
+          for (let waited = 0; this.serial.baud !== baud && waited < BAUD_CONFIRM_MS && still(); waited += 100) await wait(100);
+          if (this.serial.baud !== baud) continue; // the source did not take this rate
+        }
+        this.baudTrial = { baud, lines: 0, bad: 0 };
+        await wait(listenMs);
+        const trial = this.baudTrial;
+        this.baudTrial = null;
+        tried.push(trial);
+        if (trial.bad === 0 && trial.lines >= BAUD_SURE_LINES) break;
+      }
+      if (!still()) return;
+      const readable = tried.filter((x) => x.lines - x.bad >= 2 && x.bad / Math.max(1, x.lines) < 0.3);
+      const best = readable.sort((a, b) => b.lines - b.bad - (a.lines - a.bad))[0];
+      const keep = best?.baud ?? from;
+      if (this.serial.baud !== keep) this.send({ cmd: 'uart.config', baud: keep });
+      this.framingErrorTimes = [];
+      if (best) this.log(this.now(), 'UART', 'PASS', `baud rate found: ${best.baud}`, `${best.lines - best.bad} readable line(s), ${best.bad} garbled, in ${listenMs} ms`);
+      else
+        this.log(
+          this.now(),
+          'UART',
+          'WARN',
+          'no baud rate gave readable text',
+          tried.every((x) => x.lines === 0) ? `nothing received at any rate: the device is silent, or not on this port; back to ${from}` : `garbled at every rate tried; back to ${from}`,
+        );
+    } finally {
+      this.baudTrial = null;
+      this.baudSearching = null;
+      this.changed();
+    }
   }
 
   sendSerial(text: string): string | null {
