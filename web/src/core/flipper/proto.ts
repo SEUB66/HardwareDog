@@ -154,43 +154,72 @@ export class Fields {
 }
 
 /**
+ * The largest frame a Flipper sends: a storage read part is 512 bytes of
+ * data, a list part 8 names of up to 255 bytes. 64 KiB is far above both;
+ * a device announcing more is not a Flipper speaking RPC.
+ */
+export const FRAME_MAX = 64 * 1024;
+
+/**
  * Splits a byte stream into length-delimited messages (varint length,
  * then the message). A length above `max` is a broken stream: it throws
- * instead of waiting forever for bytes that will never come.
+ * instead of waiting forever for bytes that will never come. Bytes wait in
+ * one buffer that grows by doubling: a frame trickled in byte by byte is
+ * copied a bounded number of times, never once per chunk.
  */
 export class DelimitedReader {
-  private buf = new Uint8Array(0);
+  private buf = new Uint8Array(1024);
+  /** The bytes not yet a whole frame: buf[from, to). */
+  private from = 0;
+  private to = 0;
 
   constructor(
     private readonly onMessage: (msg: Uint8Array) => void,
-    private readonly max = 1024 * 1024,
+    private readonly max = FRAME_MAX,
   ) {}
 
   push(chunk: Uint8Array): void {
-    const merged = new Uint8Array(this.buf.length + chunk.length);
-    merged.set(this.buf);
-    merged.set(chunk, this.buf.length);
-    this.buf = merged;
+    this.room(chunk.length);
+    this.buf.set(chunk, this.to);
+    this.to += chunk.length;
     for (;;) {
+      const held = this.buf.subarray(this.from, this.to);
       let len: bigint;
       let start: number;
       try {
-        [len, start] = readVarint(this.buf, 0);
+        [len, start] = readVarint(held, 0);
       } catch (e) {
         if (e instanceof Error && e.message.includes('truncated')) return; // wait for more bytes
         throw e;
       }
       if (len > BigInt(this.max)) throw new Error(`protobuf: frame of ${len} bytes exceeds ${this.max}`);
       const end = start + Number(len);
-      if (end > this.buf.length) return;
-      const msg = this.buf.slice(start, end);
-      this.buf = this.buf.slice(end);
+      if (end > held.length) return;
+      const msg = held.slice(start, end);
+      this.from += end;
+      if (this.from === this.to) this.from = this.to = 0;
       this.onMessage(msg);
     }
   }
 
+  /** Make room for n more bytes: move what is held to the front, grow only when that is not enough. */
+  private room(n: number): void {
+    if (this.to + n <= this.buf.length) return;
+    const held = this.to - this.from;
+    let size = this.buf.length;
+    while (held + n > size) size *= 2;
+    if (size === this.buf.length) this.buf.copyWithin(0, this.from, this.to);
+    else {
+      const next = new Uint8Array(size);
+      next.set(this.buf.subarray(this.from, this.to));
+      this.buf = next;
+    }
+    this.from = 0;
+    this.to = held;
+  }
+
   get pending(): number {
-    return this.buf.length;
+    return this.to - this.from;
   }
 }
 

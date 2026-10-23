@@ -105,9 +105,12 @@ WRITES      the bytes are previewed, in the format chosen; the mode is one
             response: the device acknowledged); it does not prove the
             device acted. Sent once
 NUMBERS     u8 s8 u16 s16 u32 s32 f32, with the byte order in the name
-            (u16le, u16be...), hex, UTF-8; a tail too short is said
-LOST LINK   said; nothing is resent on its own. A reconnect is a click, and
-            no earlier write is replayed
+            (u16le, u16be...), hex, UTF-8; a tail too short is said. A
+            value out of range is refused, never sent as Infinity or 0; an
+            f32 preview shows the number the device will read
+LOST LINK   said; nothing is resent on its own, and no notification handler
+            outlives the link. A reconnect is a click, and no earlier write
+            is replayed
 ```
 
 dogd does not connect to devices: GATT is Web Bluetooth only.
@@ -119,7 +122,10 @@ written when its payload changed, or at most once a second; the ones in
 between are counted (`params.repeats`). The screen sees every one. A
 reopened session rebuilds the devices, their payloads (and the payload
 before the last change), and their RSSI at that sampling, read-only
-(`web/test/ble.test.ts`). The lab session format: [`FLIPPER_LAB.md`](FLIPPER_LAB.md).
+(`web/test/ble.test.ts`). A hand-edited file cannot stop a replay halfway:
+a payload pair without `=` or with odd hex is left out, a measure that is
+not a number is no measure, and an event that cannot be read is counted
+(`N UNREADABLE`). The lab session format: [`FLIPPER_LAB.md`](FLIPPER_LAB.md).
 
 ## SOURCES AND LICENSES
 

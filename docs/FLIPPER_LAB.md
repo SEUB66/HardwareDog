@@ -69,6 +69,20 @@ Paths are checked before anything is sent (`checkFlipperPath`): under
 `/ext`, `/int` or `/any`, no `.` or `..` segment, no control character, no
 backslash, 255 characters at most. Local downloads get a sanitized name.
 
+A device is trusted no more than its USB ids: anything can present the
+Flipper's VID/PID. What it sends is bounded:
+
+```text
+FRAME       64 KiB at most (a real one is about 1 KiB: 512 bytes of file
+            data, or 8 names of a listing); a longer one ends the session
+REPLY       40 000 parts per command at most; parts a consumer takes (a
+            read, a listing) are not also kept
+TIME        6 s of silence fails a command; so does its whole reply taking
+            longer than 60 s (a transfer gets 1 s more per 8 KiB of its
+            size), however lively the device is
+UPLOAD      a local file larger than 4 MiB is refused before it is read
+```
+
 ### Errors keep their names
 
 The device's `PB.CommandStatus` names are shown unchanged
@@ -99,8 +113,12 @@ as bytes.
 
 The LIBRARY keeps copies made on explicit request, in this browser
 (IndexedDB `hwdog-lab/library`): source path, device name, real or demo,
-time, SHA-256, notes, tags. The same bytes from the same path are kept
-once. Search is stable (`tag:x`, `kind:x`, words). COMPARE shows field by
+time, SHA-256, notes, tags. The bytes are kept apart
+(`hwdog-lab/library-data`): the list, the search and a COPY never load
+every file; a file's bytes are read when it is opened, compared or saved.
+The same bytes from the same path are kept once. WRITE MODE and the file
+preview belong to one device: another device, or a lost link, starts
+read-only with nothing on screen. Search is stable (`tag:x`, `kind:x`, words). COMPARE shows field by
 field what differs between two captures of the same kind, and refuses two
 kinds.
 
@@ -345,7 +363,12 @@ TESTED IN SIMULATION          the RPC client against the demo device, byte
  companion.test.ts,           frame), write (multi-part), collisions, device
  tv-profile.test.ts)          error codes, timeout and late-answer drain,
                               cable pulled mid-transfer, one connection when
-                              asked twice; parsers and comparisons; library;
+                              asked twice; a hostile device (oversized and
+                              random frames, endless and trickled replies);
+                              the Web Serial switch to RPC against a fake
+                              port (split prompt, echo, timeout, unplug);
+                              parsers and comparisons; library and its
+                              upgrade;
                               the companion's states, power sequence, clicks
                               during transitions, messages; the TV profile
 IMPLEMENTED, NOT VERIFIED     Web Serial switch to RPC on a real Flipper

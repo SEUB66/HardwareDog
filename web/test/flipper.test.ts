@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { FlipperClient, FlipperRpc, RpcError, checkFlipperPath } from '../src/core/flipper/client';
 import { DEMO_FILES, DemoFlipper } from '../src/core/flipper/demo';
 import { FormatError, compareParsed, parseFlipperFile, timingStats } from '../src/core/flipper/formats';
-import { FlipperLibrary, safeFileName, searchLibrary } from '../src/core/flipper/library';
+import { FlipperLibrary, safeFileName, searchLibrary, type LibraryEntry } from '../src/core/flipper/library';
 import { DelimitedReader, ProtoWriter, delimited, readFields } from '../src/core/flipper/proto';
 import { decodeMain, encodeMain, type MainMessage } from '../src/core/flipper/rpc';
+import { FlipperSerialLink } from '../src/core/flipper/serial';
 import { FlipperService } from '../src/core/flipper/service';
 import { Companion } from '../src/core/lab/companion';
 import { LabBus, type LabEvent } from '../src/core/lab/events';
@@ -164,7 +165,7 @@ describe('Flipper service and the companion', () => {
     const bus = new LabBus();
     const events: LabEvent[] = [];
     bus.subscribe((e) => events.push(e));
-    const service = new FlipperService(bus, new FlipperLibrary(new MemoryKv()));
+    const service = new FlipperService(bus, new FlipperLibrary(new MemoryKv(), new MemoryKv()));
     return { bus, events, service };
   };
 
@@ -200,7 +201,7 @@ describe('Flipper service and the companion', () => {
   });
 
   it('library search is stable and filters by tag and kind', async () => {
-    const lib = new FlipperLibrary(new MemoryKv());
+    const lib = new FlipperLibrary(new MemoryKv(), new MemoryKv());
     const a = (await lib.add({ path: '/ext/infrared/a.ir', device: 'X', origin: 'PHYSICAL', data: Uint8Array.of(1), at: 1 })).item;
     await lib.add({ path: '/ext/subghz/b.sub', device: 'X', origin: 'PHYSICAL', data: Uint8Array.of(2), at: 1 });
     await lib.annotate(a.id, { tags: ['Living Room', 'tv'], notes: 'remote' });
@@ -209,5 +210,189 @@ describe('Flipper service and the companion', () => {
     expect(searchLibrary(items, 'kind:subghz').map((i) => i.name)).toEqual(['b.sub']);
     expect(searchLibrary(items, '', 'newest').map((i) => i.id)).toEqual(searchLibrary(items, '', 'newest').map((i) => i.id));
     expect(safeFileName('../../etc/passwd')).not.toMatch(/^\.|\//);
+  });
+});
+
+/** A Flipper-shaped serial port the test drives: answers the CLI, then echoes the start line. */
+class FlipperPort {
+  written: string[] = [];
+  readable: ReadableStream<Uint8Array> | null = null;
+  writable: WritableStream<Uint8Array> | null = null;
+  closed = 0;
+  private ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+  constructor(private readonly onWrite: (port: FlipperPort, text: string) => void = () => {}) {}
+  getInfo() {
+    return { usbVendorId: 0x0483, usbProductId: 0x5740 };
+  }
+  async open() {
+    this.readable = new ReadableStream({ start: (c) => void (this.ctrl = c) });
+    this.writable = new WritableStream({
+      write: (c) => {
+        const t = new TextDecoder('latin1').decode(c);
+        this.written.push(t);
+        this.onWrite(this, t);
+      },
+    });
+  }
+  async close() {
+    this.closed++;
+  }
+  feed(b: string | Uint8Array) {
+    this.ctrl!.enqueue(typeof b === 'string' ? Uint8Array.from(b, (c) => c.charCodeAt(0)) : b);
+  }
+  unplug() {
+    this.ctrl!.error(Object.assign(new Error('The device has been lost.'), { name: 'NetworkError' }));
+  }
+}
+
+/** A link the test answers by hand: every write is handed to `answer`. */
+function handLink(answer: (id: number, send: (m: MainMessage) => void) => void) {
+  const link = {
+    origin: 'PHYSICAL' as const,
+    label: 'HOSTILE',
+    onData: null as ((b: Uint8Array) => void) | null,
+    onClose: null as ((r: string) => void) | null,
+    write: async (bytes: Uint8Array) => {
+      const id = decodeMain(bytes.subarray(1)).commandId;
+      answer(id, (m) => link.onData?.(delimited(encodeMain(m))));
+    },
+    close: async () => {},
+  };
+  return link;
+}
+
+describe('Flipper paths a hostile or broken device takes (audit 2026-10)', () => {
+  it('a frame announcing more than 64 KiB ends the stream; a trickled frame is reassembled', () => {
+    expect(() => new DelimitedReader(() => {}).push(Uint8Array.from([0x81, 0x80, 0x04]))).toThrow('exceeds 65536');
+    const msgs: Uint8Array[] = [];
+    const r = new DelimitedReader((m) => msgs.push(m));
+    const payload = new Uint8Array(60_000).map((_, i) => i & 0xff);
+    const frame = delimited(payload);
+    for (let at = 0; at < frame.length; at += 7) r.push(frame.subarray(at, at + 7));
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0]).toEqual(payload);
+    expect(r.pending).toBe(0);
+  });
+
+  it('random bytes only ever throw: no hang, nothing held past the frame limit', () => {
+    let seed = 7;
+    const rand = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let run = 0; run < 300; run++) {
+      const r = new DelimitedReader((m) => {
+        try {
+          decodeMain(m);
+        } catch {
+          // a malformed message is refused, that is all
+        }
+      });
+      try {
+        for (let n = 0; n < 40; n++) r.push(Uint8Array.from({ length: Math.floor(rand() * 200) }, () => Math.floor(rand() * 256)));
+      } catch (e) {
+        expect(String(e)).toMatch(/protobuf/);
+      }
+      expect(r.pending).toBeLessThanOrEqual(64 * 1024 + 10 + 200);
+    }
+  });
+
+  it('an endless streamed reply fails the command, and keeps nothing a consumer already took', async () => {
+    const endless = handLink((id, send) => {
+      for (let i = 0; i < 40_001; i++) send({ commandId: id, status: 0, hasNext: true, content: { kind: 'storage_list_response', files: [] } });
+    });
+    const rpc = new FlipperRpc(endless);
+    let seen = 0;
+    await expect(rpc.call({ kind: 'storage_list_request', path: '/ext' }, { onPart: () => void seen++ })).rejects.toMatchObject({ code: 'HD_TOO_MANY' });
+    expect(seen).toBe(40_000);
+
+    const three = handLink((id, send) => {
+      for (let i = 0; i < 3; i++) send({ commandId: id, status: 0, hasNext: i < 2, content: { kind: 'storage_list_response', files: [] } });
+    });
+    const kept = await new FlipperRpc(three).call({ kind: 'storage_list_request', path: '/ext' }, { onPart: () => {} });
+    expect(kept).toEqual([]);
+  });
+
+  it('a reply that keeps trickling still ends at its deadline', async () => {
+    const timers: ReturnType<typeof setInterval>[] = [];
+    const dribble = handLink((id, send) => {
+      timers.push(setInterval(() => send({ commandId: id, status: 0, hasNext: true, content: { kind: 'storage_list_response', files: [] } }), 5));
+    });
+    const t0 = Date.now();
+    await expect(new FlipperRpc(dribble).call({ kind: 'storage_list_request', path: '/ext' }, { timeoutMs: 1000, deadlineMs: 80 })).rejects.toMatchObject({ code: 'TIMEOUT', message: expect.stringMatching(/longer than 0.08 s/) });
+    expect(Date.now() - t0).toBeLessThan(900);
+    timers.forEach(clearInterval);
+  });
+
+  it('serial: a prompt split across chunks, the echo, then RPC bytes in the same chunk', async () => {
+    const ping = delimited(encodeMain({ commandId: 1, status: 0, hasNext: false, content: { kind: 'ping_response', data: Uint8Array.from([0x48, 0x44, 0x4f, 0x47]) } }));
+    const port = new FlipperPort((p, t) => {
+      if (t === '\r') setTimeout(() => (p.feed('\r\n>'), p.feed(': ')), 1);
+      if (t.startsWith('start_rpc_session')) setTimeout(() => p.feed(new Uint8Array([...Uint8Array.from('start_rpc_session\r\n', (c) => c.charCodeAt(0)), ...ping])), 1);
+    });
+    const link = new FlipperSerialLink(port);
+    const got: Uint8Array[] = [];
+    link.onData = (b) => void got.push(b);
+    await link.open(500);
+    expect(port.written).toEqual(['\r', 'start_rpc_session\r']);
+    expect(got.flatMap((b) => [...b])).toEqual([...ping]);
+    expect(link.label).toBe('FLIPPER USB 0483:5740');
+  });
+
+  it('serial: a port that never shows the prompt times out and is released; an unplug mid-RPC is said', async () => {
+    const mute = new FlipperPort();
+    await expect(new FlipperSerialLink(mute).open(30)).rejects.toMatchObject({ code: 'TIMEOUT' });
+    expect(mute.closed).toBe(1);
+
+    const port = new FlipperPort((p, t) => {
+      if (t === '\r') setTimeout(() => p.feed('>: '), 1);
+      if (t.startsWith('start_rpc_session')) setTimeout(() => p.feed('start_rpc_session\r\n'), 1);
+    });
+    const link = new FlipperSerialLink(port);
+    await link.open(500);
+    const rpc = new FlipperRpc(link);
+    const pending = rpc.call({ kind: 'ping_request', data: Uint8Array.of(1) });
+    await new Promise((r) => setTimeout(r, 5));
+    port.unplug();
+    await expect(pending).rejects.toMatchObject({ code: 'LINK_LOST', message: 'The device has been lost.' });
+  });
+});
+
+describe('the Flipper library keeps bytes apart (audit 2026-10)', () => {
+  it('a COPY counts the library instead of loading it; lists hold no bytes; opening reads them', async () => {
+    const meta = new MemoryKv<LibraryEntry>();
+    let loadedAll = 0;
+    const counted = Object.assign(Object.create(meta) as typeof meta, { all: async () => (loadedAll++, meta.all()) });
+    const lib = new FlipperLibrary(counted, new MemoryKv());
+    const { item } = await lib.add({ path: '/ext/infrared/a.ir', device: 'X', origin: 'PHYSICAL', data: Uint8Array.of(1, 2, 3), at: 1 });
+    expect((await lib.add({ path: '/ext/infrared/a.ir', device: 'X', origin: 'PHYSICAL', data: Uint8Array.of(1, 2, 3), at: 2 })).added).toBe(false);
+    expect(loadedAll).toBe(0);
+    const [entry] = await lib.list();
+    expect('data' in entry!).toBe(false);
+    expect((await lib.open(item.id))!.data).toEqual(Uint8Array.of(1, 2, 3));
+    await lib.remove(item.id);
+    expect(await lib.open(item.id)).toBeNull();
+  });
+
+  it('items copied before the split move their bytes once, on upgrade, and still open', async () => {
+    const { IDBFactory } = await import('fake-indexeddb');
+    const { openLabStore, resetLabStore } = await import('../src/core/lab/store');
+    const factory = new IDBFactory();
+    const old = { id: 'abc', name: 'a.ir', path: '/ext/a.ir', device: 'X', origin: 'PHYSICAL', copiedAt: 1, size: 2, sha256: 'h', kind: 'ir', notes: 'n', tags: [], data: Uint8Array.of(9, 8) };
+    await new Promise<void>((res) => {
+      const r = factory.open('hwdog-lab', 2);
+      r.onupgradeneeded = () => {
+        for (const s of ['sessions', 'library', 'camera', 'photos']) r.result.createObjectStore(s);
+        r.transaction!.objectStore('library').put(old, 'abc');
+      };
+      r.onsuccess = () => (r.result.close(), res());
+    });
+    resetLabStore();
+    const meta = await openLabStore<LibraryEntry>('library', factory);
+    const bytes = await openLabStore<Uint8Array>('library-data', factory);
+    expect(meta.kind).toBe('INDEXEDDB');
+    expect('data' in (await meta.get('abc'))!).toBe(false);
+    expect(await bytes.get('abc')).toEqual(Uint8Array.of(9, 8));
+    const lib = new FlipperLibrary(meta, bytes);
+    expect((await lib.open('abc'))!.data).toEqual(Uint8Array.of(9, 8));
+    expect(await meta.count()).toBe(1);
+    resetLabStore();
   });
 });
