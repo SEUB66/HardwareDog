@@ -50,7 +50,7 @@ jobs:
           curl -fs http://127.0.0.1:4799/v1/health | grep -q '"status":"ok"'
           kill "$pid"
           sudo apt-get remove -y hwdog-dogd
-      # curl -fsSL hwdog.netlify.app/install | bash, against a release served
+      # curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash, against a release served
       # from here: it installs what the sum vouches for, and nothing else.
       - name: the one-command installer
         run: |

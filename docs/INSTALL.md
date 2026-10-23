@@ -2,7 +2,7 @@
 
 ```text
 THE INTERFACE   nothing to install: open it in Chrome or Edge
-DOGD            the local daemon: curl -fsSL hwdog.netlify.app/install | bash
+DOGD            the local daemon: curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash
 ```
 
 The interface runs in the browser. dogd is what lets it see this
@@ -14,7 +14,7 @@ or TCP. Everything stays on this machine: dogd listens on 127.0.0.1 only.
 ## ONE COMMAND (Kali, Debian, Ubuntu, other Linux; amd64, arm64)
 
 ```sh
-curl -fsSL hwdog.netlify.app/install | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash
 ```
 
 It reads the system and the processor, takes the latest `dogd-v*` release
@@ -26,7 +26,7 @@ and it does not start dogd. Read it first if you like: it is one file,
 `web/public/install`.
 
 ```sh
-curl -fsSL hwdog.netlify.app/install | bash -s -- --user        # no sudo
+curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash -s -- --user        # no sudo
 bash install --deb ./hwdog-dogd_0.1.0_amd64.deb                 # a package you have
 ```
 

@@ -222,7 +222,13 @@ export class SessionArchive {
     for (const m of await this.backend.list()) {
       if (active.includes(m.key) || m.header.hdlog < 2 || m.closed) continue;
       const stored = await this.text(m.key);
-      const recovered = recoverHdlog(stored);
+      let recovered: string | null;
+      try {
+        recovered = recoverHdlog(stored);
+      } catch {
+        // One unreadable session never keeps the others from being recovered.
+        continue;
+      }
       if (recovered === null) continue;
       const meta: SessionMeta = {
         ...m,

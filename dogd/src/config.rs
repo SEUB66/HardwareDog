@@ -56,6 +56,11 @@ pub struct LinkConfig {
 /// A pack is a bench, not a fleet.
 pub const MAX_SOURCES: usize = 8;
 
+/// The project's own interface. Allowed by default: dogd is installed from
+/// this site (its installer), so trusting the page adds no new party;
+/// --no-site-origin refuses it.
+pub const SITE_ORIGIN: &str = "https://hardwaredog.org";
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub listen: SocketAddr,
@@ -65,6 +70,8 @@ pub struct Config {
     pub data_dir: PathBuf,
     /// Browser origins allowed to talk to dogd, besides localhost pages.
     pub allow_origins: Vec<String>,
+    /// SITE_ORIGIN allowed too (default; --no-site-origin turns it off).
+    pub site_origin: bool,
     /// With --listen-lan: the token a client on another machine must show
     /// (Authorization: Bearer, or ?token= for a WebSocket). Made at start.
     pub lan_token: Option<String>,
@@ -122,6 +129,8 @@ OPTIONS (serve)
   --listen-lan                listen on the network (0.0.0.0): explicit only;
                               other machines need the token printed at start
   --allow-origin URL          a browser origin allowed to connect (repeatable)
+  --no-site-origin            refuse https://hardwaredog.org too (allowed by
+                              default: the interface dogd was installed from)
   --data DIR                  sessions and index (default ~/.local/share/hwdog)
 
 LOCAL FIRST. NO ACCOUNT. NO CLOUD. NO TELEMETRY.";
@@ -135,6 +144,7 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
     let mut early_origin: Option<Origin> = None;
     let mut data_dir = default_data_dir();
     let mut allow_origins = Vec::new();
+    let mut site_origin = true;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value = |name: &str| {
@@ -187,6 +197,7 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
             "--allow-origin" => {
                 allow_origins.push(value("--allow-origin")?.trim_end_matches('/').to_string())
             }
+            "--no-site-origin" => site_origin = false,
             "--data" => data_dir = PathBuf::from(value("--data")?),
             other => return Err(format!("unknown option {other}\n\n{USAGE}")),
         }
@@ -230,6 +241,7 @@ pub fn parse_serve(args: &[String]) -> Result<Config, String> {
         links,
         data_dir,
         allow_origins,
+        site_origin,
         lan_token: None,
     })
 }

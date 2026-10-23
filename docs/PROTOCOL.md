@@ -467,7 +467,10 @@ anything that could exhaust the browser or reach the engine malformed:
 
 ```text
 FILE         256 MiB at most (about 15 h of a live session)
-LINE         128 KiB at most (an HDP frame is at most 64 KiB)
+LINE         512 KiB at most (an HDP line is at most 64 KiB; JSON escaping
+             can make it six times longer). The writer keeps these limits
+             too: a reject, mark or lost text is cut to 1000 characters,
+             saying how much was cut, so a recording always reads back
 TEXT         header fields 256 characters, marks 1000 characters
 THRESHOLDS   the ranges SETUP accepts (UV 3-5.5 V, OC 0.05-5 A,
              window 10-2000 ms)

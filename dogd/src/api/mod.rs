@@ -101,9 +101,6 @@ pub fn router(state: AppState) -> Router {
 // ------------------------------------------------------------------ guard
 
 fn host_allowed(host: &str, cfg: &Config) -> bool {
-    if cfg.lan {
-        return true;
-    }
     let name = host.rsplit_once(':').map_or(host, |(h, p)| {
         if p.chars().all(|c| c.is_ascii_digit()) {
             h
@@ -111,11 +108,25 @@ fn host_allowed(host: &str, cfg: &Config) -> bool {
             host
         }
     });
-    matches!(name, "127.0.0.1" | "localhost" | "[::1]")
+    if matches!(name, "127.0.0.1" | "localhost" | "[::1]") {
+        return true;
+    }
+    // On the network, another machine names dogd by its address. A host
+    // NAME (other than localhost) is what DNS rebinding needs: refused,
+    // even with --listen-lan, where loopback peers show no token.
+    cfg.lan
+        && (name.parse::<std::net::Ipv4Addr>().is_ok()
+            || name
+                .strip_prefix('[')
+                .and_then(|n| n.strip_suffix(']'))
+                .is_some_and(|n| n.parse::<std::net::Ipv6Addr>().is_ok()))
 }
 
 pub fn origin_allowed(origin: &str, cfg: &Config) -> bool {
     let o = origin.trim_end_matches('/');
+    if cfg.site_origin && o == crate::config::SITE_ORIGIN {
+        return true;
+    }
     for local in ["http://localhost", "http://127.0.0.1", "http://[::1]"] {
         if o == local
             || o.strip_prefix(local).is_some_and(|rest| {
@@ -560,6 +571,25 @@ mod tests {
         assert!(!origin_allowed("http://localhost:80@evil.example", &cfg));
         assert!(!origin_allowed("null", &cfg));
     }
+
+    #[test]
+    fn the_interface_dogd_was_installed_from_is_allowed_unless_refused() {
+        let cfg = parse_serve(&[]).unwrap();
+        assert!(origin_allowed("https://hardwaredog.org", &cfg));
+        assert!(origin_allowed("https://hardwaredog.org/", &cfg));
+        assert!(!origin_allowed("http://hardwaredog.org", &cfg));
+        assert!(!origin_allowed(
+            "https://hardwaredog.org.evil.example",
+            &cfg
+        ));
+        assert!(!origin_allowed(
+            "https://www.hardwaredog.org.evil.example",
+            &cfg
+        ));
+        let refused = parse_serve(&["--no-site-origin".into()]).unwrap();
+        assert!(!origin_allowed("https://hardwaredog.org", &refused));
+        assert!(origin_allowed("http://localhost:5173", &refused));
+    }
 }
 
 #[cfg(test)]
@@ -788,15 +818,32 @@ mod http_tests {
         )
         .await;
         assert_eq!(s, StatusCode::FORBIDDEN);
-        // with --listen-lan the operator decided: the host check is lifted, origins still apply
-        let (s, _) = call(
-            app(&["--listen-lan"]),
-            "GET",
-            "/v1/health",
-            &[("host", "192.168.1.20:4782")],
-        )
-        .await;
-        assert_eq!(s, StatusCode::OK);
+        // with --listen-lan, other machines name dogd by its address: accepted, origins still apply
+        for host in ["192.168.1.20:4782", "[fe80::1]:4782", "192.168.1.20"] {
+            let (s, _) = call(
+                app(&["--listen-lan"]),
+                "GET",
+                "/v1/health",
+                &[("host", host)],
+            )
+            .await;
+            assert_eq!(s, StatusCode::OK, "{host}");
+        }
+        // ...but a host NAME is still rebinding, even from this machine, which shows no token
+        for host in [
+            "attacker.example:4782",
+            "attacker.example",
+            "192.168.1.20.evil.example",
+        ] {
+            let (s, _) = call(
+                app(&["--listen-lan"]),
+                "GET",
+                "/v1/sessions",
+                &[("host", host)],
+            )
+            .await;
+            assert_eq!(s, StatusCode::FORBIDDEN, "{host}");
+        }
         let (s, _) = call(
             app(&["--listen-lan"]),
             "GET",
@@ -826,6 +873,34 @@ mod http_tests {
         .await;
         assert_eq!(s, StatusCode::NO_CONTENT);
         assert!(h.contains(&("access-control-allow-private-network".into(), "true".into())));
+    }
+
+    #[tokio::test]
+    async fn the_hosted_interface_reaches_a_default_dogd() {
+        let (s, h) = call(
+            app(&[]),
+            "OPTIONS",
+            "/v1/link",
+            &[
+                ("host", "127.0.0.1:4782"),
+                ("origin", "https://hardwaredog.org"),
+                ("access-control-request-private-network", "true"),
+            ],
+        )
+        .await;
+        assert_eq!(s, StatusCode::NO_CONTENT);
+        assert!(h.contains(&("access-control-allow-private-network".into(), "true".into())));
+        let (s, _) = call(
+            app(&["--no-site-origin"]),
+            "GET",
+            "/v1/health",
+            &[
+                ("host", "127.0.0.1:4782"),
+                ("origin", "https://hardwaredog.org"),
+            ],
+        )
+        .await;
+        assert_eq!(s, StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

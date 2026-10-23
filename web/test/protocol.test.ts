@@ -56,4 +56,13 @@ describe('LineSplitter', () => {
     expect(dropped).toEqual([10]);
     expect(lines).toEqual(['ok']);
   });
+
+  it('drops an oversized line even when it arrives whole, in one chunk', () => {
+    const lines: string[] = [];
+    const dropped: number[] = [];
+    const s = new LineSplitter((l) => lines.push(l), (n) => dropped.push(n), 8);
+    s.push('0123456789\nok\n');
+    expect(dropped).toEqual([10]);
+    expect(lines).toEqual(['ok']);
+  });
 });
