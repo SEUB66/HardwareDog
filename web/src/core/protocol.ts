@@ -330,7 +330,7 @@ function parseFrame(o: Obj): DeviceFrame {
       return { type, t, id };
     }
     default:
-      throw new FrameError(`unknown frame type "${type}"`);
+      throw new FrameError(`unknown frame type "${type.length > 64 ? `${type.slice(0, 64)}…` : type}"`);
   }
 }
 
@@ -380,6 +380,11 @@ export class LineSplitter {
       this.buffer = this.buffer.slice(nl + 1);
       if (this.overflowed) {
         this.overflowed = false;
+        continue;
+      }
+      // A complete line can arrive in one chunk: the limit is the same.
+      if (line.length > this.maxLine) {
+        this.onOverflow(line.length);
         continue;
       }
       if (line.length > 0) this.onLine(line);

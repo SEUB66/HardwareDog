@@ -207,6 +207,8 @@ export class System {
   readonly startedAt: number;
 
   link: LinkState = 'OFFLINE';
+  /** When observation stopped (link closed or lost, replay ended). Null while observing, or before any link. */
+  observedUntil: number | null = null;
   transportKind: TransportKind | null = null;
   transportLabel = '';
   device: DeviceInfo = { id: '--', rev: '--', firmware: '--', bootedAt: null, caps: null };
@@ -408,6 +410,7 @@ export class System {
     this.transportKind = transport.kind;
     this.transportLabel = transport.label;
     this.link = 'CONNECTING';
+    this.observedUntil = null;
     this.origin = transport.origin;
     this.replayOf = transport instanceof ReplayTransport ? transport.recording.header : null;
     this.replayIntegrity = transport instanceof ReplayTransport ? (transport.recording.integrity ?? null) : null;
@@ -514,6 +517,7 @@ export class System {
     this.flushPack();
     await t.close();
     this.link = 'OFFLINE';
+    this.observedUntil = this.now();
     this.usb.connected = false;
     this.power.condition = 'NO SIGNAL';
     this.log(this.now(), 'SYS', 'INFO', `link closed: ${t.kind}`);
@@ -559,6 +563,7 @@ export class System {
     const t = this.now();
     this.transport = null;
     if (this.link !== 'LOST') this.link = 'OFFLINE';
+    this.observedUntil = t;
     this.evaluate(t);
     this.log(t, 'SYS', 'INFO', 'replay ended', this.replayOf ? `${this.replayOf.id} / ${this.replayOf.source}` : undefined);
     this.changed();
@@ -570,6 +575,7 @@ export class System {
     const t = this.now();
     this.transport = null;
     this.link = 'LOST';
+    this.observedUntil = t;
     this.usb.connected = false;
     this.power.condition = 'NO SIGNAL';
     this.lastError = { what: 'DEVICE LINK LOST', where: this.transportLabel || 'transport', when: t, detail: reason };
@@ -1203,6 +1209,15 @@ export class System {
 
   get online(): boolean {
     return this.link === 'ONLINE' && this.transport !== null;
+  }
+
+  /**
+   * The time a diagnosis reads at `t`: `t` while observing, never later
+   * than the end of observation. A report exported an hour after the link
+   * closed says what was observed, not an hour that was not.
+   */
+  observedAt(t = this.now()): number {
+    return this.online || this.observedUntil === null ? t : Math.min(t, this.observedUntil);
   }
 
   /** Null when `action` can be sent now; else why not (and it is said). */

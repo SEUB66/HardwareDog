@@ -62,13 +62,25 @@ export const LIMITS = [
 
 const CLUE_STATES: NetState[] = ['VIDEO_COMPATIBLE', 'MODEL_IDENTIFIED', 'CONFIRMED'];
 
+/**
+ * Text from a device or a person, made inert in Markdown: one line (a
+ * device cannot add a line, a heading or a RESULT of its own), no HTML (a
+ * "<!--" cannot hide what follows), no link or image (nothing is loaded
+ * when the file is opened in a viewer).
+ */
+export const md = (s: string): string =>
+  s
+    .replace(/[\u0000-\u001f\u007f\u0085\u2028\u2029]+/g, ' ')
+    .replace(/[\\`<]/g, (c) => `\\${c}`)
+    .replace(/\]\(/g, ']\\(');
+
 /** Stable aliases for identifiers, in order of first use. */
 class Masker {
   private maps = new Map<string, Map<string, string>>();
   constructor(private readonly on: boolean) {}
   alias(kind: string, value: string | null | undefined): string {
     if (!value) return '';
-    if (!this.on) return value;
+    if (!this.on) return md(value);
     let m = this.maps.get(kind);
     if (!m) this.maps.set(kind, (m = new Map()));
     if (!m.has(value)) m.set(value, `${kind}-${m.size + 1}`);
@@ -76,14 +88,15 @@ class Masker {
   }
   /** Identifiers inside free text (a summary, a note someone typed): known values replaced. */
   scrub(text: string): string {
-    if (!this.on || !text) return text;
+    if (!text) return text;
+    if (!this.on) return md(text);
     // longest first: "Camera Bedroom" is replaced whole before "Camera" could cut it
     const known = [...this.maps.values()].flatMap((m) => [...m]).sort((a, b) => b[0].length - a[0].length);
     let t = text;
     for (const [v, a] of known) t = t.split(v).join(a);
     for (const [v, a] of known) if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(v)) t = t.replace(new RegExp(v.split(':').join('[-:.]?'), 'gi'), a);
     // anything that still looks like an identifier
-    return t
+    return md(t)
       .replace(/\b(urn:)?(uuid:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[uuid]')
       .replace(/\buuid:[^\s,;)"]+/gi, 'uuid:[id]')
       .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, '[address]')
@@ -140,12 +153,12 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   L.push('## SCOPE AND METHODS', '');
   L.push(
     input.network.ran
-      ? `- Network: ${input.network.iface ?? '?'} ${m.scrub(input.network.network ?? '')} · methods: ${input.network.methods.join(', ')} · ${input.network.state} · ${m.scrub(input.network.detail)}${input.network.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}`
+      ? `- Network: ${md(input.network.iface ?? '?')} ${m.scrub(input.network.network ?? '')} · methods: ${input.network.methods.join(', ')} · ${input.network.state} · ${m.scrub(input.network.detail)}${input.network.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}`
       : '- Network: not scanned',
   );
   if (input.network.lost) L.push(`  - ${input.network.lost} observation(s) were dropped by the engine (buffer full).`);
   for (const n of input.network.scanNotes) L.push(`  - ${m.scrub(n)}`);
-  L.push(input.ble.ran ? `- Bluetooth: ${input.ble.source ?? '?'} · ${input.ble.clues.length} device(s) observed${input.ble.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}` : '- Bluetooth: not scanned');
+  L.push(input.ble.ran ? `- Bluetooth: ${md(input.ble.source ?? '?')} · ${input.ble.clues.length} device(s) observed${input.ble.origin === 'SIMULATED' ? ' (SIMULATED)' : ''}` : '- Bluetooth: not scanned');
   L.push(input.usb.ran ? (input.usb.supported ? `- USB: ${input.usb.clues.length} device(s) read` : '- USB: not readable on this system') : '- USB: not read');
   L.push(`- Physical inspection: ${insp.rooms.length} room(s), ${items.length} object(s), ${items.filter(({ item }) => item.status !== 'TO_EXAMINE').length} examined`);
   L.push('');
@@ -166,7 +179,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
   for (const c of trackers) L.push(`- Bluetooth ${m.alias('ble', c.id)}: ${bleLabel(c)} (${c.signature!.source})`);
   const unknownBle = input.ble.clues.length - trackers.length;
   if (unknownBle) L.push(`- Bluetooth: ${unknownBle} device(s) not identified (no reliable signature; not a camera by default).`);
-  for (const u of input.usb.clues) L.push(`- USB ${u.id} ${u.name} at ${u.port}: interfaces ${u.interfaces.join(', ')}`);
+  for (const u of input.usb.clues) L.push(`- USB ${md(u.id)} ${md(u.name)} at ${md(u.port)}: interfaces ${md(u.interfaces.join(', '))}`);
   L.push('');
 
   L.push('## INTERPRETATIONS (how the classification reads the facts)', '');
@@ -180,7 +193,7 @@ export function buildReport(input: ReportInput, options: ReportOptions): Report 
     }
     L.push(`  - not established: ${NOT_ESTABLISHED[c.state]}`);
   }
-  for (const u of usbVideo) L.push(`- USB ${u.id}: ${u.reading}`);
+  for (const u of usbVideo) L.push(`- USB ${md(u.id)}: ${md(u.reading)}`);
   L.push('');
 
   L.push('## DECLARATIONS (what you stated)', '');

@@ -346,11 +346,14 @@ NO TELEMETRY
 "No login" is not "no security":
 
 - **DNS rebinding**: every request must name a loopback host
-  (`127.0.0.1`, `localhost`, `[::1]`). A page that resolves its own name to
-  127.0.0.1 is refused.
+  (`127.0.0.1`, `localhost`, `[::1]`), or, with `--listen-lan`, an IP
+  address. A page that resolves its own name to 127.0.0.1 is refused, in
+  LAN mode too (a LAN client names dogd by its address, not by a name).
 - **Other web pages**: a browser request carrying an `Origin` is served
-  only for `http://localhost:*`, `http://127.0.0.1:*`, `http://[::1]:*`
-  and the origins given with `--allow-origin`. A site on the Internet
+  only for `http://localhost:*`, `http://127.0.0.1:*`, `http://[::1]:*`,
+  `https://hardwaredog.org` (the interface dogd is installed from:
+  `--no-site-origin` refuses it) and the origins given with
+  `--allow-origin`. A site on the Internet
   cannot read sessions or drive the device on your desk.
 - **Private Network Access**: an allowed site served over HTTPS (for
   example a hosted copy of the interface, `--allow-origin
