@@ -112,6 +112,10 @@ const RULE_TEXT: Record<DiagnosisId, string> = {
 export const RULES: readonly string[] = DIAGNOSIS_IDS.map((id) => `${id.padEnd(30)}${RULE_TEXT[id]}`);
 
 const POWER_WINDOW_MS = 15_000;
+/** The power window by count too: a device clock that stops would let a time window grow forever. */
+const POWER_SAMPLES_MAX = 4000;
+/** Frames with the very same device time, in a row: past this, the device clock has stopped. */
+const CLOCK_STALL_FRAMES = 500;
 /** A Hardware Dog says hello as soon as its port opens: past this, the port is something else. */
 export const HELLO_WAIT_MS = 3_000;
 /** Shown on STATUS while the link is up: the port answered, but not as a Hardware Dog. */
@@ -300,6 +304,8 @@ export class System {
   private lastBelowAt: number | null = null;
   private overcurrent = false;
   private framingErrorTimes: number[] = [];
+  private lastDeviceT = -1;
+  private sameDeviceT = 0;
   private lastBaudHypothesisAt = -Infinity;
   /** FIND BAUD at work: the rate on trial and what it read. */
   private baudTrial: { baud: number; lines: number; bad: number } | null = null;
@@ -646,6 +652,7 @@ export class System {
     this.clk = { dog: p.dog, err: p.err };
     try {
       const f = p.frame;
+      if (p.ahead !== undefined) this.log(p.t, 'SYS', 'WARN', `${p.dog} time far ahead of its arrival`, `t=${f.t} ms, ${Math.round(p.ahead / 1000)} s ahead: placed at its arrival, the Dog's clock unchanged`);
       if (f.type === 'time') return; // clock samples: the pack has used them
       if (f.type === 'hello') return this.onDogHello(p.dog, f, p.t);
       const cap = capabilityOf(f.type);
@@ -786,6 +793,14 @@ export class System {
       return;
     }
     const t = placedAt ?? this.hostTime(f.t);
+    // A device clock that stops (a firmware bug, a 32-bit counter that wrapped) is a device fault: said once.
+    if (f.t === this.lastDeviceT) {
+      if (++this.sameDeviceT === CLOCK_STALL_FRAMES)
+        this.log(t, 'SYS', 'WARN', 'device clock stalled', `${CLOCK_STALL_FRAMES} frames in a row at t=${f.t} ms: time windows and correlations cannot be trusted`);
+    } else {
+      this.lastDeviceT = f.t;
+      this.sameDeviceT = 0;
+    }
     switch (f.type) {
       case 'power':
         this.onPower(t, f.v, f.i);
@@ -961,6 +976,7 @@ export class System {
     let drop = 0;
     while (drop < p.samples.length && p.samples[drop]!.t < cutoff) drop++;
     if (drop > 0) p.samples.splice(0, drop);
+    if (p.samples.length > POWER_SAMPLES_MAX) p.samples.splice(0, p.samples.length - POWER_SAMPLES_MAX);
 
     // Rule: undervoltage with hysteresis.
     if (v < s.undervoltageThreshold) {
@@ -1123,6 +1139,8 @@ export class System {
     if (kind !== 'framing' && kind !== 'garbled') return;
     this.framingErrorTimes = this.framingErrorTimes.filter((x) => t - x < 5000);
     this.framingErrorTimes.push(t);
+    // three in 5 s is all the hint needs: a burst never makes this list (and its filter) grow
+    if (this.framingErrorTimes.length > 64) this.framingErrorTimes.splice(0, this.framingErrorTimes.length - 64);
     if (this.framingErrorTimes.length >= 3 && t - this.lastBaudHypothesisAt > 10_000) {
       this.lastBaudHypothesisAt = t;
       this.log(t, 'RULE', 'WARN', 'possible cause: baud rate mismatch', `${this.framingErrorTimes.length} framing errors in 5 s at ${this.serial.baud}`);

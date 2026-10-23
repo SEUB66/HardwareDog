@@ -66,7 +66,8 @@ describe('anonymize: who and where are gone', () => {
     for (const secret of ['7cdfa13a1f2c', 'HD-3A1F2C', '10.4.7', 'hunter22', 'MaisonSeb', 'seb@seub.net', 'f4:12:fa', 'F4:12:FA', '9f86d081', 'nas.maison.lan', '/Users/seb']) {
       expect(hdlog, secret).not.toContain(secret);
     }
-    expect(hdlog).toContain('mac 02:00:00:00:00:01');
+    // the console repeats the USB serial (a MAC here): one identifier, one stand-in, any case
+    expect(hdlog).toContain('mac ANON-1');
     // the boot line, which the reset rule reads, is untouched
     expect(hdlog).toContain('rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)');
     // consistent: the gateway and the DNS server were the same host, and still are
@@ -126,3 +127,25 @@ describe('anonymize: a secret never survives, wherever and however it is printed
     expect(findLeaks(hdlog)).toEqual([]);
   });
 });
+
+describe('anonymize: structured identifiers everywhere (audit 2026-10)', () => {
+  it('usb.follow serial and port, a host name in another case, a MAC with no separators, a local name', () => {
+    const header = newHeader({ id: 'HD-F', startedAt: T0, source: 'DOGD', origin: 'PHYSICAL', endpoint: 'dogd', scenario: null, app: 't' });
+    const rec = new SessionRecorder(header);
+    let t = 0;
+    const at = () => T0 + (t += 10);
+    // the console names the serial before the command that follows it
+    rec.add({ at: at(), frame: { type: 'hello', t: 0, proto: 1, device: 'HOST', rev: 'H', fw: 'dogd' } as never });
+    rec.add({ at: at(), frame: { type: 'log', t: 5, level: 'info', message: 'usb attached: 1A86:7523 serial 5A8F21C3 at /dev/serial/by-id/usb-1a86_USB_Serial-5A8F21C3-if00' } as never });
+    rec.add({ at: at(), cmd: { cmd: 'usb.follow', vid: 0x1a86, pid: 0x7523, serial: '5A8F21C3', port: '/dev/serial/by-id/usb-1a86_USB_Serial-5A8F21C3-if00' } as never });
+    rec.add({ at: at(), cmd: { cmd: 'probe', id: 'p', target: 'printer.office', tests: ['PING'] } });
+    rec.add({ at: at(), frame: { type: 'log', t: 9, level: 'info', message: 'PRINTER.OFFICE answered; nas.lan too; wlan mac a4cf12b3c4d5' } as never });
+    const { hdlog } = anonymize(toHdlog(rec));
+    for (const v of ['5A8F21C3', 'usb-1a86_USB_Serial', 'printer.office', 'PRINTER.OFFICE', 'nas.lan', 'a4cf12b3c4d5']) expect(hdlog, v).not.toContain(v);
+    expect(findLeaks(hdlog)).toEqual([]);
+    // and the library check would have seen them
+    const raw = toHdlog(rec).replace('"endpoint":"dogd"', '"endpoint":"dogd"');
+    expect(findLeaks(raw).join(' ')).toMatch(/USB serial number 5A8F21C3 in a command/);
+  });
+});
+

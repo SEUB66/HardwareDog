@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { DogdTransport, dogdClosed, dogdLink, dogdStore } from '../src/core/dogd';
+import { DogdTransport, checkLink, dogdClosed, dogdLink, dogdStore } from '../src/core/dogd';
 import type { DeviceFrame, HostCommand } from '../src/core/protocol';
 import type { ScenarioId } from '../src/core/scenarios';
 import { SessionRecorder, newHeader, parseHdlog, toHdlog } from '../src/core/session';
@@ -429,5 +429,17 @@ describe.runIf(BIN)('dogd --source host, USB of this computer (real binary, fake
     expect(sys.trace.all().some((e) => e.message.includes('usb detached: 045E:0B12 Microsoft Controller'))).toBe(true);
     expect(sys.frameErrors).toBe(0);
     await sys.disconnect();
+  });
+});
+
+describe('what dogd answers is checked before it goes into a recording (audit 2026-10)', () => {
+  const link = { state: 'ONLINE', source: 'tcp:x', origin: 'PHYSICAL', label: 'L', device: null, epoch: 1, reason: null };
+  it('refuses an origin, a Dog id or a state the reader would refuse; cuts a long label', () => {
+    expect(checkLink(link).origin).toBe('PHYSICAL');
+    expect(() => checkLink({ ...link, origin: 'physical' })).toThrow(/origin physical/);
+    expect(() => checkLink({ ...link, dog: '../x' })).toThrow(/dog/);
+    expect(() => checkLink({ ...link, state: 'UP' })).toThrow(/state/);
+    expect(() => checkLink('<html>')).toThrow(/another program on port 4782/);
+    expect(checkLink({ ...link, label: 'x'.repeat(900) }).label).toHaveLength(256);
   });
 });

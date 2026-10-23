@@ -10,6 +10,22 @@ Documentation=file:///usr/share/doc/hwdog-dogd/INSTALL.md
 ExecStart=/usr/bin/dogd serve --source host
 Restart=on-failure
 RestartSec=2
+# Defence in depth: a bug in a parser of network, USB or BLE data runs with
+# less than the user's full rights. What a user unit can apply (each one
+# implies NoNewPrivileges there): no privilege gained through setuid or file
+# capabilities, no setuid file created, native system calls only, no
+# writable-and-executable memory. Sockets: local (D-Bus for BlueZ), IP (the
+# API, ping, the LAN scan), netlink (link and routes). The gateway ping uses
+# unprivileged ICMP sockets (net.ipv4.ping_group_range, the default on
+# current distributions); where it is not allowed, dogd says ping could not
+# run, and nothing else changes.
+NoNewPrivileges=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_BLUETOOTH
 
 [Install]
 WantedBy=default.target

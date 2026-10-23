@@ -112,7 +112,7 @@ const TERMS: Record<string, string> = {
   'LINK/PROTOCOL': 'HDP, the Hardware Dog protocol: one JSON object per line (NDJSON). Every source speaks it.',
   'LINK/FRAME ERRORS': 'Lines received that are not valid HDP frames. A few at boot is normal (ROM banner); a steady count means a wrong port or baud rate.',
   'LINK/RECORDING': 'Whether this session is being recorded to a .hdlog file you can replay and export.',
-  'LINK/INTEGRITY': 'Integrity check of the replayed recording, from its SHA-256 seals. VERIFIED: untouched since recorded.',
+  'LINK/INTEGRITY': 'Integrity check of the replayed recording, from its SHA-256 seals. VERIFIED: unchanged since it was sealed, by whoever sealed it (a hash is not a signature: compare the file SHA-256 with its sender to know it is theirs).',
   'LINK/THRESHOLDS': 'The replay uses the thresholds stored in the recording, so it gives the same diagnosis as live.',
 
   // SESSIONS
@@ -222,11 +222,11 @@ const STATUS: Record<string, string> = {
   SIMULATOR: 'Made-up data from the built-in simulator, not a real device. Labeled in every screen and export.',
   DOGD: 'Data comes through dogd, the local daemon on this machine (127.0.0.1).',
   'TRACE PAUSED': 'The trace view is frozen. Events are still recorded and buffered.',
-  VERIFIED: 'Finalized by the recorder. Every hash and count matches.',
+  VERIFIED: 'Finalized, and every hash and count matches: unchanged since it was sealed, by whoever sealed it. Not a proof of who recorded it.',
   RECOVERED: 'Closed after an unclean stop. Every sealed line is intact.',
   INCOMPLETE: 'Never finalized. Sealed lines are intact; the end is missing.',
   MODIFIED: 'Bytes changed after they were sealed. Not evidence.',
-  UNVERIFIED: 'Old recording format (hdlog v1): no integrity data.',
+  UNVERIFIED: 'No seal covers it: an old recording (hdlog v1), or a file written with none. Content cannot be verified.',
   OK: 'Working as expected.',
   UNAVAILABLE: 'This browser refuses storage: sessions are kept in memory only.',
   'MEMORY ONLY, LOST ON RELOAD': 'This browser refuses storage: recordings disappear when the page reloads. Export them before closing.',

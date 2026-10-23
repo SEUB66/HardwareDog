@@ -357,11 +357,16 @@ NO TELEMETRY
   address. A page that resolves its own name to 127.0.0.1 is refused, in
   LAN mode too (a LAN client names dogd by its address, not by a name).
 - **Other web pages**: a browser request carrying an `Origin` is served
-  only for `http://localhost:*`, `http://127.0.0.1:*`, `http://[::1]:*`,
-  `https://hardwaredog.org` (the interface dogd is installed from:
-  `--no-site-origin` refuses it) and the origins given with
-  `--allow-origin`. A site on the Internet
-  cannot read sessions or drive the device on your desk.
+  only for `http://localhost:PORT`, `http://127.0.0.1:PORT`,
+  `http://[::1]:PORT`, `https://hardwaredog.org` (the interface dogd is
+  installed from: `--no-site-origin` refuses it) and the origins given with
+  `--allow-origin`. A site on the Internet cannot read sessions or drive
+  the device on your desk. `--allow-origin` takes an origin as a browser
+  sends it, `scheme://host[:port]`: `null` and `*` are refused (any site
+  can send them), and plain `http://` only for this machine. dogd prints
+  the allowed pages at start (`PAGES`).
+- **Connections**: 64 at a time, 10 s for a request's headers; a refused
+  request closes its connection.
 - **Private Network Access**: an allowed site served over HTTPS (for
   example a hosted copy of the interface, `--allow-origin
   https://your.site`) gets the preflight answer browsers require to reach

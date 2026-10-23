@@ -151,6 +151,13 @@ function num(o: Obj, k: string): number {
   return v;
 }
 
+/** An integer in the schema's range (protocol/hdp_v1.json): anything else is reported, never kept. */
+function int(o: Obj, k: string, min: number, max = Number.MAX_SAFE_INTEGER): number {
+  const v = num(o, k);
+  if (!Number.isInteger(v) || v < min || v > max) throw new FrameError(`field "${k}" must be an integer from ${min}${max < Number.MAX_SAFE_INTEGER ? ` to ${max}` : ''}`);
+  return v;
+}
+
 function numOrNull(o: Obj, k: string): number | null {
   return o[k] === null || o[k] === undefined ? null : num(o, k);
 }
@@ -219,7 +226,9 @@ function parseFrame(o: Obj): DeviceFrame {
 
   switch (type) {
     case 'hello': {
-      const hello: DeviceFrame = { type, t, proto: num(o, 'proto'), device: str(o, 'device'), rev: str(o, 'rev'), fw: str(o, 'fw') };
+      // A device that speaks another version is said to, not decoded as v1 by guess.
+      if (o['proto'] !== PROTOCOL_VERSION) throw new FrameError(`hello proto ${String(o['proto'])}: this interface speaks HDP v${PROTOCOL_VERSION}`);
+      const hello: DeviceFrame = { type, t, proto: PROTOCOL_VERSION, device: str(o, 'device'), rev: str(o, 'rev'), fw: str(o, 'fw') };
       // The 48-bit chip id, only well formed: never a guess.
       if (typeof o['chip'] === 'string' && /^[0-9a-f]{12}$/.test(o['chip'])) hello.chip = o['chip'];
       // Liberal: unknown capabilities from a newer device are ignored, not fatal.
@@ -233,8 +242,8 @@ function parseFrame(o: Obj): DeviceFrame {
         type,
         t,
         speed: oneOf(o, 'speed', USB_SPEEDS),
-        vid: num(o, 'vid'),
-        pid: num(o, 'pid'),
+        vid: int(o, 'vid', 0, 0xffff),
+        pid: int(o, 'pid', 0, 0xffff),
         cls: str(o, 'cls'),
         power: oneOf(o, 'power', ['BUS', 'SELF'] as const),
         manufacturer: strOrNull(o, 'manufacturer'),
@@ -264,7 +273,7 @@ function parseFrame(o: Obj): DeviceFrame {
       const stop = num(o, 'stop');
       if (bits !== 7 && bits !== 8) throw new FrameError('field "bits" must be 7 or 8');
       if (stop !== 1 && stop !== 2) throw new FrameError('field "stop" must be 1 or 2');
-      return { type, t, port: str(o, 'port'), baud: num(o, 'baud'), bits, parity: oneOf(o, 'parity', PARITIES), stop };
+      return { type, t, port: str(o, 'port'), baud: int(o, 'baud', 300), bits, parity: oneOf(o, 'parity', PARITIES), stop };
     }
     case 'uart.rx':
       return { type, t, data: str(o, 'data') };
@@ -280,12 +289,12 @@ function parseFrame(o: Obj): DeviceFrame {
         return { addr, ident: strOrNull(d as Obj, 'ident'), method: strOrNull(d as Obj, 'method') };
       });
       const scan: DeviceFrame = { type, t, speed: num(o, 'speed'), devices };
-      if (o['every_ms'] !== undefined && o['every_ms'] !== null) scan.every_ms = num(o, 'every_ms');
+      if (o['every_ms'] !== undefined && o['every_ms'] !== null) scan.every_ms = int(o, 'every_ms', 0);
       return scan;
     }
     case 'i2c.error': {
       const e: DeviceFrame = { type, t, kind: oneOf(o, 'kind', I2C_ERROR_KINDS), detail: strOrNull(o, 'detail') };
-      if (o['every_ms'] !== undefined && o['every_ms'] !== null) e.every_ms = num(o, 'every_ms');
+      if (o['every_ms'] !== undefined && o['every_ms'] !== null) e.every_ms = int(o, 'every_ms', 0);
       return e;
     }
     case 'net.status': {

@@ -157,6 +157,8 @@ pub fn is_link_local(a: Ipv4Addr) -> bool {
 pub fn valid_target(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 253
+        // a host name never starts with '-': such a target would reach ping as an option
+        && !s.starts_with(['-', '.'])
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
 }
@@ -252,5 +254,9 @@ mod tests {
         assert!(!valid_target("a b"));
         assert!(!valid_target("x;rm -rf"));
         assert!(!valid_target(""));
+        assert!(!valid_target("-c1000"));
+        assert!(!valid_target("-fexample.com"));
+        assert!(!valid_target(".example.com"));
+        assert!(valid_target("my-router.lan"));
     }
 }

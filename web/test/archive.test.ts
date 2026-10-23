@@ -167,6 +167,16 @@ describe.each(backends)('session archive (%s)', (_, backend) => {
     expect(left).toContain(sims.at(-1));
   });
 
+  it('replaces a session in one step: its meta and all its chunks, never a moment with neither', async () => {
+    const b = await backend();
+    const meta = { key: 'k1', header: header(T0, 'WEB SERIAL'), entries: 2, bytes: 10, lastAt: T0, diagnoses: [], closed: null, fileSha256: null };
+    await b.append(meta, 0, 'a\n');
+    await b.append(meta, 1, 'b\n');
+    await b.replace({ ...meta, closed: 'RECOVERED' }, 'ab\n');
+    expect(await b.chunks('k1')).toEqual(['ab\n']);
+    expect((await b.list()).find((m) => m.key === 'k1')?.closed).toBe('RECOVERED');
+  });
+
   it('removes a session with all its chunks', async () => {
     const archive = new SessionArchive(await backend());
     const a = await archived(archive, T0, 'WEB SERIAL', 5);

@@ -257,6 +257,9 @@ pub fn inspect(data: &[u8]) -> Result<Inspection, String> {
     }
     out.integrity = if !out.problems.is_empty() {
         "MODIFIED"
+    } else if footer.is_none() && seals == 0 && entries > 0 {
+        // nothing in it is covered by a hash: nothing is said to be intact
+        "UNVERIFIED"
     } else if footer.is_none() {
         "INCOMPLETE"
     } else if out.closure.as_deref() == Some("RECOVERED") {
@@ -429,6 +432,19 @@ mod tests {
         let renamed = written(true).replacen(",\"self\":\"", ",\"selF\":\"", 1);
         assert!(inspect(renamed.as_bytes()).unwrap().problems[0].contains("not sealed"));
         assert_eq!(footer_self(b"{\"end\":{}}"), None);
+    }
+
+    /// No seal and no footer: nothing is covered by a hash (as the interface says).
+    #[test]
+    fn a_file_with_no_seal_at_all_is_unverified() {
+        let text = String::from_utf8(case("HD-C002.hdlog")).unwrap();
+        let header = text.lines().next().unwrap();
+        let bare = format!("{header}\n{{\"at\":1790778060001,\"mark\":\"a\"}}\n");
+        assert_eq!(inspect(bare.as_bytes()).unwrap().integrity, "UNVERIFIED");
+        assert_eq!(
+            inspect(format!("{header}\n").as_bytes()).unwrap().integrity,
+            "INCOMPLETE"
+        );
     }
 
     #[test]

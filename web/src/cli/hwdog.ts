@@ -2,8 +2,8 @@
  * HARDWARE DOG / COMMAND LINE
  *
  *   hwdog test <dir>                          replay every case in <dir> (and its shelves)
- *   hwdog report <file.hdlog> [--format txt|json|html|pdf] [--out <file>]
- *   hwdog anonymize <file.hdlog> --out <file.hdlog>
+ *   hwdog report <file.hdlog> [--format txt|json|html|pdf] [--out <file>] [--force]
+ *   hwdog anonymize <file.hdlog> --out <file.hdlog> [--force]
  *   hwdog index <dir> [--write]               the library's INDEX.md
  *   hwdog version
  *
@@ -43,8 +43,8 @@ const node = async <T>(name: string) => (await import(/* @vite-ignore */ ['node'
 const USAGE = `hwdog ${BUILD}  ruleset v${RULESET_VERSION}
 
   hwdog test <dir>                          replay every case in <dir> (and its shelves)
-  hwdog report <file.hdlog> [--format txt|json|html|pdf] [--out <file>]
-  hwdog anonymize <file.hdlog> --out <file.hdlog>
+  hwdog report <file.hdlog> [--format txt|json|html|pdf] [--out <file>] [--force]
+  hwdog anonymize <file.hdlog> --out <file.hdlog> [--force]
   hwdog index <dir> [--write]               the library's INDEX.md
   hwdog version`;
 
@@ -112,13 +112,29 @@ async function testCases(dir: string): Promise<number> {
   return failed ? 1 : 0;
 }
 
+/**
+ * Where an output may go: never over the recording it was made from (the
+ * evidence), and over another existing file only with --force.
+ */
+async function outputAllowed(fs: Fs, input: string, target: string, force: boolean): Promise<string | null> {
+  const path = await node<{ resolve(p: string): string }>('path');
+  if (path.resolve(target) === path.resolve(input)) return `${target} is the recording itself: the evidence is never overwritten`;
+  if (fs.existsSync(target) && !force) return `${target} exists: add --force to replace it`;
+  return null;
+}
+
 /** The shareable copy of a recording: same incident, nobody named. */
 async function anonymizeFile(file: string, args: string[]): Promise<number> {
   const fs = await node<Fs>('fs');
   const k = args.indexOf('--out');
   const target = k >= 0 ? args[k + 1] : undefined;
   if (!target) {
-    err('hwdog anonymize <file.hdlog> --out <file.hdlog>');
+    err('hwdog anonymize <file.hdlog> --out <file.hdlog> [--force]');
+    return 2;
+  }
+  const refused = await outputAllowed(fs, file, target, args.includes('--force'));
+  if (refused) {
+    err(`!! ${refused}`);
     return 2;
   }
   const original = fs.readFileSync(file, 'utf8');
@@ -180,6 +196,11 @@ async function report(file: string, args: string[]): Promise<number> {
           : reportToText(r);
   const target = opt('--out');
   if (target) {
+    const refused = await outputAllowed(fs, file, target, args.includes('--force'));
+    if (refused) {
+      err(`!! ${refused}`);
+      return 2;
+    }
     fs.writeFileSync(target, content);
     err(`${format.toUpperCase()} report of ${file} -> ${target} (integrity ${recording.integrity?.status ?? 'unknown'})`);
   } else if (typeof content === 'string') {

@@ -21,9 +21,12 @@ export interface StoredLabSession {
 
 export class LabSessions {
   recorder: LabRecorder | null = null;
-  stored: StoredLabSession[] = [];
+  /** What the list shows: the sessions' metadata, never their text (fetched on OPEN, EXPORT, VS). */
+  stored: Omit<StoredLabSession, 'text'>[] = [];
   /** A reopened session, shown read-only. */
   opened: LabSessionData | null = null;
+  /** A stopped session the browser refused to keep: still here, to export. */
+  unsaved: { data: LabSessionData; error: string } | null = null;
   private listeners = new Set<() => void>();
   private rev = 0;
   private live: (() => void) | null = null;
@@ -51,7 +54,7 @@ export class LabSessions {
   }
 
   async refresh(): Promise<void> {
-    this.stored = (await this.kv.all()).sort((a, b) => b.startedAt - a.startedAt);
+    this.stored = (await this.kv.all()).map(({ text: _text, ...meta }) => meta).sort((a, b) => b.startedAt - a.startedAt);
     this.changed();
   }
 
@@ -78,9 +81,23 @@ export class LabSessions {
     const data = r.stop();
     this.live?.();
     this.live = null;
-    await this.kv.put(data.header.id, { id: data.header.id, name: data.header.name, startedAt: data.header.startedAt, events: data.events.length, lost: data.footer?.lost ?? 0, text: toHdlab(data) });
+    try {
+      await this.kv.put(data.header.id, { id: data.header.id, name: data.header.name, startedAt: data.header.startedAt, events: data.events.length, lost: data.footer?.lost ?? 0, text: toHdlab(data) });
+    } catch (e) {
+      // The browser refused it (quota, a private window): the session stays here, open, to export.
+      this.unsaved = { data, error: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
+      this.opened = data;
+      this.changed();
+      throw new Error(`not kept in this browser (${this.unsaved.error}): EXPORT .HDLAB keeps it`);
+    }
+    this.unsaved = null;
     await this.refresh();
     return data;
+  }
+
+  /** The unsaved session, as a file: it is gone from this page once another one starts. */
+  unsavedText(): string | null {
+    return this.unsaved ? toHdlab(this.unsaved.data) : null;
   }
 
   rename(name: string): void {

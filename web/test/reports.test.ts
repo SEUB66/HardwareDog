@@ -40,6 +40,15 @@ describe('LVL 75: professional reports', () => {
     expect(timelineExcerpt([], []).basis).toBe('EMPTY');
   });
 
+  it('a long excerpt keeps the first incidents and the latest, and counts the middle', () => {
+    const events: TraceEvent[] = Array.from({ length: 400 }, (_, k) => ({ id: k, t: 1_000 + k, source: 'USB', severity: 'WARN', message: `detach ${k}`, seq: k + 1 }));
+    const x = timelineExcerpt(events, [{ evidence: events.filter((_, k) => k % 10 === 0).map((e) => e.seq!) } as never], 60);
+    expect(x.entries).toHaveLength(60);
+    expect(x.entries[0]!.message).toBe('detach 0');
+    expect(x.entries.at(-1)!.message).toBe('detach 392'); // the latest incident and its context
+    expect(x.entries.filter((e) => e.gapAfter).length).toBe(1);
+  });
+
   it('a real incident: the report carries the timeline of the diagnosis', async () => {
     const { sys } = await recordSession('HD-T001', 40);
     const r = buildReport(sys);

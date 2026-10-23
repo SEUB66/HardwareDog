@@ -10,7 +10,7 @@ const CLOSED_TEXT: Record<Footer['closed'], string> = {
   RECOVERED: 'RECOVERED after an unclean stop',
   SNAPSHOT: 'SNAPSHOT, exported while recording',
 };
-import { clock, clockText, duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, NO_VALUE } from './format';
+import { clock, clockText, duration, frequency, hex, i2cAddress, milliamps, ms, percent, sessionId, volts, zoneOf, NO_VALUE } from './format';
 import type { TraceEvent } from './types';
 
 /**
@@ -67,6 +67,8 @@ export interface TimelineEntry {
   seq: number | null;
   /** A diagnosis cites this event's frame, or a rule produced it. */
   evidence: boolean;
+  /** Events of the excerpt left out after this one (the middle of a long one). */
+  gapAfter?: number;
 }
 
 export interface TimelineExcerpt {
@@ -100,11 +102,16 @@ export function timelineExcerpt(events: readonly TraceEvent[], diagnoses: readon
     basis = warn.length ? 'WARNINGS' : events.length ? 'LATEST' : 'EMPTY';
     picked = warn.length ? warn.slice(-20) : events.map((_, i) => i).slice(-10);
   }
-  const shown = picked.slice(0, limit);
+  // Over the limit: both ends, the first incidents and the latest (the ones acted on), the middle counted.
+  const half = Math.floor(limit / 2);
+  const shown = picked.length <= limit ? picked : [...picked.slice(0, half), ...picked.slice(-(limit - half))];
+  const gap = picked.length - shown.length;
   return {
-    entries: shown.map((i) => {
+    entries: shown.map((i, n) => {
       const e = events[i]!;
-      return { t: e.t, source: e.source, severity: e.severity, message: e.message, value: e.value ?? null, seq: e.seq ?? null, evidence: isEvidence(e) };
+      const entry: TimelineEntry = { t: e.t, source: e.source, severity: e.severity, message: e.message, value: e.value ?? null, seq: e.seq ?? null, evidence: isEvidence(e) };
+      if (gap > 0 && n === half - 1) entry.gapAfter = gap;
+      return entry;
     }),
     omitted: events.length - shown.length,
     basis,
@@ -136,6 +143,9 @@ export interface RecordingRef {
   /** Ruleset the recording was made with, and the one that produced this report. */
   ruleset: number;
   rulesetNow: number;
+  hdlog: number;
+  /** Entries covered by no seal (a file that never finished). */
+  unsealed: number;
 }
 
 function recordingRef(sys: System): RecordingRef | null {
@@ -151,8 +161,16 @@ function recordingRef(sys: System): RecordingRef | null {
     closed: i?.footer?.closed ?? null,
     ruleset: h.ruleset,
     rulesetNow: RULESET_VERSION,
+    hdlog: h.hdlog,
+    unsealed: i?.unsealed ?? 0,
   };
 }
+
+/** What each status proves, said next to it: a hash shows the bytes did not change, not who wrote them. */
+const INTEGRITY_TEXT: Partial<Record<IntegrityStatus, string>> = {
+  VERIFIED: 'VERIFIED   hashes consistent: unchanged since it was sealed, by whoever sealed it',
+  RECOVERED: 'RECOVERED  hashes consistent; closed after an unclean stop',
+};
 
 export function buildReport(sys: System, now = sys.now()): Report {
   // Diagnoses and duration stop where observation stopped; only GENERATED is the time of export.
@@ -393,12 +411,14 @@ export function reportLines(r: Report, options: { banner?: boolean } = {}): DocL
   kv('SOURCE', r.source);
   kv('DURATION', r.duration);
   kv('GENERATED', `${new Date(r.generatedAt).toISOString()}`);
+  // Event times below are the reading machine's local clock: its zone, said once.
+  kv('TIMES', `local time of the computer that made this report, ${zoneOf(r.startedAt)}`);
   const rec = r.recording;
   if (rec) {
     kv('RECORDING', rec.id || 'hdlog v1, no recording id');
     kv('ORIGIN', rec.origin);
     if (rec.integrity === null) kv('INTEGRITY', 'RECORDING, NOT FINALIZED: hashed when the session ends');
-    else kv('INTEGRITY', rec.integrity);
+    else kv('INTEGRITY', INTEGRITY_TEXT[rec.integrity] ?? rec.integrity);
     if (rec.closed) kv('CLOSED', CLOSED_TEXT[rec.closed]);
     if (rec.fileSha256) kv('FILE SHA-256', rec.fileSha256);
     kv('RULESET', rec.ruleset === rec.rulesetNow || rec.integrity === null ? `v${rec.rulesetNow}` : `recorded v${rec.ruleset}, diagnosed v${rec.rulesetNow}`);
@@ -415,6 +435,7 @@ export function reportLines(r: Report, options: { banner?: boolean } = {}): DocL
   if (rec?.integrity === 'INCOMPLETE') {
     blank();
     line('!! INCOMPLETE RECORDING. NEVER FINALIZED: SEALED LINES ARE INTACT, THE END IS MISSING.', 'alert');
+    if (rec.unsealed > 0) line(`!! ${rec.unsealed} entr${rec.unsealed > 1 ? 'ies' : 'y'} after the last seal: covered by no hash.`, 'alert');
   }
   if (rec?.integrity === 'RECOVERED') {
     blank();
@@ -422,7 +443,8 @@ export function reportLines(r: Report, options: { banner?: boolean } = {}): DocL
   }
   if (rec?.integrity === 'UNVERIFIED') {
     blank();
-    line('NOTE  hdlog v1 file: no integrity data. Content cannot be verified.', 'note');
+    if (rec.hdlog < 2) line('NOTE  hdlog v1 file: no integrity data. Content cannot be verified.', 'note');
+    else line(`!! NO SEAL: none of its ${rec.unsealed} entries is covered by a hash. Content cannot be verified.`, 'alert');
   }
 
   section('MEASUREMENT');
@@ -468,7 +490,10 @@ export function reportLines(r: Report, options: { banner?: boolean } = {}): DocL
   blank();
   line(TIMELINE_BASIS[r.timeline.basis], 'note');
   blank();
-  for (const e of r.timeline.entries) line(timelineLine(e), e.evidence ? 'evidence' : 'normal');
+  for (const e of r.timeline.entries) {
+    line(timelineLine(e), e.evidence ? 'evidence' : 'normal');
+    if (e.gapAfter) line(`  ... ${e.gapAfter} events of the excerpt between these, not shown ...`, 'note');
+  }
   if (r.timeline.omitted > 0) {
     blank();
     line(`${r.timeline.omitted} other events not shown: full trace in the JSON export and the .hdlog.`, 'note');

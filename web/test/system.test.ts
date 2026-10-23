@@ -201,3 +201,13 @@ describe('USB of a computer (no supply measured)', () => {
     expect(JSON.stringify(d)).not.toMatch(/rail|4\.75/);
   });
 });
+
+describe('a device clock that stops (audit 2026-10)', () => {
+  it('is said once, and the power window and the framing hints stay bounded', async () => {
+    const { sys, transport } = await connectedSystem();
+    for (let k = 0; k < 6000; k++) transport.push({ type: 'power', t: 777, v: 5.0, i: 0.2 });
+    for (let k = 0; k < 2000; k++) transport.push({ type: 'uart.error', t: 777, kind: 'framing' });
+    expect(sys.power.samples.length).toBeLessThanOrEqual(4000);
+    expect(sys.trace.all().filter((e) => e.message === 'device clock stalled')).toHaveLength(1);
+  });
+});

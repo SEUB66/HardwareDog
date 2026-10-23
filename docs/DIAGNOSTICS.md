@@ -6,7 +6,7 @@ SCENARIOS    17 physical fault scenarios    web/src/core/scenarios.ts
 PROOF        reliability matrix             web/test/scenarios.test.ts
 RULE TESTS   threshold / precedence tests   web/test/diagnostics.test.ts
 CASES        recorded incidents             cases/, web/test/cases.test.ts
-RULESET      version 4                      RULESET_VERSION, diagnostics.ts
+RULESET      version 5                      RULESET_VERSION, diagnostics.ts
 ```
 
 Hardware Dog does not guess. Every diagnosis comes from a written rule,
@@ -17,6 +17,9 @@ The ruleset has a version. It is bumped whenever a rule, a default
 threshold or a confidence definition changes.
 
 ```text
+v5   TARGET_RESET_LOOP counts watchdog and software resets only (host,
+     power and sleep resets are not a hang); USB_INTERMITTENT rests on the
+     disconnects whose supply was observed, the others are counted apart
 v4   counts that never read a capped list (a long capture at the wrong
      baud keeps SERIAL_CONFIGURATION_MISMATCH); a disconnect just before
      the first low sample counts with its drop; an I2C loss is set against
@@ -77,13 +80,16 @@ POWER_INSTABILITY               >= 1 USB disconnect within the correlation      
 SUPPLY_SAG                      undervoltage events, none followed by a            MEDIUM >= 3 drops
                                 disconnect                                         LOW    otherwise
 OVERCURRENT                     current above the limit (0.9 A)                    HIGH >= 3 / MEDIUM 2 / LOW 1 event
-USB_INTERMITTENT                >= 2 disconnects the supply does not explain       HIGH >= 3 / MEDIUM 2
+USB_INTERMITTENT                >= 2 disconnects the supply does not explain,      HIGH >= 3 / MEDIUM 2
+                                counted on those whose supply was observed
                                 (supply not observed, a computer's own USB:        MEDIUM, and it says
                                 said as such: neither blamed nor cleared)          the supply was not seen
 USB_NOT_ENUMERATED              target draws >= 50 mA for >= 3 s with no USB       HIGH  >= 10 s and never enumerated
                                 device                                             MEDIUM otherwise
-TARGET_RESET_LOOP               >= 2 target resets that are not power-on or        HIGH >= 3 / MEDIUM 2
-                                brownout (ESP-IDF "rst:0x.. (REASON)")
+TARGET_RESET_LOOP               >= 2 watchdog or software resets (ESP-IDF          HIGH >= 3 / MEDIUM 2
+                                "rst:0x.. (REASON)"); power-on, brownout, glitch,
+                                USB/JTAG/external (the host) and deep-sleep
+                                resets are not counted
 SERIAL_CONFIGURATION_MISMATCH   >= 3 framing errors or garbled lines (CONSOLE.md)  HIGH  >= 5 errors and >= 80 %
                                 at the current baud, on >= 30 % of lines,          MEDIUM otherwise
                                 last one < 15 s ago
