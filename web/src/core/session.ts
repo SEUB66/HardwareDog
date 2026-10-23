@@ -212,7 +212,8 @@ export class SessionRecorder {
     this.keep = options.keep ?? true;
   }
 
-  add(entry: SessionEntry): void {
+  add(original: SessionEntry): void {
+    const entry = fitEntry(original);
     if (this.keep) this.entries.push(entry);
     for (const l of this.listeners) l(entry);
   }
@@ -230,6 +231,35 @@ export class SessionRecorder {
 // ------------------------------------------------------------------ writing
 
 export const encodeEntry = (e: SessionEntry): string => JSON.stringify(e);
+
+/** Free text cut to `max`, saying how much went. */
+const cut = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 32)}… [${s.length - (max - 32)} chars cut]`);
+
+/** A rejected line's raw bytes, cut so its encoded line stays readable. */
+function cutRaw(raw: string): string {
+  const budget = HDLOG_LIMITS.maxLine - 4 * 1024;
+  if (raw.length <= budget / 6 || JSON.stringify(raw).length <= budget) return raw;
+  let keep = Math.floor(raw.length / 2);
+  while (keep > 0 && JSON.stringify(raw.slice(0, keep)).length > budget) keep = Math.floor(keep / 2);
+  return cut(raw, keep + 32);
+}
+
+/**
+ * The writer keeps the reader's limits: a recording can always be read
+ * back, whatever a device, a mark or an error message put in it.
+ */
+export function fitEntry(e: SessionEntry): SessionEntry {
+  const max = HDLOG_LIMITS.maxText;
+  if ('reject' in e) {
+    const reject = cut(e.reject, max);
+    const raw = e.raw === undefined ? undefined : cutRaw(e.raw);
+    if (reject === e.reject && raw === e.raw) return e;
+    return raw === undefined ? { ...e, reject } : { ...e, reject, raw };
+  }
+  if ('mark' in e && e.mark.length > max) return { ...e, mark: cut(e.mark, max) };
+  if ('lost' in e && e.lost.length > max) return { ...e, lost: cut(e.lost, max) };
+  return e;
+}
 
 type Counts = Omit<Footer, 'closed' | 'startedAt' | 'endedAt' | 'seals' | 'device' | 'dogs' | 'sha256'>;
 
@@ -276,7 +306,7 @@ export class HdlogSealer {
   /** Encode one entry; it is written at the next seal(). Returns its line. */
   add(e: SessionEntry): string {
     if (this.finished) throw new Error('hdlog: entry after footer');
-    const line = encodeEntry(e) + '\n';
+    const line = encodeEntry(fitEntry(e)) + '\n';
     this.pending.push(line);
     count(this.counts, e);
     this.lastAt = e.at;
@@ -351,8 +381,11 @@ export class HdlogError extends Error {}
 export const HDLOG_LIMITS = {
   /** Whole file. About 15 hours of a live session at 50 power frames/s. */
   maxBytes: 256 * 1024 * 1024,
-  /** One line: an HDP frame is at most 64 KiB, plus the entry around it. */
-  maxLine: 128 * 1024,
+  /**
+   * One line: an HDP line is at most 64 KiB (LineSplitter), and JSON
+   * escaping can make it six times longer (a control byte is \u0000).
+   */
+  maxLine: 512 * 1024,
   /** Free-text header fields and marks. */
   maxText: 1000,
 } as const;

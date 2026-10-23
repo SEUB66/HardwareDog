@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { SIM_RETENTION, SessionArchive, idbBackend, memoryBackend, type ArchiveBackend } from '../src/core/archive';
-import { ReplayTransport, SessionRecorder, newHeader, parseHdlog } from '../src/core/session';
+import { HDLOG_LIMITS, ReplayTransport, SessionRecorder, newHeader, parseHdlog } from '../src/core/session';
 import { sha256 } from '../src/core/sha256';
 import { System, memoryStore } from '../src/core/system';
 import { T0, diagnosisKeys, recordSession } from './helpers';
@@ -101,6 +101,21 @@ describe.each(backends)('session archive (%s)', (_, backend) => {
     expect(meta!.closed).toBe('RECOVERED');
     expect(meta!.fileSha256).toBe(sha256(text));
     expect(await archive.recover()).toEqual([]); // once
+  });
+
+  it('one unreadable crashed session never keeps the others from being recovered', async () => {
+    const be = await backend();
+    const archive = new SessionArchive(be);
+    const bad = new SessionRecorder(header(T0, 'WEB SERIAL'));
+    const w1 = archive.record(bad, undefined, { flushMs: null });
+    bad.add({ at: T0, mark: 'a' });
+    await w1.flush();
+    await be.append(w1.meta, (await be.chunks(w1.meta.key)).length, `${'x'.repeat(HDLOG_LIMITS.maxLine + 1)}\n`);
+    const good = new SessionRecorder(header(T0 + 10, 'WEB SERIAL'));
+    const w2 = archive.record(good, undefined, { flushMs: null });
+    good.add({ at: T0 + 10, mark: 'b' });
+    await w2.flush();
+    expect(await archive.recover()).toEqual([w2.meta.key]);
   });
 
   it('exports a live session as a verifiable SNAPSHOT while it keeps recording', async () => {

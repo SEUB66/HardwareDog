@@ -155,13 +155,15 @@ function recordingRef(sys: System): RecordingRef | null {
 }
 
 export function buildReport(sys: System, now = sys.now()): Report {
+  // Diagnoses and duration stop where observation stopped; only GENERATED is the time of export.
+  const at = sys.observedAt(now);
   const p = sys.power;
   const u = sys.usb;
   const s = sys.serial;
   const n = sys.net;
   const cfg = sys.settings;
   const sections: ReportSection[] = [];
-  const diagnoses = diagnose(sys.facts, cfg, now);
+  const diagnoses = diagnose(sys.facts, cfg, at);
   const findings: Finding[] = diagnoses.flatMap((d): Finding[] => [
     ...d.observed.map((text) => ({ kind: 'OBSERVED' as const, text, diagnosis: d.id })),
     ...(d.correlation ? [{ kind: 'CORRELATION' as const, text: d.correlation, diagnosis: d.id }] : []),
@@ -171,7 +173,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
 
   // PACK: which Dog observed what, and how well their clocks agreed
   if (sys.pack) {
-    const dogs = sys.packView(now);
+    const dogs = sys.packView(at);
     const notes: string[] = [];
     for (const d of dogs) {
       if (d.refused.length) notes.push(`${d.id} also claimed ${d.refused.join(' ')}: refused, one signal has one source.`);
@@ -297,7 +299,7 @@ export function buildReport(sys: System, now = sys.now()): Report {
     recording: recordingRef(sys),
     startedAt: sys.startedAt,
     generatedAt: now,
-    duration: duration(now - sys.startedAt),
+    duration: duration(at - sys.startedAt),
     sections,
     diagnoses,
     findings,

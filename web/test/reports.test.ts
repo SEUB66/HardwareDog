@@ -103,3 +103,23 @@ describe('LVL 75: professional reports', () => {
     }
   });
 });
+
+describe('a report says what was observed, whenever it is exported (audit 2026-10)', () => {
+  it('exported an hour after the link closed, it has the same diagnoses and duration as at the close', async () => {
+    const { sys, transport, clock } = await connectedSystem();
+    // 5 s of a target drawing 120 mA with no USB device: USB NOT ENUMERATED
+    for (let t = 100; t <= 5000; t += 100) {
+      clock.set(1_000_000 + t);
+      transport.push({ type: 'power', t, v: 5.0, i: 0.12 });
+    }
+    await sys.disconnect();
+    const closed = clock.get();
+    const atClose = buildReport(sys, closed);
+    const later = buildReport(sys, closed + 3_600_000);
+    const keys = (r: typeof atClose) => r.diagnoses.map((d) => `${d.id}:${d.confidence}:${d.observed.join('|')}`);
+    expect(keys(atClose).length).toBeGreaterThan(0);
+    expect(keys(later)).toEqual(keys(atClose));
+    expect(later.duration).toBe(atClose.duration);
+    expect(later.generatedAt).toBe(closed + 3_600_000); // only the export time moves
+  });
+});
