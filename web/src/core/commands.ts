@@ -49,6 +49,7 @@ export const COMMANDS: CommandSpec[] = [
   { usage: 'usb enumerate', summary: 'ACTIVE: re-read USB descriptors' },
   { usage: 'usb follow <VID:PID [serial]|off>', summary: "this computer: the USB device to follow as the target" },
   { usage: 'serial <baud>', summary: 'set UART baud rate' },
+  { usage: 'serial find', summary: 'find the baud rate: try the usual rates, keep the readable one' },
   { usage: 'meter', summary: 'what the power numbers are worth: sensor, range, accuracy' },
   { usage: 'meter point <V> <mA>', summary: 'calibration: what the reference instrument reads now' },
   { usage: 'meter cal "<reference>"', summary: 'ACTIVE: fit the points, store the calibration on the device' },
@@ -206,8 +207,9 @@ export function execute(input: string, ctx: CommandContext): CommandOutput {
         if (!text) return fail('usage: serial send "<text>"');
         return result(sys.sendSerial(text), `tx: ${text}`);
       }
+      if (a0 === 'find') return result(sys.findBaud(), 'looking for the baud rate: the result goes on the timeline');
       const baud = Number(args[0]);
-      if (!args[0] || !Number.isFinite(baud)) return fail('usage: serial <baud> | serial send "<text>"');
+      if (!args[0] || !Number.isFinite(baud)) return fail('usage: serial <baud> | serial find | serial send "<text>"');
       return result(sys.setBaud(baud), `baud -> ${baud}`);
     }
 

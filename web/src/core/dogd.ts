@@ -85,6 +85,17 @@ export async function connectDogd(base = DOGD_URL): Promise<Transport> {
 export const viaDogd = (t: Transport | null): boolean =>
   t instanceof DogdTransport || (t instanceof PackTransport && t.links.every((l) => l.kind === 'DOGD'));
 
+/**
+ * Why the HDP socket closed, in words that name who dropped: dogd gives a
+ * reason when it closes on purpose (the device behind it was lost, the
+ * client was too slow); with none and code 1006, dogd itself went away.
+ */
+export function dogdClosed(code: number, reason: string): string {
+  if (reason) return reason;
+  if (code === 1006) return 'dogd stopped answering: it quit or was stopped, or the connection to it dropped';
+  return `dogd closed the HDP socket (${code})`;
+}
+
 /** Hand a finished .hdlog to dogd's local store. The file is the evidence; dogd indexes it. */
 export async function dogdStore(recording: string, hdlog: string, base = DOGD_URL): Promise<void> {
   const res = await fetch(`${base}/v1/sessions/${recording}/hdlog`, {
@@ -152,7 +163,7 @@ export class DogdTransport implements Transport {
 
     await new Promise<void>((resolve, reject) => {
       socket.onopen = () => resolve();
-      socket.onclose = (e) => reject(new Error(e.reason || `dogd closed the HDP socket (${e.code})`));
+      socket.onclose = (e) => reject(new Error(dogdClosed(e.code, e.reason)));
       socket.onerror = () => reject(new Error('dogd HDP socket failed'));
     });
     socket.onmessage = (e) => {
@@ -160,7 +171,7 @@ export class DogdTransport implements Transport {
     };
     socket.onclose = (e) => {
       this.socket = null;
-      if (!this.closing) sink.lost(e.reason || `dogd closed the HDP socket (${e.code})`);
+      if (!this.closing) sink.lost(dogdClosed(e.code, e.reason));
     };
     socket.onerror = null;
     this.send({ cmd: 'hello', proto: PROTOCOL_VERSION });

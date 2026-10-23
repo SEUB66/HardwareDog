@@ -82,8 +82,10 @@ FILES            a .hdlog from anyone is refused, with a reason and a line,
                  before it can exhaust the browser or reach the engine
                  malformed: 256 MiB, 512 KiB lines, bounded text, every
                  frame through the HDP decoder (PROTOCOL.md, limits)
-EVIDENCE         every recording is sealed with a SHA-256 chain; a changed
-                 byte reads MODIFIED, a report says so, a case refuses it
+EVIDENCE         every recording is sealed with a SHA-256 chain, and its
+                 footer seals its own line: a changed byte anywhere in the
+                 file reads MODIFIED, a report says so, a case refuses it
+                 (dogd checks a stored file the same way)
 REPORTS          every string from a device or a file is escaped in the HTML
                  report (core/reportFormats.ts); the interface never builds
                  HTML from text; in the Camera Sniffer report, text from a
@@ -112,9 +114,11 @@ BUILDS           the interface, the command line, dogd and the firmware image
 ## WHAT IS NOT DONE (said, not hidden)
 
 ```text
-CLOSING LINE     the footer of a recording (how it closed, when it ended)
-                 is not covered by a seal yet: editing it is not detected.
-                 The sealed lines are. (audit 2026-10, to be fixed)
+OLDER FOOTERS    a footer written before 2026-10 does not seal its own
+                 line: in such a file, "closed" (NORMAL, RECOVERED,
+                 SNAPSHOT) could be swapped unseen. Every other byte is
+                 checked, its end time included. Cases pin their file's
+                 SHA-256, so the library's are covered
 LINE BREAKS      a device string with a line break (a USB product name, a
                  console line) still starts a new line in the TXT and HTML
                  reports: read a report from a device you do not trust with
