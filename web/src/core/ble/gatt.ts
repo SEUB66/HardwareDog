@@ -157,7 +157,14 @@ export class GattSession {
     if (this.state === 'PICKED') return;
     const wasConnected = this.state === 'CONNECTED';
     this.state = 'DISCONNECTED';
-    for (const s of this.services) for (const c of s.chars) c.notifying = false;
+    // The link is gone, and with it every subscription: no handler is left to log a later value twice.
+    for (const s of this.services)
+      for (const c of s.chars) {
+        const held = c as GattCharView & { handler?: (e: Event) => void };
+        if (held.handler) c.char.removeEventListener('characteristicvaluechanged', held.handler);
+        held.handler = undefined;
+        c.notifying = false;
+      }
     this.log({ kind: 'link', uuid: null, bytes: null, text: this.closing ? 'disconnected on request' : 'the device disconnected' });
     if (wasConnected || !this.closing)
       this.emit('link.state', undefined, this.closing ? 'INFO' : 'WARN', this.closing ? `${this.label} disconnected` : `${this.label} disconnected (lost)`, { params: { state: 'DISCONNECTED', reason: this.closing ? 'closed' : 'lost' } });

@@ -13,7 +13,7 @@ import { BleService } from '../ble/service';
 import { demoLanApi } from '../camera/demo';
 import { Inspections, type Inspection, type PhotoRecord } from '../camera/inspection';
 import { CameraNet } from '../camera/net';
-import { FlipperLibrary, type LibraryItem } from '../flipper/library';
+import { FlipperLibrary, type LibraryEntry } from '../flipper/library';
 import { FlipperService } from '../flipper/service';
 import { Companion } from './companion';
 import { DeviceBridge } from './device';
@@ -41,7 +41,7 @@ export async function createLab(app: string, reducedMotion: () => boolean): Prom
   // The interface opens on STATUS: the dog, following the session's own link, until a section says otherwise.
   const companion = new Companion(bus, { lang: browserLang(), reducedMotion, watch: 'DEVICE', profile: 'hwdog' });
   const registry = new CommandRegistry();
-  const library = new FlipperLibrary(await openLabStore<LibraryItem>('library'));
+  const library = new FlipperLibrary(await openLabStore<LibraryEntry>('library'), await openLabStore<Uint8Array>('library-data'));
   const flipper = new FlipperService(bus, library);
   const ble = new BleService(bus);
   const sessions = new LabSessions(bus, await openLabStore<StoredLabSession>('sessions'), app);

@@ -23,6 +23,7 @@ export const SAMPLE_MS = 1000;
 
 export type ScanState = 'IDLE' | 'STARTING' | 'SCANNING' | 'STOPPED' | 'ERROR' | 'REPLAY';
 
+const HEX = /^(?:[0-9a-fA-F]{2})*$/;
 const hexToBytes = (h: string) => Uint8Array.from(h.match(/[0-9a-fA-F]{2}/g) ?? [], (b) => parseInt(b, 16));
 
 /** Payload fields as one stable text ("004C=0215..."), for the session file. */
@@ -34,14 +35,25 @@ export function payloadParams(o: Pick<BleObservation, 'manufacturer' | 'serviceD
   };
 }
 
-/** A recorded observation event back into an observation (replay). */
+/**
+ * A recorded observation event back into an observation (replay). A file
+ * may be hand-edited: a payload pair without "=" or with odd hex is left
+ * out, never guessed, and a measure that is not a number is no measure.
+ */
 export function observationOf(e: LabEvent): BleObservation | null {
   if (e.source !== 'BLE' || e.type !== 'observe' || e.tool !== 'ble.scan' || !e.params) return null;
   const p = e.params;
   const str = (k: string) => (typeof p[k] === 'string' && p[k] !== '' ? (p[k] as string) : null);
-  const pairs = (k: string) => (str(k) ?? '').split(';').filter(Boolean).map((x) => x.split('=') as [string, string]);
-  const rssi = e.measures?.find((m) => m.name === 'rssi')?.value ?? null;
-  const tx = e.measures?.find((m) => m.name === 'txPower')?.value ?? null;
+  const pairs = (k: string) =>
+    (str(k) ?? '').split(';').flatMap((x) => {
+      const i = x.indexOf('=');
+      return i > 0 && HEX.test(x.slice(i + 1)) ? [[x.slice(0, i), x.slice(i + 1)] as [string, string]] : [];
+    });
+  const measure = (name: string) => {
+    const v = (Array.isArray(e.measures) ? e.measures : []).find((m) => m?.name === name)?.value;
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  };
+  const addressType = str('addressType');
   return {
     at: e.at,
     mono: e.mono,
@@ -50,14 +62,14 @@ export function observationOf(e: LabEvent): BleObservation | null {
     id: str('id') ?? e.device ?? '?',
     idKind: 'replay',
     address: str('address'),
-    addressType: (str('addressType') as BleObservation['addressType']) ?? null,
+    addressType: addressType === 'public' || addressType === 'random' ? addressType : null,
     advName: str('name'),
     systemName: str('systemName'),
-    rssi,
-    txPower: tx,
+    rssi: measure('rssi'),
+    txPower: measure('txPower'),
     connectable: typeof p['connectable'] === 'boolean' ? (p['connectable'] as boolean) : null,
     services: (str('services') ?? '').split(' ').filter(Boolean),
-    manufacturer: pairs('mfr').map(([c, h]) => ({ company: parseInt(c, 16), data: hexToBytes(h) })),
+    manufacturer: pairs('mfr').flatMap(([c, h]) => (/^[0-9a-fA-F]{1,4}$/.test(c) ? [{ company: parseInt(c, 16), data: hexToBytes(h) }] : [])),
     serviceData: pairs('svc').map(([u, h]) => ({ uuid: u, data: hexToBytes(h) })),
   };
 }
@@ -75,6 +87,8 @@ export class BleService {
   /** The replayed session's integrity, and whether any of it was simulated: said in the scan view. */
   replayIntegrity: string | null = null;
   replaySimulated = false;
+  /** Recorded observations the replay could not read: counted and said, never a crash halfway. */
+  replaySkipped = 0;
   /** When the live scan on screen started (host wall clock); null for a replay or none. */
   scanStartedAt: number | null = null;
   private source: BleSource | null = null;
@@ -117,6 +131,7 @@ export class BleService {
     this.sampled.clear();
     this.sampledOut = 0;
     this.replayOf = null;
+    this.replaySkipped = 0;
     this.replayIntegrity = null;
     this.replaySimulated = false;
     this.scanStartedAt = this.bus.clock.now();
@@ -259,16 +274,23 @@ export class BleService {
     this.replayOf = data.header.name;
     this.replayIntegrity = data.integrity;
     this.replaySimulated = data.events.some((e) => e.origin === 'SIMULATED');
+    this.replaySkipped = 0;
     this.scanStartedAt = null;
     let n = 0;
-    for (const e of data.events) {
-      const o = observationOf(e);
-      if (o) {
-        this.model.add(o);
-        n++;
+    try {
+      for (const e of data.events) {
+        try {
+          const o = observationOf(e);
+          if (!o) continue;
+          this.model.add(o);
+          n++;
+        } catch {
+          this.replaySkipped++;
+        }
       }
+    } finally {
+      this.changed();
     }
-    this.changed();
     return n;
   }
 

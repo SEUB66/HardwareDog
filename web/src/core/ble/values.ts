@@ -109,9 +109,14 @@ export function parseValue(text: string, f: ValueFormat): Uint8Array {
         dv.setInt32(i, int(-0x80000000, 0x7fffffff), le);
         break;
       case 'f32le':
-      case 'f32be':
+      case 'f32be': {
+        // f32 holds about ±3.4e38 down to 1.4e-45: past either end the device would get Infinity or 0.
         dv.setFloat32(i, n, le);
+        const kept = dv.getFloat32(i, le);
+        if (!Number.isFinite(kept)) throw new Error(`"${p}" is too large for ${f} (largest ±3.4e38)`);
+        if (kept === 0 && n !== 0) throw new Error(`"${p}" is too small for ${f}: it would be sent as 0`);
         break;
+      }
     }
   });
   return out;

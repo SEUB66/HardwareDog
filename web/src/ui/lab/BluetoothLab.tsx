@@ -203,6 +203,7 @@ function Scan({ lab, selected, onSelect, focus, onFocus }: { lab: Lab; selected:
           {ble.state === 'REPLAY' && <Tag status="INFO" label={`REPLAY · ${ble.replayOf}`} />}
           {ble.state === 'REPLAY' && ble.replayIntegrity && <Tag status={ble.replayIntegrity === 'VERIFIED' ? 'PASS' : 'WARN'} label={ble.replayIntegrity} />}
           {ble.state === 'REPLAY' && ble.replaySimulated && <Tag status="WARN" label="SIMULATED" />}
+          {ble.state === 'REPLAY' && ble.replaySkipped > 0 && <Tag status="WARN" label={`${ble.replaySkipped} UNREADABLE`} />}
         </div>
         {(error || ble.error) && <p class="note warn">{error ?? `[${ble.error!.code}] ${ble.error!.message}`}</p>}
         <div class="counters">
@@ -407,6 +408,8 @@ function CharRow({ lab, c }: { lab: Lab; c: GattCharView }) {
     } catch (e) {
       parseErr = (e as Error).message;
     }
+  // A float is sent as the nearest f32: say what the device will read, not what was typed.
+  const stored = preview && fmt.startsWith('f32') ? ` = ${formatValue(preview, fmt)} as sent` : '';
   const run = (fn: () => Promise<unknown>) => {
     setErr(null);
     fn().catch((e: unknown) => {
@@ -449,7 +452,7 @@ function CharRow({ lab, c }: { lab: Lab; c: GattCharView }) {
           onSubmit={(e) => {
             e.preventDefault();
             if (!preview) return;
-            if (!confirm(`Write ${preview.length} byte(s) to ${c.uuid} (${mode})?\n\n${toHex(preview)}\n\nSent once. Accepted by the API does not prove the device acted.`)) return;
+            if (!confirm(`Write ${preview.length} byte(s) to ${c.uuid} (${mode})?\n\n${toHex(preview)}${stored}\n\nSent once. Accepted by the API does not prove the device acted.`)) return;
             const bytes = preview;
             run(() => g.write(c, bytes, mode));
           }}
@@ -465,7 +468,7 @@ function CharRow({ lab, c }: { lab: Lab; c: GattCharView }) {
           <button class="btn" type="submit" disabled={!preview}>
             WRITE…
           </button>
-          <span class="mono small">{parseErr ? <span class="amber">{parseErr}</span> : preview ? `bytes: ${toHex(preview)}` : ''}</span>
+          <span class="mono small">{parseErr ? <span class="amber">{parseErr}</span> : preview ? `bytes: ${toHex(preview)}${stored}` : ''}</span>
         </form>
       )}
       {c.descriptors.length > 0 && (

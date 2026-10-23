@@ -204,9 +204,13 @@ export class Inspections {
     if (!found) return;
     const before = found.item.status;
     // "Confirmed (documented)" needs the documentation: what was seen, written down.
-    if (patch.status === 'CONFIRMED_DOCUMENTED' && !(patch.observations ?? found.item.observations).trim()) {
+    // Asked for without it, the status is refused; documentation erased from a
+    // confirmed object withdraws the confirmation, and the timeline says so.
+    let withdrawn = false;
+    if ((patch.status ?? before) === 'CONFIRMED_DOCUMENTED' && !(patch.observations ?? found.item.observations).trim()) {
       const { status: _refused, ...rest } = patch;
-      patch = rest;
+      withdrawn = before === 'CONFIRMED_DOCUMENTED';
+      patch = withdrawn ? { ...rest, status: 'NEEDS_CHECK' } : rest;
     }
     Object.assign(found.item, patch, { updated: Date.now() });
     if (patch.status && patch.status !== before) {
@@ -219,9 +223,9 @@ export class Inspections {
         type: 'note',
         op,
         severity: 'INFO',
-        message: `${found.item.label} (${found.room.label || found.room.kind}): ${STATUS_LABEL[patch.status]}${found.item.observations ? ` · ${found.item.observations}` : ''}`,
+        message: `${found.item.label} (${found.room.label || found.room.kind}): ${STATUS_LABEL[patch.status]}${withdrawn ? ' · its documentation was erased: confirmation withdrawn' : found.item.observations ? ` · ${found.item.observations}` : ''}`,
         origin: this.origin,
-        params: { declared: true, status: patch.status, family: found.item.familyId },
+        params: { declared: true, status: patch.status, family: found.item.familyId, ...(withdrawn ? { withdrawn: true } : {}) },
       });
       this.bus.emit({ source: 'CAMERA', tool: 'camera.object', type: 'op.end', op, severity: 'PASS', message: `${found.item.label}: ${STATUS_LABEL[patch.status]}`, origin: this.origin, params: { ...(say ? { say } : {}) } });
     }
