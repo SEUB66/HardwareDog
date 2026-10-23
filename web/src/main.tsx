@@ -16,10 +16,14 @@ import './styles/home.css';
 import { SessionArchive } from './core/archive';
 import { BUILD } from './core/ascii';
 import { createLab } from './core/lab/context';
+import { holdLater } from './core/net';
 import { pwa } from './core/pwa';
 import { App } from './ui/App';
 import { StartFailed } from './ui/StartFailed';
 
+// What is for later (the offline copy, the other TV, the lab sections) waits for the interface
+// to be up after its boot screen, then for a quiet moment (core/net.ts).
+holdLater();
 // Offline after one visit, installable where the browser offers it; updates wait for the person.
 pwa.start(import.meta.env.PROD);
 

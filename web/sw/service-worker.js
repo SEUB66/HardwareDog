@@ -36,9 +36,17 @@ const scope = new URL(self.registration.scope);
 const rel = (url) => decodeURIComponent(url.pathname.slice(scope.pathname.length));
 const abs = (path) => new URL(path, scope).href;
 
+/**
+ * A hashed build file (assets/) cannot change under its name: the copy the
+ * page has just loaded (the browser's HTTP cache) is the one kept, never
+ * downloaded twice on a slow connection. Pages and public files are asked
+ * for afresh.
+ */
+const request = (path) => new Request(abs(path), path.startsWith('assets/') ? {} : { cache: 'reload' });
+
 self.addEventListener('install', (event) => {
   // The whole interface of this build, or nothing: addAll fails as one.
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE.map((p) => new Request(abs(p), { cache: 'reload' })))));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE.map(request))));
   // No skipWaiting here: a new version waits until the page asks for it.
 });
 

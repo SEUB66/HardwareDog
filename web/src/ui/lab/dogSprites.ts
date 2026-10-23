@@ -36,6 +36,7 @@ import type { Stage, Subject } from '../../core/lab/companion';
 import atlasUrl from '../../../../assets/brand/web/hd-dog-scenes.webp';
 import atlasJson from '../../../../assets/brand/web/hd-dog-scenes.json';
 import { SCREEN_H, SCREEN_W, alpha, glint, led, pixelText, pixelTextWidth, pulse, rect, rnd, twinkle, type SceneName, type SpriteSet } from './sprites';
+import { track } from '../../core/net';
 
 /** The dog's scenes, by their name on the sheet (the hero is the big scene in the TV). */
 export const DOG_SCENE_IDS = [
@@ -86,6 +87,7 @@ function frames(): HTMLImageElement | null {
     atlas = new Image();
     atlas.decoding = 'async';
     atlas.src = atlasUrl;
+    track(atlas);
   }
   return atlas.complete && atlas.naturalWidth > 0 ? atlas : null;
 }

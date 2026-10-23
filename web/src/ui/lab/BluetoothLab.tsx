@@ -29,7 +29,7 @@ import { Tag } from '../components/Tag';
 import { HexView } from './HexView';
 import { LabLog } from './LabLog';
 import { LabSessionsPanel } from './LabSessionsPanel';
-import { SessionStrip } from './FlipperLab';
+import { SessionStrip } from './SessionStrip';
 import { useRev } from './useRev';
 import { useSettled } from './useSettled';
 

@@ -9,6 +9,7 @@
 
 import { useEffect, useRef } from 'preact/hooks';
 import cameraBanner800 from '../../../assets/brand/web/hd-camera-sniffer-banner-800.webp';
+import cameraBanner1200 from '../../../assets/brand/web/hd-camera-sniffer-banner-1200.webp';
 import cameraBanner1600 from '../../../assets/brand/web/hd-camera-sniffer-banner-1600.webp';
 import type { Screen } from '../core/commands';
 import { FEATURES } from '../core/features';
@@ -16,7 +17,21 @@ import type { Lab } from '../core/lab/context';
 import { browserLang } from '../core/lab/rules';
 import { RetroTv } from './lab/RetroTv';
 import { useModal } from './useModal';
+import { track } from '../core/net';
 import type { TvPlacement } from './lab/TvHost';
+
+const HERO_SIZES = '(max-width: 700px) 100vw, 680px';
+const HERO_SRCSET = `${cameraBanner800} 800w, ${cameraBanner1200} 1200w, ${cameraBanner1600} 1600w`;
+
+/** The hero picture, asked for during the boot screen: What's New opens with it. */
+export function preloadWhatsNew(): void {
+  if (typeof Image === 'undefined') return;
+  const img = new Image();
+  img.sizes = HERO_SIZES;
+  img.srcset = HERO_SRCSET;
+  img.src = cameraBanner800;
+  track(img);
+}
 
 export function WhatsNew({ lab, placement, reducedMotion, onGo, onClose }: { lab: Lab; placement: TvPlacement; reducedMotion: boolean; onGo: (s: Screen) => void; onClose: () => void }) {
   const lang = browserLang();
@@ -53,7 +68,7 @@ export function WhatsNew({ lab, placement, reducedMotion, onGo, onClose }: { lab
           </button>
         </header>
         <button class="whatsnew-hero" onClick={() => go(first.screen)} aria-label={`${first.name}: ${first.pitch[lang]}`}>
-          <img src={cameraBanner800} srcset={`${cameraBanner800} 800w, ${cameraBanner1600} 1600w`} sizes="(max-width: 700px) 100vw, 680px" width={800} height={320} alt="" decoding="async" />
+          <img src={cameraBanner800} srcset={HERO_SRCSET} sizes={HERO_SIZES} width={800} height={320} alt="" decoding="async" />
           <span class="whatsnew-new">NEW</span>
         </button>
         <div class="whatsnew-body">

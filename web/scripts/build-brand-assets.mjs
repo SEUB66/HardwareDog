@@ -25,6 +25,8 @@ const SOCIAL = join(repo, 'assets/brand/social');
 const PUBLIC = join(repo, 'web/public');
 
 const BG = { r: 11, g: 13, b: 15, alpha: 1 }; // --bg #0B0D0F
+/** App icons: PNG is what every system reads; a 256-colour palette keeps pixel art as it is, at a third of the bytes. */
+const ICON_PNG = { palette: true, quality: 100, effort: 10, compressionLevel: 9 };
 
 /** Official head artwork, 1254 x 1254, transparent. */
 const HEAD = join(SRC, 'hd-official-head.png');
@@ -370,7 +372,7 @@ async function main() {
       sharp(headFloat)
         .resize(inner, inner, { kernel: 'lanczos3' })
         .extend({ top: Math.floor(pad), bottom: Math.ceil(pad), left: Math.floor(pad), right: Math.ceil(pad), background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .png({ compressionLevel: 9 }),
+        .png(ICON_PNG),
     );
   }
   // MASKABLE: the pixel head on its own dark ground, full bleed, no rounded
@@ -395,11 +397,11 @@ async function main() {
         .removeAlpha()
         .resize(inner, inner, { kernel: 'lanczos3' })
         .extend({ top: Math.floor(pad), bottom: Math.ceil(pad), left: Math.floor(pad), right: Math.ceil(pad), background: groundBg })
-        .png({ compressionLevel: 9 }),
+        .png(ICON_PNG),
     );
   }
   // APPLE TOUCH: opaque (iOS shows transparency as black and rounds the corners itself): the pixel head, a small margin.
-  await save(join(PUBLIC, 'apple-touch-icon.png'), sharp(PIXEL_HEAD).removeAlpha().resize(164, 164, { kernel: 'lanczos3' }).extend({ top: 8, bottom: 8, left: 8, right: 8, background: groundBg }).png({ compressionLevel: 9 }));
+  await save(join(PUBLIC, 'apple-touch-icon.png'), sharp(PIXEL_HEAD).removeAlpha().resize(164, 164, { kernel: 'lanczos3' }).extend({ top: 8, bottom: 8, left: 8, right: 8, background: groundBg }).png(ICON_PNG));
   await save(join(WEB, 'hd-app-icon-512.webp'), sharp(iconArt).resize(512, 512).webp({ nearLossless: true, quality: 80 }));
 
   // HEADER MARK: transparent head + collar at exact display sizes (1x, 2x, 3x of 22 px).
@@ -454,13 +456,13 @@ async function main() {
     outputs.push([relative(repo, profile), (await stat(profile)).size]);
   }
 
-  // FLIPPER LAB BANNER: the full scene at 2x and 1x of its 800 px display width.
-  for (const w of [1600, 800]) {
+  // FLIPPER LAB BANNER: the full scene at 2x and 1x of its 800 px display width, and 1200 for a phone (no 1600 on a slow link).
+  for (const w of [1600, 1200, 800]) {
     await save(join(WEB, `hd-flipper-lab-banner-${w}.webp`), sharp(BANNER).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 82, smartSubsample: true, effort: 6 }));
   }
 
   // CAMERA SNIFFER BANNER: same sizes as the Flipper Lab banner.
-  for (const w of [1600, 800]) {
+  for (const w of [1600, 1200, 800]) {
     await save(join(WEB, `hd-camera-sniffer-banner-${w}.webp`), sharp(CAMERA_BANNER).resize(w, null, { kernel: 'lanczos3' }).webp({ quality: 82, smartSubsample: true, effort: 6 }));
   }
 
