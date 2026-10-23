@@ -25,9 +25,9 @@ import {
   type Power,
   type Room,
 } from '../../core/camera/catalog';
-import { ITEM_STATUSES, priorityWhy, STATUS_LABEL, type Annotation, type Item, type PhotoRecord, type RoomVisit } from '../../core/camera/inspection';
+import { ITEM_STATUSES, PHOTO_LIMITS, priorityWhy, STATUS_LABEL, type Annotation, type Item, type PhotoRecord, type RoomVisit } from '../../core/camera/inspection';
 import type { Lab } from '../../core/lab/context';
-import { instantOp } from '../../core/lab/events';
+import { errorInfo, instantOp } from '../../core/lab/events';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
 
@@ -180,7 +180,14 @@ function ItemCard({ lab, room, item, onSheet }: { lab: Lab; room: RoomVisit; ite
   const [obs, setObs] = useState(item.observations);
   const [next, setNext] = useState(item.nextCheck);
   const [camera, setCamera] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const save = () => (obs !== item.observations || next !== item.nextCheck) && insp.update(item.id, { observations: obs, nextCheck: next });
+  // A photo the browser refuses to keep (quota, not an image, too large) is said, never dropped silently.
+  const keep = (b: Blob, w: number, h: number) =>
+    void insp.addPhoto(item.id, b, w, h).then(
+      () => setPhotoError(null),
+      (e: unknown) => setPhotoError(`Photo not kept: ${errorInfo(e).message}`),
+    );
   return (
     <article class={`camera-item status-${item.status}`}>
       <header>
@@ -247,9 +254,10 @@ function ItemCard({ lab, room, item, onSheet }: { lab: Lab; room: RoomVisit; ite
         <button class="btn" onClick={() => setCamera(!camera)}>
           {camera ? 'CLOSE CAMERA' : 'PHOTO'}
         </button>
-        <PhotoFile onFile={(b, w, h) => void insp.addPhoto(item.id, b, w, h)} />
+        <PhotoFile onFile={keep} />
       </div>
-      {camera && <CameraCapture onShot={(b, w, h) => void insp.addPhoto(item.id, b, w, h)} />}
+      {photoError && <p class="note warn">{photoError}</p>}
+      {camera && <CameraCapture onShot={keep} />}
       {item.photos.length > 0 && (
         <div class="camera-photos">
           {item.photos.map((p) => (
@@ -273,11 +281,13 @@ function PhotoFile({ onFile }: { onFile: (b: Blob, w: number, h: number) => void
         capture="environment"
         hidden
         onChange={async (e) => {
-          const file = (e.target as HTMLInputElement).files?.[0];
+          const input = e.target as HTMLInputElement;
+          const file = input.files?.[0];
+          // Cleared at once: the same file can be picked again after an error.
+          input.value = '';
           if (!file) return;
-          const dims = await imageSize(file).catch(() => ({ w: 0, h: 0 }));
+          const dims = file.size <= PHOTO_LIMITS.maxBytes ? await imageSize(file).catch(() => ({ w: 0, h: 0 })) : { w: 0, h: 0 };
           onFile(file, dims.w, dims.h);
-          (e.target as HTMLInputElement).value = '';
         }}
       />
     </label>
@@ -396,6 +406,7 @@ function Photo({ lab, id }: { lab: Lab; id: string }) {
   const [rec, setRec] = useState<PhotoRecord | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let u: string | null = null;
     let alive = true;
@@ -412,9 +423,13 @@ function Photo({ lab, id }: { lab: Lab; id: string }) {
   }, [id]);
   if (!rec || !url) return null;
   const marks = rec.annotations;
+  const full = marks.length >= PHOTO_LIMITS.maxMarks;
   const save = (a: Annotation[]) => {
     setRec({ ...rec, annotations: a });
-    void insp.annotate(id, a);
+    insp.annotate(id, a).then(
+      () => setError(null),
+      (e: unknown) => setError(`Marks not kept: ${errorInfo(e).message}`),
+    );
   };
   return (
     <figure class={`camera-photo${open ? ' open' : ''}`}>
@@ -422,6 +437,7 @@ function Photo({ lab, id }: { lab: Lab; id: string }) {
         class="camera-photo-frame"
         onClick={(e) => {
           if (!open) return setOpen(true);
+          if (full) return;
           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
           save([...marks, { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height, note: '' }]);
         }}
@@ -435,11 +451,12 @@ function Photo({ lab, id }: { lab: Lab; id: string }) {
       </div>
       {open && (
         <figcaption>
-          <p class="dim small">Tap the photo to add a numbered mark. Kept in this browser.</p>
+          <p class="dim small">{full ? `${PHOTO_LIMITS.maxMarks} marks: no more on one photo.` : 'Tap the photo to add a numbered mark. Kept in this browser.'}</p>
+          {error && <p class="note warn">{error}</p>}
           {marks.map((m, i) => (
             <label key={i} class="camera-field">
               Mark {i + 1}
-              <input class="input" value={m.note} onInput={(e) => save(marks.map((x, j) => (j === i ? { ...x, note: (e.target as HTMLInputElement).value } : x)))} />
+              <input class="input" value={m.note} maxLength={PHOTO_LIMITS.maxNote} onInput={(e) => save(marks.map((x, j) => (j === i ? { ...x, note: (e.target as HTMLInputElement).value } : x)))} />
             </label>
           ))}
           <div class="actions">

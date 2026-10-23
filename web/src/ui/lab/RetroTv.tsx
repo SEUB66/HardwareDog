@@ -277,13 +277,14 @@ export function RetroTv({ companion, registry, skin: skinProp, sprites: spritesP
   }, []);
   const [osd, setOsd] = useState<number>(0);
   const lastDial = useRef(companion.dial);
+  // Runs on a dial change only: the re-render it causes must not cancel its own timer.
   useEffect(() => {
     if (lastDial.current === companion.dial) return;
     lastDial.current = companion.dial;
     setOsd((n) => n + 1);
     const t = setTimeout(() => setOsd(0), 1600);
     return () => clearTimeout(t);
-  });
+  }, [companion.dial]);
 
   const on = companion.power === 'ON';
   const msg = companion.message;

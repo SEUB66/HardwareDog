@@ -18,6 +18,7 @@ import p4s from '../../../../assets/illustrations/web/camera-sniffer-04-room-out
 import p4l from '../../../../assets/illustrations/web/camera-sniffer-04-room-outdoor-2400.webp';
 import p5s from '../../../../assets/illustrations/web/camera-sniffer-05-personal-portable-1200.webp';
 import p5l from '../../../../assets/illustrations/web/camera-sniffer-05-personal-portable-2400.webp';
+import { useModal } from '../useModal';
 
 export interface Poster {
   title: string;
@@ -46,6 +47,7 @@ export function PosterSlider() {
   const [full, setFull] = useState(false);
   const [zoom, setZoom] = useState(false);
   const overlay = useRef<HTMLDivElement>(null);
+  useModal(overlay, full);
   const touch = useRef<{ x: number; y: number } | null>(null);
   const p = POSTERS[i]!;
   const go = (by: number) => {
