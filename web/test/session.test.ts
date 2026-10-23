@@ -359,3 +359,35 @@ describe('evidence references', () => {
     }
   });
 });
+
+describe('.hdlog files from anyone, more limits (audit 2026-10)', () => {
+  const head = (o: Record<string, unknown> = {}) =>
+    JSON.stringify({ hdlog: 2, proto: 1, recording: '0123456789abcdef0123456789abcdef', id: 'HD-X', startedAt: 1_790_000_000_000, origin: 'PHYSICAL', source: 'WEB SERIAL', endpoint: 'x', scenario: null, app: 't', ruleset: 4, ...o });
+  const hello = '{"at":1790000000000,"frame":{"type":"hello","t":0,"proto":1,"device":"HD-1","rev":"A","fw":"0.1.0"}}';
+
+  it('refuses times no date can show, Dogs outside v3, and a v1 file through dogd', () => {
+    expect(() => parseHdlog(head({ startedAt: 9e15 }) + '\n')).toThrow(/startedAt/);
+    expect(() => parseHdlog(`${head()}\n{"at":1e16,"mark":"x"}\n`)).toThrow(/not a date/);
+    expect(() => parseHdlog(head({ dogs: [{ id: 'D1', source: 'SIMULATOR', endpoint: 'x', origin: 'SIMULATED' }] }) + '\n')).toThrow(/only in hdlog v3/);
+    expect(() => parseHdlog(JSON.stringify({ hdlog: 1, id: 'HD-X', startedAt: 1, source: 'DOGD', endpoint: 'x', app: 't' }) + '\n')).toThrow(/no DOGD source/);
+  });
+
+  it('a v2 file with no seal at all is UNVERIFIED, and the report says nothing in it is covered', async () => {
+    const r = parseHdlog(`${head()}\n${hello}\n{"at":1790000000100,"mark":"x"}\n`);
+    expect(r.integrity!.status).toBe('UNVERIFIED');
+    expect(r.integrity!.unsealed).toBe(2);
+    const { sys } = await replay(`${head()}\n${hello}\n{"at":1790000000100,"mark":"x"}\n`);
+    const text = reportToText(buildReport(sys));
+    expect(text).toContain('!! NO SEAL: none of its 2 entries is covered by a hash.');
+    expect(text).toMatch(/TIMES\s+local time of the computer that made this report, UTC[+-]\d\d:\d\d/);
+  });
+
+  it('a frame no encoder can write back is a rejected line, not a crash of the replay', async () => {
+    const recording = parseHdlog(`${head()}\n${hello}\n`);
+    recording.entries.push({ at: 1_790_000_000_200, frame: { type: 'power', t: 200, v: 10n as unknown as number, i: 0.1 } });
+    const r = new ReplayTransport(recording);
+    const sys = new System(memoryStore(), () => r.clock);
+    await sys.boot(r, () => {}, 0);
+    expect(sys.trace.all().some((e) => /cannot be replayed/.test(`${e.message} ${e.value ?? ''}`))).toBe(true);
+  });
+});

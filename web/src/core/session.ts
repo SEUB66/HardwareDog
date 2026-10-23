@@ -427,6 +427,10 @@ function checkThresholds(t: unknown, where: string): void {
   }
 }
 
+/** A time a Date can show: 0 to 8.64e15 ms (year 275760). Past it, every report would throw. */
+const MAX_TIME = 8.64e15;
+const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MAX_TIME;
+
 const isText = (v: unknown, max: number = HDLOG_LIMITS.maxText): v is string => typeof v === 'string' && v.length <= max;
 
 /** What each entry kind must carry. The frame itself is checked by the HDP decoder at replay. */
@@ -460,11 +464,15 @@ function readHeader(line: string): SessionHeader {
     if (!isText(header[k], 256)) throw new HdlogError(`line 1: header field "${k}" missing or too long`);
   }
   if (header['scenario'] !== undefined && header['scenario'] !== null && !isText(header['scenario'], 64)) throw new HdlogError('line 1: header field "scenario" malformed');
-  if (typeof header['startedAt'] !== 'number' || !Number.isFinite(header['startedAt']) || header['startedAt'] < 0) throw new HdlogError('line 1: header field "startedAt" missing');
+  if (!isTime(header['startedAt'])) throw new HdlogError('line 1: header field "startedAt" missing or not a date');
   if (header['proto'] !== undefined && !Number.isInteger(header['proto'])) throw new HdlogError('line 1: header field "proto" malformed');
   if (header['thresholds'] !== undefined) checkThresholds(header['thresholds'], 'line 1');
   if (header['hdlog'] === 3) return readPackHeader(header);
+  // Dogs are a v3 thing: a v1 or v2 file that lists some would be replayed as a pack its seals never described.
+  if (header['dogs'] !== undefined) throw new HdlogError(`line 1: Dogs are listed only in hdlog v3 (this file is v${String(header['hdlog'])})`);
   if (header['source'] !== 'SIMULATOR' && header['source'] !== 'WEB SERIAL' && header['source'] !== 'DOGD') throw new HdlogError('line 1: unknown source');
+  // dogd came after v1: a v1 file through dogd cannot say its origin.
+  if (header['hdlog'] === 1 && header['source'] === 'DOGD') throw new HdlogError('line 1: hdlog v1 has no DOGD source (dogd came with v2)');
   // Through dogd either origin is possible: dogd reports it per link.
   const derived: Origin = header['source'] === 'SIMULATOR' ? 'SIMULATED' : header['source'] === 'DOGD' ? (header['origin'] as Origin) : 'PHYSICAL';
   if (header['hdlog'] === 1) {
@@ -574,7 +582,7 @@ export function parseHdlog(text: string): Recording {
       footerText = line;
       continue;
     }
-    if (typeof e['at'] !== 'number' || !Number.isFinite(e['at'])) throw new HdlogError(`${where}: entry without "at"`);
+    if (!isTime(e['at'])) throw new HdlogError(`${where}: entry without "at", or "at" is not a date`);
     if (e['at'] < last) throw new HdlogError(`${where}: time goes backwards`);
     last = e['at'];
     const kinds = ENTRY_KINDS.filter((k) => k in e);
@@ -614,8 +622,9 @@ export function parseHdlog(text: string): Recording {
     if (JSON.stringify(footer.device) !== JSON.stringify(device)) problems.push(`${where}: footer device does not match the hello frame`);
     if (dogHellos && JSON.stringify(footer.dogs ?? null) !== JSON.stringify(dogHellos)) problems.push(`${where}: footer Dogs do not match their hello frames`);
   }
+  // No seal at all and no footer: nothing in it is covered by a hash, so nothing is said to be intact.
   const status: IntegrityStatus =
-    problems.length > 0 ? 'MODIFIED' : !footer ? 'INCOMPLETE' : footer.closed === 'RECOVERED' ? 'RECOVERED' : 'VERIFIED';
+    problems.length > 0 ? 'MODIFIED' : !footer ? (seals === 0 && entries.length > 0 ? 'UNVERIFIED' : 'INCOMPLETE') : footer.closed === 'RECOVERED' ? 'RECOVERED' : 'VERIFIED';
   return { header, entries, text, integrity: { status, fileSha256, problems, unsealed: footer ? 0 : unsealed, footer } };
 }
 
@@ -742,7 +751,16 @@ export class ReplayTransport implements Transport {
       this.clock = e.at;
       const dog = 'dog' in e ? e.dog : undefined;
       const lines = (dog !== undefined && this.dogLines.get(dog)) || this.lines!;
-      if ('frame' in e) lines.push(JSON.stringify(e.frame) + '\n');
+      if ('frame' in e) {
+        // A frame no encoder can write back (too deep, say) is a rejected line, not a crash of the replay.
+        let line: string | null = null;
+        try {
+          line = JSON.stringify(e.frame);
+        } catch (err) {
+          this.sink.error(`recorded frame cannot be replayed: ${err instanceof Error ? err.message : String(err)}`, undefined, dog);
+        }
+        if (line !== null) lines.push(line + '\n');
+      }
       else if ('reject' in e) {
         // Give the decoder the same bytes: it must reject them again.
         if (e.raw !== undefined) lines.push(e.raw.replace(/\n/g, ' ') + '\n');
