@@ -411,6 +411,23 @@ describe('guided inspection', () => {
     expect(insp.find(item.id)!.item.status).toBe('CONFIRMED_DOCUMENTED');
   });
 
+  it('erasing the documentation of a confirmed object withdraws the confirmation, on the timeline', () => {
+    const { insp, events } = make();
+    insp.start('');
+    const r = insp.addRoom('bedroom');
+    const item = insp.addItem(r.id, 'usb-charger')!;
+    insp.update(item.id, { status: 'CONFIRMED_DOCUMENTED', observations: 'lens behind the grille' });
+    insp.update(item.id, { observations: '  ' });
+    expect(insp.find(item.id)!.item.status).toBe('NEEDS_CHECK');
+    const note = events.filter((e) => e.type === 'note').at(-1)!;
+    expect(note.message).toMatch(/documentation was erased: confirmation withdrawn/);
+    expect(note.params?.['withdrawn']).toBe(true);
+    // a status change that keeps the documentation is not touched
+    insp.update(item.id, { status: 'CONFIRMED_DOCUMENTED', observations: 'lens again' });
+    insp.update(item.id, { nextCheck: 'RF scan' });
+    expect(insp.find(item.id)!.item.status).toBe('CONFIRMED_DOCUMENTED');
+  });
+
   it('orders the visit by what was said, never by catalog membership', () => {
     const { insp } = make();
     insp.start('Rental, 3rd floor');
@@ -666,13 +683,13 @@ describe('the lab database upgrade', () => {
     old.close();
     resetLabStore();
     expect((await openLabStore('camera', factory)).kind).toBe('INDEXEDDB');
-    // a newer version (3) opened elsewhere is not blocked by this one
+    // a newer version (4) opened elsewhere is not blocked by this one
     const newer = await new Promise<IDBDatabase>((res, rej) => {
-      const r = factory.open('hwdog-lab', 3);
+      const r = factory.open('hwdog-lab', 4);
       r.onsuccess = () => res(r.result);
       r.onblocked = () => rej(new Error('blocked'));
     });
-    expect(newer.version).toBe(3);
+    expect(newer.version).toBe(4);
     newer.close();
     resetLabStore();
   }, 10_000);
