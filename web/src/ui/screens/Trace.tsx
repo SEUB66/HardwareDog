@@ -1,7 +1,8 @@
+import { Component } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { clock } from '../../core/format';
 import type { System } from '../../core/system';
-import type { Source } from '../../core/types';
+import type { Source, TraceEvent } from '../../core/types';
 import { SOURCES } from '../../core/types';
 import { Empty } from '../components/Empty';
 import { Hint } from '../components/Hint';
@@ -9,6 +10,37 @@ import { Tag } from '../components/Tag';
 import { explain, explainSource } from '../../core/glossary';
 
 const MAX_ROWS = 800;
+
+/**
+ * One row, redrawn only when its event or its freshness changes: events are
+ * never modified once in the trace, so a frame of new events redraws the
+ * new rows, not all 800.
+ */
+class Row extends Component<{ e: TraceEvent; fresh: boolean }> {
+  override shouldComponentUpdate(next: { e: TraceEvent; fresh: boolean }): boolean {
+    return next.e !== this.props.e || next.fresh !== this.props.fresh;
+  }
+  override render() {
+    const { e, fresh } = this.props;
+    return (
+      <tr class={`${e.severity} src-${e.source}${fresh ? ' fresh' : ''}`}>
+        <td class="time">{clock(e.t)}</td>
+        <td class="src">
+          <Hint text={explainSource(e.source)} focusable={false}>
+            {e.source}
+          </Hint>
+        </td>
+        <td class="col-sev">
+          <Tag status={e.severity} />
+        </td>
+        <td class="msg">
+          {e.message}
+          {e.value ? <span class="val">{e.value}</span> : null}
+        </td>
+      </tr>
+    );
+  }
+}
 
 /** One chronological timeline for every source (spec 13, 14). */
 export function Trace({ system, only }: { system: System; only?: Source[] | null }) {
@@ -94,21 +126,7 @@ export function Trace({ system, only }: { system: System; only?: Source[] | null
             </thead>
             <tbody>
               {events.map((e) => (
-                <tr key={e.id} class={`${e.severity} src-${e.source}${e.id > freshFrom && freshFrom > 0 ? ' fresh' : ''}`}>
-                  <td class="time">{clock(e.t)}</td>
-                  <td class="src">
-                    <Hint text={explainSource(e.source)} focusable={false}>
-                      {e.source}
-                    </Hint>
-                  </td>
-                  <td class="col-sev">
-                    <Tag status={e.severity} />
-                  </td>
-                  <td class="msg">
-                    {e.message}
-                    {e.value ? <span class="val">{e.value}</span> : null}
-                  </td>
-                </tr>
+                <Row key={e.id} e={e} fresh={e.id > freshFrom && freshFrom > 0} />
               ))}
             </tbody>
           </table>

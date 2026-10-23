@@ -1,9 +1,10 @@
 /**
  * HARDWARE DOG / INSTALL AND UPDATE, ON SCREEN
  *
- * UpdateNote: a new version is ready. RELOAD is offered only when a reload
- * cuts nothing (no operation, no recording); otherwise it says what it
- * waits for. Nothing reloads on its own.
+ * UpdateNote: a new version is ready, or another tab already started it.
+ * RELOAD is offered only when a reload cuts nothing (no operation, no
+ * recording); otherwise it says what it waits for. Nothing reloads on its
+ * own.
  *
  * InstallCard (home): INSTALL opens the browser's own install prompt where
  * the browser offers one; on iPhone and iPad a plain line says how (Share,
@@ -20,12 +21,22 @@ export function UpdateNote({ lab, recording }: { lab: Lab; recording: boolean })
   useRev(pwa);
   useRev(lab.companion);
   useRev(lab.sessions);
-  if (!pwa.update) return null;
+  if (!pwa.update && !pwa.elsewhere) return null;
   const blocker = updateBlocker({ operations: lab.companion.operations.length, recording, labRecording: !!lab.sessions.recorder?.recording });
+  const wait = blocker ? `It waits until nothing is running: ${blocker}.` : 'Reloading starts it; nothing is running now.';
   return (
     <div class="update-note" role="status">
       <span>
-        <b>NEW VERSION READY.</b> {blocker ? `It waits until nothing is running: ${blocker}.` : 'Reloading starts it; nothing is running now.'}
+        {pwa.elsewhere ? (
+          <>
+            <b>UPDATED IN ANOTHER TAB.</b> This tab still runs the previous version. {wait}
+          </>
+        ) : (
+          <>
+            <b>NEW VERSION READY.</b> {wait}
+            {pwa.stalled && ' It did not start: press RELOAD again, or close the other Hardware Dog tabs.'}
+          </>
+        )}
       </span>
       <button class="btn" disabled={!!blocker} title={blocker ?? 'Reload into the new version'} onClick={() => pwa.applyUpdate()}>
         RELOAD

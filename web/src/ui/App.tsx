@@ -311,10 +311,20 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
   }, [system.settings.theme, system.settings.fieldMode, system.settings.reducedMotion]);
 
-  // A new screen opens at its top: it never looks like the one before.
+  // A new screen opens at its top: it never looks like the one before. After a
+  // change (not at start), focus moves to it, so Tab continues there, and its
+  // name is said to a screen reader (the live line below).
+  const firstScreen = useRef(true);
+  const [screenSaid, setScreenSaid] = useState('');
   useEffect(() => {
     const work = document.getElementById('workspace');
     if (work) work.scrollTop = 0;
+    if (firstScreen.current) {
+      firstScreen.current = false;
+      return;
+    }
+    setScreenSaid(`${screen}: ${SCREEN_PURPOSE[screen]}`);
+    if (work && !dialogOpen()) work.focus({ preventScroll: true });
   }, [screen]);
 
   const navigate = (next: Screen, only: Source[] | null = null) => {
@@ -907,7 +917,10 @@ export function App({ archive, lab }: { archive: SessionArchive; lab: Lab }) {
         </div>
       </nav>
 
-      <main class="work" id="workspace">
+      <main class="work" id="workspace" tabIndex={-1} aria-label={`${screen}: ${SCREEN_PURPOSE[screen]}`}>
+        <p class="sr-only" aria-live="polite">
+          {screenSaid}
+        </p>
         <UpdateNote lab={lab} recording={session.transport !== null && !(session.transport instanceof ReplayTransport) && !!session.writer && !session.writer.error} />
         {session.transport === null && screen !== 'STATUS' && !labScreen && <ConnectStrip onChoose={() => navigate('STATUS')} onDemo={() => void switchTransport('SIMULATOR')} />}
         {home && (

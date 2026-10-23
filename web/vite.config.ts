@@ -18,7 +18,7 @@ export default defineConfig({
     rollupOptions: { input: { home: 'index.html', diagnostic: 'diagnostic.html', engineering: 'engineering.html' } },
   },
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
     environment: 'node',
   },
 });

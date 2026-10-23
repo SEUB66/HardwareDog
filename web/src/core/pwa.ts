@@ -8,7 +8,11 @@
  *   UPDATE     a new version installs in the background and waits; the
  *              interface says it is ready, and the person reloads when
  *              nothing is running (no scan, transfer or recording is ever
- *              cut by an update); the worker is asked again every hour
+ *              cut by an update); the worker is asked again every hour.
+ *              Another tab may start the new version first: this one then
+ *              says it still runs the previous one, and RELOAD reloads. A
+ *              new version that does not take over within 10 s is said,
+ *              and RELOAD can be pressed again
  *   INSTALL    where the browser offers installation (beforeinstallprompt),
  *              a button opens the browser's own prompt; on iPhone and iPad,
  *              where no such prompt exists, a line says how (Share, Add to
@@ -25,16 +29,25 @@ interface PromptEvent extends Event {
 }
 
 const HOUR = 3_600_000;
+/** How long a new version may take to take over after RELOAD before that is said. */
+export const TAKEOVER_MS = 10_000;
 
 export class Pwa {
   /** A new version is installed and waiting for a reload. */
   update = false;
+  /** Another tab started the new version: this page still runs the previous one. */
+  elsewhere = false;
+  /** RELOAD was pressed and the new version did not take over in time. */
+  stalled = false;
   install: InstallState = 'none';
   private registration: ServiceWorkerRegistration | null = null;
   private deferred: PromptEvent | null = null;
   private reloading = false;
+  private takeover: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<() => void>();
   private rev = 0;
+
+  constructor(private readonly reload: () => void = () => location.reload()) {}
 
   subscribe(l: () => void): () => void {
     this.listeners.add(l);
@@ -78,6 +91,12 @@ export class Pwa {
     });
     const secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     if (!production || !secure || !('serviceWorker' in navigator)) return;
+    // A worker taking over a page that had one is a new version: asked here, or by another tab.
+    let controlled = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      this.takenOver(controlled);
+      controlled = true;
+    });
     void navigator.serviceWorker
       .register('./sw.js')
       .then((reg) => {
@@ -100,13 +119,38 @@ export class Pwa {
       });
   }
 
+  private takenOver(hadController: boolean): void {
+    if (this.reloading) {
+      if (this.takeover !== null) clearTimeout(this.takeover);
+      this.reload();
+      return;
+    }
+    // The first visit's worker claiming the page is no update.
+    if (!hadController) return;
+    this.update = false;
+    this.elsewhere = true;
+    this.changed();
+  }
+
   /** The person asked for the new version: the waiting worker takes over, then the page reloads once. */
   applyUpdate(): void {
+    if (this.reloading) return;
     const waiting = this.registration?.waiting;
-    if (!waiting || this.reloading) return;
+    // Already started (by another tab), or gone: a reload is all that is left to do.
+    if (!waiting) {
+      this.reloading = true;
+      this.reload();
+      return;
+    }
     this.reloading = true;
-    navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+    this.stalled = false;
+    this.changed();
     waiting.postMessage('hwdog:activate');
+    this.takeover = setTimeout(() => {
+      this.reloading = false;
+      this.stalled = true;
+      this.changed();
+    }, TAKEOVER_MS);
   }
 
   /** The person put the install offer away (remembered by the caller). */
