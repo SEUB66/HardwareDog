@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diagnose, emptyFacts, parseResetLine, type NetFact, type SessionFacts } from '../src/core/diagnostics';
+import { diagnose, emptyFacts, parseResetLine, resetKind, type NetFact, type SessionFacts } from '../src/core/diagnostics';
 import { DEFAULT_SETTINGS } from '../src/core/types';
 import { attach, connectedSystem } from './helpers';
 
@@ -183,5 +183,49 @@ describe('an I2C device that browns out with the supply (audit 2026-10)', () => 
     const d = sys.diagnoses.find((x) => x.id === 'I2C_DEVICE_DISAPPEARED')!;
     expect(d.correlation).toMatch(/^3 \/ 3 losses during a voltage drop/);
     expect(d.cause).toMatch(/browns out with the supply/);
+  });
+});
+
+describe('reset kinds and unseen supplies (audit 2026-10)', () => {
+  it('flashing or opening the USB port, a power glitch and a sleep wake are not a firmware hang', () => {
+    expect(resetKind({ code: 0x15, reason: 'USB_UART_CHIP_RESET' })).toBe('HOST');
+    expect(resetKind({ code: 0x10, reason: 'RTCWDT_RTC_RST' })).toBe('HOST');
+    expect(resetKind({ code: 0x17, reason: 'POWER_GLITCH_RESET' })).toBe('POWER');
+    expect(resetKind({ code: 0xf, reason: 'RTCWDT_BROWN_OUT_RESET' })).toBe('POWER');
+    expect(resetKind({ code: 0x8, reason: 'TG1WDT_SYS_RST' })).toBe('WATCHDOG');
+    expect(resetKind({ code: 0xc, reason: 'RTC_SW_CPU_RST' })).toBe('SOFTWARE');
+    expect(resetKind({ code: 0x5, reason: 'DSLEEP' })).toBe('SLEEP');
+    const x = facts((x) => {
+      for (const [k, reason] of ['USB_UART_CHIP_RESET', 'USB_JTAG_CHIP_RESET', 'USB_UART_CHIP_RESET', 'POWER_GLITCH_RESET'].entries())
+        x.uart.resets.push({ seq: k, t: k * 1000, code: 0x15, reason });
+    });
+    expect(ids(x)).toEqual([]);
+    x.uart.resets.push({ seq: 10, t: 5000, code: 8, reason: 'TG1WDT_SYS_RST' }, { seq: 11, t: 6000, code: 8, reason: 'TG1WDT_SYS_RST' });
+    const d = diagnose(x, DEFAULT_SETTINGS, 7000).find((x) => x.id === 'TARGET_RESET_LOOP')!;
+    expect(d.confidence).toBe('MEDIUM');
+    expect(d.observed.join(' ')).toMatch(/3 more by the host/);
+  });
+
+  it('disconnects before the first power sample never make the rail "fine", nor HIGH', () => {
+    const detach = (t: number, unseen: boolean) => ({ seq: t, t, dropAt: null, dropSeq: null, dropMin: null, currentAfter: null, ...(unseen ? { supplyUnseen: true as const } : {}) });
+    const x = facts((x) => x.detaches.push(detach(1000, true), detach(2000, true), detach(3000, true), detach(4000, false)));
+    const d = diagnose(x, DEFAULT_SETTINGS, 5000).find((x) => x.id === 'USB_INTERMITTENT')!;
+    expect(d.confidence).toBe('MEDIUM');
+    expect(d.observed.join(' ')).not.toMatch(/rail above/);
+    x.detaches.push(detach(5000, false), detach(6000, false));
+    const e = diagnose(x, DEFAULT_SETTINGS, 7000).find((x) => x.id === 'USB_INTERMITTENT')!;
+    expect(e.confidence).toBe('HIGH');
+    expect(e.basis).toMatch(/^3 disconnects/);
+    expect(e.observed.join(' ')).toMatch(/3 more with the supply not observed/);
+  });
+
+  it('a crafted bus of alternating scans stays cheap to evaluate', () => {
+    const x = facts((x) => {
+      for (let k = 0; k < 500; k++) x.i2c.scans.push({ seq: k, t: k * 1000, addresses: k % 2 ? [] : Array.from({ length: 112 }, (_, a) => a + 8) });
+      for (let k = 0; k < 500; k++) x.drops.push({ seq: 10_000 + k, start: k * 1000 + 500, end: k * 1000 + 600, min: 4.5 });
+    });
+    const started = performance.now();
+    diagnose(x, DEFAULT_SETTINGS, 600_000);
+    expect(performance.now() - started).toBeLessThan(150);
   });
 });

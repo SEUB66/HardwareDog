@@ -30,7 +30,7 @@ const errorsText = (all: number, garbled: number): string =>
  * or a confidence definition changes: recordings carry the version they
  * were made with, and a replay on other rules says so.
  */
-export const RULESET_VERSION = 4; // 4: true counts, early disconnects, I2C gaps; 3: NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY
+export const RULESET_VERSION = 5; // 5: reset kinds, unseen supplies; 4: true counts, early disconnects, I2C gaps; 3: NETWORK_POWER_LOSS, I2C_DEVICE_DISAPPEARED, I2C_BUS_INSTABILITY
 
 export const DIAGNOSIS_IDS = [
   'POWER_INSTABILITY',
@@ -204,6 +204,24 @@ const counted = (all: number, kept: number): string => (all > kept ? `${all} (th
 export const NET_HISTORY = 30;
 
 /** "rst:0x8 (TG1WDT_SYS_RST)" -> reset fact. ESP-IDF boot banner format. */
+/**
+ * Why the target restarted, by the reason ESP-IDF prints (ESP32, S2, S3,
+ * C3; "_RESET" and "_RST" alike). Only a watchdog or a software reset says
+ * the firmware is at fault: a power-on, brownout or glitch is power
+ * evidence, a USB/JTAG or external reset is the host (flashing, opening
+ * the port), a deep-sleep wake is the firmware sleeping as told.
+ */
+export type ResetKind = 'POWER' | 'HOST' | 'WATCHDOG' | 'SOFTWARE' | 'SLEEP' | 'OTHER';
+export function resetKind(r: { code: number; reason: string }): ResetKind {
+  const x = r.reason;
+  if (r.code === 0x1 || /POWERON|BROWN|GLITCH/.test(x)) return 'POWER';
+  if (/USB_UART_CHIP|USB_JTAG_CHIP|^EXT_|RTCWDT_RTC_RES|RTCWDT_RTC_RST/.test(x)) return 'HOST';
+  if (/WDT/.test(x)) return 'WATCHDOG';
+  if (/(^|_)SW_|PANIC/.test(x)) return 'SOFTWARE';
+  if (/DEEPSLEEP|DSLEEP/.test(x)) return 'SLEEP';
+  return 'OTHER';
+}
+
 export function parseResetLine(line: string, t: number, seq = 0): ResetFact | null {
   const m = /rst:0x([0-9a-f]+)\s*\(([A-Z0-9_]+)\)/i.exec(line);
   return m ? { seq, t, code: parseInt(m[1]!, 16), reason: m[2]!.toUpperCase() } : null;
@@ -341,23 +359,25 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
   // Without a supply measurement, the disconnects are said as they are:
   // the supply can be neither blamed nor cleared.
   const blind = unexplained.filter((d) => d.supplyUnseen);
-  if (blind.length >= 2 && blind.length === unexplained.length) {
-    const u = blind.length;
+  // Only disconnects with the supply observed say the rail was fine; the others say nothing about it.
+  const seen = unexplained.filter((d) => !d.supplyUnseen);
+  if (unexplained.length >= 2 && seen.length < 2) {
+    const u = unexplained.length;
     add({
       id: 'USB_INTERMITTENT',
       title: 'INTERMITTENT USB',
       confidence: 'MEDIUM',
-      basis: `${u} disconnects of the same device (supply not observed)`,
+      basis: `${u} disconnects of the same device (supply not observed${seen.length ? ` for ${blind.length} of them` : ''})`,
       observed: [`${u} USB disconnect(s) of the device followed.`, 'The supply is not observed here: a power cause can be neither shown nor ruled out.'],
       correlation: null,
       cause: 'The device drops off USB and comes back: connector, cable, a hub or port, or the device itself. Its supply was not measured.',
       next: 'Try another cable and another port (not through a hub), then watch whether the disconnects follow the cable, the port or the device.',
-      since: blind[0]!.t,
-      evidence: evidence(...blind.map((d) => d.seq)),
+      since: unexplained[0]!.t,
+      evidence: evidence(...unexplained.map((d) => d.seq)),
     });
-  } else if (unexplained.length >= 2) {
-    const u = unexplained.length;
-    const kept = unexplained.filter((d) => d.currentAfter !== null && d.currentAfter >= RUNNING_CURRENT).length;
+  } else if (seen.length >= 2) {
+    const u = seen.length;
+    const kept = seen.filter((d) => d.currentAfter !== null && d.currentAfter >= RUNNING_CURRENT).length;
     add({
       id: 'USB_INTERMITTENT',
       title: 'INTERMITTENT USB',
@@ -366,6 +386,7 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
       observed: [
         `${u} USB disconnect(s) with the rail above ${volts(s.undervoltageThreshold)}.`,
         `Target kept drawing current after ${kept} of ${u} of them.`,
+        ...(blind.length ? [`${blind.length} more with the supply not observed: neither blamed nor cleared.`] : []),
       ],
       correlation: kept * 2 > u ? `${kept} / ${u} disconnects happened while the target stayed powered.` : null,
       cause:
@@ -373,8 +394,8 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
           ? 'The USB data link drops while the target keeps running: connector, cable data pairs, or the target USB stack.'
           : 'USB link loss that the supply does not explain.',
       next: 'Wiggle-test the connector, swap the cable, then check the target USB stack logs.',
-      since: unexplained[0]!.t,
-      evidence: evidence(...unexplained.map((d) => d.seq)),
+      since: seen[0]!.t,
+      evidence: evidence(...seen.map((d) => d.seq)),
     });
   }
 
@@ -396,20 +417,23 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
     });
   }
 
-  // TARGET: resets that are not power cycles.
-  const resets = f.uart.resets.filter((r) => r.code !== 0x1 && !/BROWN/.test(r.reason));
+  // TARGET: resets the firmware causes (watchdog, software). Power, host
+  // (flashing, opening the USB port) and sleep wakes are not a hang.
+  const resets = f.uart.resets.filter((r) => ['WATCHDOG', 'SOFTWARE'].includes(resetKind(r)));
   if (resets.length >= 2) {
     const reasons = [...new Set(resets.map((r) => r.reason))];
     const gaps = resets.slice(1).map((r, i) => r.t - resets[i]!.t);
-    const wdt = reasons.some((r) => /WDT/.test(r));
+    const wdt = resets.some((r) => resetKind(r) === 'WATCHDOG');
+    const host = f.uart.resets.filter((r) => resetKind(r) === 'HOST').length;
     add({
       id: 'TARGET_RESET_LOOP',
       title: 'TARGET RESET LOOP',
       confidence: resets.length >= 3 ? 'HIGH' : 'MEDIUM',
-      basis: `${resets.length} non-power resets reported by the target`,
+      basis: `${resets.length} watchdog or software resets reported by the target`,
       observed: [
         `${resets.length} target resets, reason ${reasons.join(', ')}.`,
         `Interval ${ms(Math.min(...gaps))} to ${ms(Math.max(...gaps))}.`,
+        ...(host ? [`${host} more by the host (USB/JTAG, external: flashing or opening the port), not counted.`] : []),
       ],
       correlation: null,
       cause: wdt
@@ -523,6 +547,9 @@ export function diagnose(f: SessionFacts, s: Settings, now: number): Diagnosis[]
 function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   const scans = f.i2c.scans;
   if (scans.length < 2) return null;
+  // One set per scan, built once: a faulty bus or a crafted stream of full and
+  // empty scans must not cost addresses x scans x addresses at every evaluation.
+  const sets = scans.map((x) => new Set(x.addresses));
   const all = [...new Set(scans.flatMap((x) => x.addresses))].sort((a, b) => a - b);
   /** prevT: the scan before, where it still answered. It went somewhere in (prevT, t]. */
   type Loss = { addr: number; t: number; prevT: number; seq: number; clk: Clk | undefined; back: { t: number; seq: number } | null; absent: number };
@@ -530,8 +557,8 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   for (const addr of all) {
     let open: Loss | null = null;
     for (let k = 1; k < scans.length; k++) {
-      const was = scans[k - 1]!.addresses.includes(addr);
-      const is = scans[k]!.addresses.includes(addr);
+      const was = sets[k - 1]!.has(addr);
+      const is = sets[k]!.has(addr);
       if (was && !is) {
         open = { addr, t: scans[k]!.t, prevT: scans[k - 1]!.t, seq: scans[k]!.seq, clk: scans[k]!.clk, back: null, absent: 1 };
         losses.push(open);
@@ -552,20 +579,40 @@ function diagnoseI2cLoss(f: SessionFacts, s: Settings): Diagnosis | null {
   // the time the address went missing: a scan every 3 s, or a long sag,
   // must not turn a brownout into a loose wire. Two clocks: their
   // alignment decides, as everywhere.
-  const afterDrop = losses.filter((l) =>
-    f.drops.some((d) =>
-      (d.clk?.dog ?? null) === (l.clk?.dog ?? null)
-        ? d.start <= l.t && (d.end ?? Infinity) + I2C_POWER_WINDOW_MS > l.prevT
-        : relation({ t: d.start, clk: d.clk }, { t: l.t, clk: l.clk }, I2C_POWER_WINDOW_MS) === 'IN',
-    ),
-  );
+  // Drops come in order and do not overlap: those that end (plus the window)
+  // after prevT form a suffix, those that start before t a prefix. Two binary
+  // searches per loss, on the drops of the same clock.
+  const sameClock = (d: DropFact, l: Loss) => (d.clk?.dog ?? null) === (l.clk?.dog ?? null);
+  const firstAtLeast = (n: number, ok: (i: number) => boolean) => {
+    let lo = 0;
+    let hi = n;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (ok(mid)) hi = mid;
+      else lo = mid + 1;
+    }
+    return lo;
+  };
+  const byClock = new Map<string | null, DropFact[]>();
+  for (const d of f.drops) {
+    const k = d.clk?.dog ?? null;
+    if (!byClock.has(k)) byClock.set(k, []);
+    byClock.get(k)!.push(d);
+  }
+  const afterDrop = losses.filter((l) => {
+    const own = byClock.get(l.clk?.dog ?? null) ?? [];
+    const from = firstAtLeast(own.length, (i) => (own[i]!.end ?? Infinity) + I2C_POWER_WINDOW_MS > l.prevT);
+    const to = firstAtLeast(own.length, (i) => own[i]!.start > l.t) - 1;
+    if (from <= to) return true;
+    return f.drops.some((d) => !sameClock(d, l) && relation({ t: d.start, clk: d.clk }, { t: l.t, clk: l.clk }, I2C_POWER_WINDOW_MS) === 'IN');
+  });
   return {
     id: 'I2C_DEVICE_DISAPPEARED',
     title: 'I2C DEVICE DISAPPEARED',
     confidence,
     basis: `${losses.length} loss(es) of ${addrs.map(name).join(', ')} over ${scans.length} scans, ${flapping} came back`,
     observed: [
-      ...addrs.map((a) => `${name(a)} answered ${scans.filter((x) => x.addresses.includes(a)).length} of ${scans.length} scans.`),
+      ...addrs.map((a) => `${name(a)} answered ${sets.filter((x) => x.has(a)).length} of ${scans.length} scans.`),
       `Last loss at ${clock(losses.at(-1)!.t)}.`,
     ],
     correlation: afterDrop.length
