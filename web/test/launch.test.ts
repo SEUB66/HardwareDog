@@ -392,3 +392,37 @@ describe('install and update in the page', () => {
     expect(Pwa.ios('Mozilla/5.0 (Linux; Android 14)', 'Linux armv8l', 5)).toBe(false);
   });
 });
+
+describe('the hosted headers let the tools work (netlify.toml)', () => {
+  const toml = (import.meta.glob('../../netlify.toml', { query: '?raw', import: 'default', eager: true }) as Record<string, string>)['../../netlify.toml']!;
+  const header = (name: string) => toml.match(new RegExp(`${name} = "([^"]*)"`))![1]!;
+
+  it('Camera Sniffer can take and show its inspection photos (audit 2026-10)', () => {
+    // CameraObjects: getUserMedia for the photo, then <img src="blob:..."> to show it
+    expect(header('Permissions-Policy')).toMatch(/camera=\(self\)/);
+    expect(header('Content-Security-Policy')).toMatch(/img-src [^;]*\bblob:/);
+  });
+
+  it('nothing else is opened up: scripts and styles from the site only, no microphone or location', () => {
+    const csp = header('Content-Security-Policy');
+    expect(csp).toMatch(/script-src 'self';/);
+    expect(csp).toMatch(/style-src 'self';/);
+    expect(csp).not.toMatch(/unsafe-inline|unsafe-eval/);
+    expect(header('Permissions-Policy')).toMatch(/microphone=\(\).*geolocation=\(\)/);
+  });
+});
+
+describe('the installer is only ever fetched over HTTPS', () => {
+  const docs = import.meta.glob(['../../README.md', '../../docs/*.md', '../public/install', '../../netlify.toml'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+
+  it('every documented "| bash" one-liner names https and refuses anything else (audit 2026-10)', () => {
+    let seen = 0;
+    for (const [file, text] of Object.entries(docs)) {
+      for (const line of text.split('\n').filter((l) => /install \| bash/.test(l))) {
+        seen++;
+        expect(line, file).toContain("curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install");
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(5);
+  });
+});

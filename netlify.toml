@@ -10,16 +10,18 @@
 
 # Security headers. Everything is served from this site; the only other
 # place the interface talks to is dogd, on this machine (docs/SECURITY.md).
+# blob: images and camera=(self): Camera Sniffer's inspection photos, taken
+# here and kept in this browser.
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://127.0.0.1:4782 ws://127.0.0.1:4782; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' http://127.0.0.1:4782 ws://127.0.0.1:4782; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
-    Permissions-Policy = "serial=(self), camera=(), microphone=(), geolocation=(), usb=()"
+    Permissions-Policy = "serial=(self), camera=(self), microphone=(), geolocation=(), usb=()"
     Cross-Origin-Opener-Policy = "same-origin"
 
-# The dogd installer: curl -fsSL hwdog.netlify.app/install | bash
+# The dogd installer: curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash
 [[headers]]
   for = "/install"
   [headers.values]

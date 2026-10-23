@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HARDWARE DOG / INSTALL dogd
 #
-#   curl -fsSL hwdog.netlify.app/install | bash
+#   curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash
 #
 # What it does, and nothing else:
 #   1. reads this machine's system and architecture
@@ -26,7 +26,7 @@ hwdog_install() {
   local REPO="SEUB66/HardwareDog"
   local API="${HWDOG_API:-https://api.github.com/repos/$REPO}"
   local DL="${HWDOG_DOWNLOAD:-https://github.com/$REPO/releases/download}"
-  local SITE="https://hwdog.netlify.app"
+  local SITE="https://hardwaredog.org"
 
   local deb_file="" user_mode=0 want="" plain=0
   while [ $# -gt 0 ]; do
@@ -38,8 +38,8 @@ hwdog_install() {
       -h | --help) cat <<'HELP'
 HARDWARE DOG / install dogd
 
-  curl -fsSL hwdog.netlify.app/install | bash
-  curl -fsSL hwdog.netlify.app/install | bash -s -- --user
+  curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash
+  curl --proto '=https' --tlsv1.2 -fsSL https://hardwaredog.org/install | bash -s -- --user
 
   --deb FILE     install this package instead of downloading one
   --user         put the binary in ~/.local/bin (no sudo, no apt)
@@ -162,11 +162,14 @@ HELP
   }
 
   fetch() {
-    # fetch URL [FILE]: curl or wget, nothing else.
+    # fetch URL [FILE]: curl or wget, nothing else. An https address stays
+    # https, redirects included (plain http only for a local test server).
+    local tls=() wtls=()
+    case "$1" in https://*) tls=(--proto '=https' --tlsv1.2) wtls=(--https-only) ;; esac
     if command -v curl >/dev/null 2>&1; then
-      if [ -n "${2:-}" ]; then curl -fsSL --retry 2 -o "$2" "$1"; else curl -fsSL --retry 2 "$1"; fi
+      if [ -n "${2:-}" ]; then curl ${tls[@]+"${tls[@]}"} -fsSL --retry 2 -o "$2" "$1"; else curl ${tls[@]+"${tls[@]}"} -fsSL --retry 2 "$1"; fi
     elif command -v wget >/dev/null 2>&1; then
-      if [ -n "${2:-}" ]; then wget -q -O "$2" "$1"; else wget -q -O - "$1"; fi
+      if [ -n "${2:-}" ]; then wget ${wtls[@]+"${wtls[@]}"} -q -O "$2" "$1"; else wget ${wtls[@]+"${wtls[@]}"} -q -O - "$1"; fi
     else
       return 127
     fi
