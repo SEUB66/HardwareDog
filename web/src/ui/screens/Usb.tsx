@@ -7,6 +7,7 @@ import { Empty } from '../components/Empty';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
+import { usbKnown, usbLabel } from '../../core/usbids';
 
 interface UsbProps {
   system: System;
@@ -19,8 +20,9 @@ interface UsbProps {
 /** VID:PID, hex. */
 const usbId = (vid: number, pid: number) => `${hex(vid)}:${hex(pid)}`;
 
+/** Its own name strings first; without them, who its id says made it (core/usbids.ts); else the id. */
 const usbName = (d: HostUsbDevice) =>
-  d.product ? (d.manufacturer && !d.product.startsWith(d.manufacturer) ? `${d.manufacturer} ${d.product}` : d.product) : (d.manufacturer ?? usbId(d.vid, d.pid));
+  d.product ? (d.manufacturer && !d.product.startsWith(d.manufacturer) ? `${d.manufacturer} ${d.product}` : d.product) : (d.manufacturer ?? usbLabel(d.vid, d.pid) ?? usbId(d.vid, d.pid));
 
 /**
  * This computer's USB devices (dogd --source host): every one is on the
@@ -80,7 +82,7 @@ function HostUsb({ system, base }: { system: System; base: string }) {
           <tbody>
             {devices.map((d) => (
               <tr key={`${d.port}-${d.vid}-${d.pid}`} class={followed(d) ? 'followed' : undefined}>
-                <td>{usbName(d)}</td>
+                <td title={usbKnown(d.vid, d.pid)?.note}>{usbName(d)}</td>
                 <td>{usbId(d.vid, d.pid)}</td>
                 <td>{d.cls}</td>
                 <td>{d.speed ?? '--'}</td>
@@ -166,6 +168,7 @@ export function Usb({ system, dogdBase, onTrace, onExport }: UsbProps) {
                 ['MANUFACTURER', d.manufacturer ?? '--'],
                 ['PRODUCT', d.product ?? '--'],
                 ['SERIAL', d.serial ?? '--'],
+                ['ID SAYS', usbLabel(d.vid, d.pid) ?? 'not in the table: the numbers are all USB says'],
               ]}
             />
           </Panel>

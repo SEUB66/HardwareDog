@@ -179,6 +179,7 @@ select {
   padding: 6px 10px;
   border: 1px solid var(--amber);
   border-left-width: 3px;
+  background: var(--panel); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
   background: color-mix(in srgb, var(--amber) 8%, var(--panel));
   font-size: var(--fs-text);
 }
@@ -515,6 +516,7 @@ select {
 .hint {
   cursor: help;
   text-decoration: underline dotted;
+  text-decoration-color: var(--text-dim); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
   text-decoration-color: color-mix(in srgb, var(--text-dim) 70%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
@@ -778,6 +780,7 @@ select {
 
 @keyframes insert {
   from {
+    background: rgba(0, 229, 255, 0.14); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
     background: color-mix(in srgb, var(--cyan) 14%, transparent);
   }
   to {
@@ -1350,4 +1353,18 @@ button.link {
 /* A lab section still downloading, or whose download failed (ui/lazyScreen.tsx). */
 .lazy-screen {
   padding: 24px 4px;
+}
+
+/* What works on this device (ui/components/DeviceCheck.tsx): words wrap, on a phone too. */
+.trace.device-table {
+  width: 100%;
+}
+.trace.device-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.trace.device-table td:first-child {
+  width: 34%;
 }

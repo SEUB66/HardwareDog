@@ -1,3 +1,5 @@
+// First: what an older browser lacks is filled in before anything else runs.
+import './core/compat';
 import { render } from 'preact';
 // Fonts are bundled, never fetched from a CDN: the interface must work
 // offline, served from the device itself (spec 38, local first).

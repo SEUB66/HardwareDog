@@ -208,6 +208,7 @@
   text-decoration: underline;
 }
 .lab tr.selected td {
+  background: rgba(0, 229, 255, 0.1); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
   background: color-mix(in srgb, var(--cyan) 10%, transparent);
 }
 .lab tr[onclick],
@@ -364,6 +365,7 @@
   color: var(--pink);
 }
 .btn.rec.on {
+  background: rgba(255, 79, 163, 0.16); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
   background: color-mix(in srgb, var(--pink) 16%, transparent);
 }
 .session-view {
@@ -784,6 +786,7 @@
   margin-top: 2px;
 }
 .tv-floating .tv-toolbar .btn {
+  background: var(--bg); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -1155,6 +1158,7 @@
   cursor: pointer;
 }
 .camera-devices tr.selected td {
+  background: rgba(0, 229, 255, 0.1); /* color-mix fallback: Safari before 16.2, Firefox before 113 */
   background: color-mix(in srgb, var(--cyan) 10%, transparent);
 }
 button.linkish {

@@ -16,6 +16,7 @@ import { Hint } from '../components/Hint';
 import { Tag } from '../components/Tag';
 import { explain, explainPanel } from '../../core/glossary';
 import { beep } from '../sound';
+import { DeviceTable, deviceLine, useDeviceCheck } from '../components/DeviceCheck';
 
 interface SetupProps {
   system: System;
@@ -94,6 +95,17 @@ function recordingCell(system: System, recording: SetupProps['recording']) {
   if (system.recordingError) return <Tag status="FAIL" label={`STOPPED: ${system.recordingError}`} />;
   if (!recording) return '--';
   return <Tag status="LIVE" label={`REC ${recording.entries.toLocaleString('en-US')} EVENTS / ${bytes(recording.bytes)}`} />;
+}
+
+/** What works on this device: the browser, the system, each tool here. */
+function ThisDevice() {
+  const { info, caps, working } = useDeviceCheck();
+  return (
+    <Panel title="THIS DEVICE" aside={`${working} of ${caps.length} here`} info="Checked in this browser when shown: which tools work on this device, and what to use instead. Nothing is sent anywhere.">
+      <p class="note">{deviceLine(info)}</p>
+      <DeviceTable caps={caps} />
+    </Panel>
+  );
 }
 
 export function Setup({ system, scenario, demoPack, onSwitch, onConsole, onDemoPack, packBuilder, onDisconnect, sessions, recording }: SetupProps) {
@@ -233,6 +245,8 @@ export function Setup({ system, scenario, demoPack, onSwitch, onConsole, onDemoP
             ]}
           />
         </Panel>
+
+        <ThisDevice />
 
         <Panel title="INTERFACE">
           <Toggle label="STARTUP BEEP" on={s.sound} onChange={(v) => set({ sound: v })} />

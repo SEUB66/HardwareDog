@@ -51,6 +51,7 @@ const TERMS: Record<string, string> = {
   'USB/VBUS': 'Voltage on VBUS, the 5 V line of the USB cable, measured now.',
   'USB/SUPPLY': 'What the device draws and at what voltage. A computer does not measure it for its own ports: not observed, so a power cause can be neither shown nor ruled out. A Hardware Dog probe measures it.',
   'USB/MANUFACTURER': 'Manufacturer name, as the device reports it. Self-declared, not verified.',
+  'USB/ID SAYS': 'Who the vendor id (and product id) says made it, from a short table of the public USB id registry. An id not in the table stays a number, never a guess.',
   'USB/PRODUCT': 'Product name, as the device reports it. Self-declared, not verified.',
   'USB/SERIAL': 'Serial number string, as the device reports it.',
   'USB/CONNECTIONS': 'How many times a device enumerated during this session.',
@@ -72,6 +73,7 @@ const TERMS: Record<string, string> = {
 
   // SERIAL: the target UART
   'SERIAL/PORT': 'Serial port (UART) Hardware Dog listens on.',
+  'SERIAL/CHIP': 'The chip the port\'s USB id names, when it is a known one (CH340, CP210x, FTDI, an ST-LINK...). A USB-to-serial bridge is what the board talks through, not the board.',
   'SERIAL/CONFIG': 'Serial settings: baud rate, data bits, parity (N/E/O), stop bits. 115200 8N1 is the most common.',
   'SERIAL/BAUD': 'Speed of the serial line, in bits per second. Both sides must use the same value, or text turns to garbage.',
   'SERIAL/DATA': 'Data bits per character, usually 8.',

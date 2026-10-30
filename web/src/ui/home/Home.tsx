@@ -21,6 +21,7 @@ import { BannerCarousel } from '../brand/BannerCarousel';
 import { HOME_SLIDES } from '../brand/slides';
 import { Icon } from '../components/Icon';
 import { InstallCard } from '../Pwa';
+import { DeviceTable, deviceLine, useDeviceCheck } from '../components/DeviceCheck';
 
 export type DogdState = 'checking' | 'running' | 'absent';
 
@@ -84,6 +85,21 @@ function useDogd(): [DogdState, string | null, () => void] {
   };
   useEffect(ask, []);
   return [state, version, ask];
+}
+
+/** What works on this device, one line open to the full table. */
+function HomeDevice({ lang, dogd }: { lang: Lang; dogd: DogdState }) {
+  const { info, caps, working } = useDeviceCheck(dogd);
+  const fr = lang === 'fr';
+  return (
+    <details class="home-device">
+      <summary>
+        <span class="home-state-k">{fr ? 'CET APPAREIL' : 'THIS DEVICE'}</span> {deviceLine(info)} ·{' '}
+        {fr ? `${working} outils sur ${caps.length} fonctionnent ici` : `${working} of ${caps.length} tools work here`}
+      </summary>
+      <DeviceTable caps={caps} />
+    </details>
+  );
 }
 
 function useOnline(): boolean {
@@ -197,6 +213,8 @@ export function Home({ lang, reducedMotion, sessions, onConsole, onNetwork, onPr
           </li>
         </ul>
       </div>
+
+      <HomeDevice lang={lang} dogd={dogd} />
 
       <InstallCard lang={lang} />
 
