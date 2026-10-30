@@ -45,7 +45,9 @@ const EMAIL = /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/g;
  * (WIFI_PASSWORD, mqtt_pass, CONFIG_ESP_WIFI_PASSWORD), and a JSON key its
  * closing quote before the separator.
  */
-const SECRET = /(?<![A-Za-z0-9])((?:[A-Za-z0-9]+[_-])*(?:pass(?:word|wd|phrase)?|pwd|psk|token|secret|api[_-]?key|key|ssid|user(?:name)?|login))("?\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+// No lookbehind: Safari before 16.4 cannot even parse one, and the whole page would stop.
+// The character before the key is captured instead (group 1) and given back.
+const SECRET = /(^|[^A-Za-z0-9])((?:[A-Za-z0-9]+[_-])*(?:pass(?:word|wd|phrase)?|pwd|psk|token|secret|api[_-]?key|key|ssid|user(?:name)?|login))("?\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 /** A secret's value without its quotes; shorter than this, it is not hunted in the rest of the text. */
 const unquote = (v: string) => v.replace(/^(["'])(.*)\1$/, '$2');
 const SECRET_MIN = 4;
@@ -90,7 +92,7 @@ class Mapper {
 
   /** A secret's value, wherever it was typed: every other copy of it goes too. */
   learnSecrets(s: string): void {
-    for (const [, , , v] of s.matchAll(SECRET)) {
+    for (const [, , , , v] of s.matchAll(SECRET)) {
       const value = unquote(v!);
       if (value.length >= SECRET_MIN && value !== '<removed>') this.of('secret', value, () => '<removed>');
     }
@@ -98,10 +100,10 @@ class Mapper {
 
   /** Free text: secrets, every known value, then every pattern. */
   text(s: string): string {
-    let t = s.replace(SECRET, (_all, k: string, sep: string, v: string) => {
+    let t = s.replace(SECRET, (_all, pre: string, k: string, sep: string, v: string) => {
       const value = unquote(v);
       if (value.length >= SECRET_MIN && value !== '<removed>') this.of('secret', value, () => '<removed>');
-      return v.startsWith('"') ? `${k}${sep}"<removed>"` : v.startsWith("'") ? `${k}${sep}'<removed>'` : `${k}${sep}<removed>`;
+      return v.startsWith('"') ? `${pre}${k}${sep}"<removed>"` : v.startsWith("'") ? `${pre}${k}${sep}'<removed>'` : `${pre}${k}${sep}<removed>`;
     });
     // Values met in structured fields (a device id, a host name, a serial, a
     // secret) also hide in text, in any case (MYROUTER.lan is myrouter.lan).
@@ -260,7 +262,7 @@ export function findLeaks(hdlog: string): string[] {
   const say = (where: string, what: string) => leaks.length < 50 && leaks.push(`${where}: ${what}`);
   const scan = (where: string, s: string, physical: boolean) => {
     for (const v of s.match(EMAIL) ?? []) if (!v.endsWith('@example.org')) say(where, `e-mail ${v}`);
-    for (const [all, , , v] of s.matchAll(SECRET)) if (unquote(v!) !== '<removed>') say(where, `possible secret "${all.slice(0, 20)}"`);
+    for (const [all, pre, , , v] of s.matchAll(SECRET)) if (unquote(v!) !== '<removed>') say(where, `possible secret "${all.slice(pre!.length, pre!.length + 20)}"`);
     for (const v of secrets) if (s.includes(v)) say(where, `the value of a secret seen elsewhere ("${v.slice(0, 2)}…")`);
     for (const v of s.match(PATH_USER) ?? []) if (!/[/\\]user$/.test(v)) say(where, `user name in a path ${v}`);
     if (!physical) return; // invented by the simulator: it names no one
@@ -274,7 +276,7 @@ export function findLeaks(hdlog: string): string[] {
   const secrets = new Set<string>();
   for (const e of r.entries)
     for (const s of strings(e))
-      for (const [, , , v] of s.matchAll(SECRET)) {
+      for (const [, , , , v] of s.matchAll(SECRET)) {
         const value = unquote(v!);
         if (value.length >= SECRET_MIN && value !== '<removed>') secrets.add(value);
       }

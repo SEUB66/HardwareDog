@@ -117,6 +117,38 @@ New opens complete on Fast 3G. Pictures: every picture of the pages is
 WebP; the app icons stay PNG and the favicon ICO (what systems read), the
 social preview images JPEG (what link previews read).
 
+## COMPATIBILITY
+
+```text
+THE DEMO, REPLAYS, REPORTS   any current browser, phones included: built for
+                             ES2020 (Safari 14, iOS 14, Firefox 78, Chrome 85
+                             and later)
+FILLED IN                    the few newer functions used (Array/String .at(),
+                             structuredClone, AbortSignal.timeout) are filled
+                             in first thing on a browser that lacks them
+                             (web/src/core/compat.ts); a regex lookbehind,
+                             which Safari before 16.4 cannot even parse, is
+                             refused by a test
+STYLES                       newer CSS (color-mix, :has) has a plain fallback
+                             before it: older browsers lose a tint, not a
+                             screen
+DEVICES                      Web Serial (console, probe, Flipper): Chrome, Edge,
+                             Opera on a computer; Web Bluetooth: Chrome, Edge on
+                             a computer or Android (scanning behind a flag);
+                             none of it on iPhone or iPad (every browser there
+                             runs Safari's engine); dogd on a computer for the
+                             network and this computer's USB
+```
+
+THIS DEVICE (on the home, folded, and in SETUP) says which browser, system
+and kind of device this is, and for each tool whether it works here, partly
+or not, why, and what to use instead (web/src/core/device.ts). Checked in
+the browser when shown; nothing is sent.
+
+Checked in Chromium (desktop and phone sizes), and in Chromium with the
+functions older Safari and Firefox lack removed: every screen, the demo, the
+labs' demos, exports, a replay, dogd, offline.
+
 ## UPDATES
 
 Every build makes a new worker: its version is a hash of the files it keeps
