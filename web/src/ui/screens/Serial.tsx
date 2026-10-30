@@ -4,12 +4,22 @@ import type { System } from '../../core/system';
 import { KV } from '../components/KV';
 import { Panel } from '../components/Panel';
 import { Tag } from '../components/Tag';
+import { usbKnown } from '../../core/usbids';
 
 const BAUD_RATES = [9600, 19200, 38400, 57600, 74880, 115200, 230400, 460800, 921600];
 
 /** A real serial monitor, minimal controls (spec 17). */
+/** The chip a USB serial port's id names (CH340, CP210x, an ST-LINK...), from its label "USB 1A86:7523". */
+const chipOf = (port: string): string | null => {
+  const m = /\b([0-9A-F]{4}):([0-9A-F]{4})\b/i.exec(port);
+  if (!m) return null;
+  const k = usbKnown(parseInt(m[1]!, 16), parseInt(m[2]!, 16));
+  return k ? [k.product ? `${k.vendor} ${k.product}` : k.vendor, k.note].filter(Boolean).join(': ') : null;
+};
+
 export function Serial({ system }: { system: System }) {
   const s = system.serial;
+  const chip = chipOf(s.port);
   const [baud, setBaud] = useState(String(s.baud));
   const [text, setText] = useState('');
   const [stamps, setStamps] = useState(false);
@@ -48,6 +58,7 @@ export function Serial({ system }: { system: System }) {
           <KV
             rows={[
               ['PORT', s.port],
+              ...(chip ? ([['CHIP', chip]] as [string, string][]) : []),
               ['BAUD', String(s.baud), true],
               ['DATA', String(s.dataBits)],
               ['PARITY', s.parity],

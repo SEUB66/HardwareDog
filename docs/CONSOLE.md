@@ -35,6 +35,14 @@ BROWSER                Chrome or Edge on a computer (Web Serial), over https
 5. READ        STATUS and REPORT: what the rules found
 ```
 
+Once open, SERIAL names the chip the port's USB id says when it is a known
+one (CHIP: QinHeng CH340, Silicon Labs CP210x, FTDI, an ST-LINK, the
+ESP32-S3's own USB...), from a short table taken from the public USB id
+registry (web/src/core/usbids.ts). A USB-to-serial bridge is the chip the
+board talks through, not the board: USB does not name the board behind it.
+An id not in the table stays a number, never a guess. The USB screen (dogd)
+uses the same table when a device gives no name strings (ID SAYS).
+
 The port list is empty on Linux? Your user needs access to serial ports:
 `sudo usermod -aG dialout $USER`, then log out and in again. A port that
 another program holds (Arduino IDE serial monitor, screen, minicom) cannot
