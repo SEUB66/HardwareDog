@@ -627,3 +627,16 @@
   flex: 1 1 260px;
   margin: 0;
 }
+
+/* THIS DEVICE: one line, open to the table of what works here. */
+.home-device {
+  margin: 4px 0 14px;
+  font-size: var(--fs-text);
+}
+.home-device > summary {
+  cursor: pointer;
+  padding: 6px 0;
+}
+.home-device > summary .home-state-k {
+  margin-right: 6px;
+}
