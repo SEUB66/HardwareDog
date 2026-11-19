@@ -26,6 +26,9 @@ SystemCallArchitectures=native
 MemoryDenyWriteExecute=yes
 RestrictRealtime=yes
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK AF_BLUETOOTH
+# Whatever dogd creates is the user's alone (recordings, the index): 0600 /
+# 0700 even before dogd tightens them itself.
+UMask=0077
 
 [Install]
 WantedBy=default.target
