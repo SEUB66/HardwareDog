@@ -22,6 +22,39 @@ use std::time::Duration;
 
 use config::{Config, DEFAULT_PORT, USAGE};
 
+/// A line for the terminal. Text a device chose (its hello, its USB
+/// strings, an alias) can hold escape sequences: printed as is, they would
+/// drive the terminal (set its title, write the clipboard, hide a line).
+/// A control or direction character is written out instead (\u{1b}); a
+/// line with none is printed unchanged.
+macro_rules! say {
+    () => {
+        println!()
+    };
+    ($($t:tt)*) => {
+        println!("{}", shown(&format!($($t)*)))
+    };
+}
+
+fn shown(s: &str) -> String {
+    let unsafe_char = |c: char| {
+        c.is_control()
+            || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+    };
+    if !s.chars().any(unsafe_char) {
+        return s.to_string();
+    }
+    s.chars()
+        .map(|c| {
+            if unsafe_char(c) {
+                format!("\\u{{{:x}}}", c as u32)
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let (cmd, rest) = match args.first().map(String::as_str) {
@@ -32,7 +65,7 @@ fn main() {
             return;
         }
         Some("--version") | Some("-V") => {
-            println!("dogd {}", api::VERSION);
+            say!("dogd {}", api::VERSION);
             return;
         }
         _ => ("serve", &args[..]),
@@ -56,12 +89,14 @@ fn main() {
 }
 
 fn fail(msg: &str) -> i32 {
-    eprintln!("dogd: {msg}");
+    // Line by line: a usage text after an error keeps its lines.
+    let lines: Vec<String> = msg.split('\n').map(shown).collect();
+    eprintln!("dogd: {}", lines.join("\n"));
     2
 }
 
 fn row(k: &str, v: impl std::fmt::Display) {
-    println!("{k:<15}{v}");
+    say!("{k:<15}{v}");
 }
 
 async fn serve(mut cfg: Config) -> i32 {
@@ -110,7 +145,7 @@ async fn serve(mut cfg: Config) -> i32 {
                 seen.saw_device(hello, port);
                 // The 48-bit chip id (or, from older firmware, the 24-bit HDP id).
                 if let Some(line) = found.identified(&seen, port, hello) {
-                    println!("{line}");
+                    say!("{line}");
                 }
             },
         );
@@ -125,13 +160,13 @@ async fn serve(mut cfg: Config) -> i32 {
                 .await
                 .unwrap_or_default();
             for line in scan.scan(&scan_store, &ports) {
-                println!("{line}");
+                say!("{line}");
             }
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
 
-    println!("HW DOG / DOGD");
+    say!("HW DOG / DOGD");
     row("VERSION", api::VERSION);
     row("MODE", if cfg.lan { "LAN (explicit)" } else { "LOCAL" });
     if let Some(t) = &cfg.lan_token {
@@ -171,7 +206,7 @@ async fn serve(mut cfg: Config) -> i32 {
     row("DATA", cfg.data_dir.display());
     row("SESSIONS", store.sessions().len());
     row("STATE", "READY");
-    println!();
+    say!();
 
     let state = api::AppState {
         ble: ble::BleScanner::new(),
@@ -260,7 +295,7 @@ async fn status(args: &[String]) -> i32 {
     let health = match local_get(port, "/v1/health").await {
         Ok(h) => h,
         Err(e) => {
-            println!("HW DOG / DOGD");
+            say!("HW DOG / DOGD");
             row("STATE", "NOT RUNNING");
             row("DETAIL", e);
             return 1;
@@ -278,7 +313,7 @@ async fn status(args: &[String]) -> i32 {
             .unwrap_or("--")
             .to_string()
     };
-    println!("HW DOG / DOGD");
+    say!("HW DOG / DOGD");
     row("VERSION", s(&health, "dogd"));
     row("LISTEN", format!("127.0.0.1:{port}"));
     row(
@@ -322,7 +357,7 @@ fn data_dir(args: &[String]) -> std::path::PathBuf {
 fn known_devices(store: &storage::Store) -> i32 {
     let rows = store.hw_devices();
     if rows.is_empty() {
-        println!("NO DEVICE KNOWN YET");
+        say!("NO DEVICE KNOWN YET");
     }
     for d in rows {
         let usb = match (d.vid, d.pid) {
@@ -334,25 +369,29 @@ fn known_devices(store: &storage::Store) -> i32 {
             .as_deref()
             .map(|a| format!("'{a}'"))
             .unwrap_or_default();
-        println!(
+        say!(
             "{:<15}{:<22}{:<11}{:<11}{}",
-            d.id, name, usb, d.strength, d.basis
+            d.id,
+            name,
+            usb,
+            d.strength,
+            d.basis
         );
         if let Some(by) = d.superseded_by {
-            println!("{:<15}bound by the user to {by}", "");
+            say!("{:<15}bound by the user to {by}", "");
         } else if let Some(a) = d.ambiguous_with {
-            println!(
+            say!(
                 "{:<15}looks like {a}: if it is one of them, dogd bind PORT HW-ID",
                 ""
             );
         } else if let Some(h) = d.hint {
-            println!(
+            say!(
                 "{:<15}{h} matched by a weaker key only: dogd bind PORT {h} if they are the same",
                 ""
             );
         }
         if d.serial.is_some() && !d.serial_trusted {
-            println!(
+            say!(
                 "{:<15}serial {} is shared by other units: not an identity",
                 "",
                 d.serial.as_deref().unwrap_or("")
@@ -376,7 +415,7 @@ async fn devices(args: &[String]) -> i32 {
         .await
         .unwrap_or_default();
     if ports.is_empty() {
-        println!("NO SERIAL PORT");
+        say!("NO SERIAL PORT");
         return 0;
     }
     let fps: Vec<identity::Fingerprint> = ports.iter().map(discovery::fingerprint).collect();
@@ -418,9 +457,9 @@ async fn devices(args: &[String]) -> i32 {
             }
             identity::Resolution::Unidentified { basis } => format!("NO IDENTITY ({basis})"),
         };
-        println!("{:<22}{}", p.port, who);
+        say!("{:<22}{}", p.port, who);
     }
-    println!();
+    say!();
     for p in ports {
         let usb = match (&p.vid, &p.pid) {
             (Some(v), Some(i)) => format!("USB {v}:{i} {}", p.product.clone().unwrap_or_default()),
@@ -438,7 +477,7 @@ async fn devices(args: &[String]) -> i32 {
         } else {
             "NOT PROBED (--identify sends one HDP hello)".into()
         };
-        println!("{:<22}{:<34}{}", p.port, usb.trim(), identity);
+        say!("{:<22}{:<34}{}", p.port, usb.trim(), identity);
     }
     0
 }
@@ -467,11 +506,11 @@ fn alias(args: &[String]) -> i32 {
     };
     match store.set_alias(id, &name) {
         Ok(()) if name.is_empty() => {
-            println!("{id}: alias removed");
+            say!("{id}: alias removed");
             0
         }
         Ok(()) => {
-            println!("{id}: '{name}'");
+            say!("{id}: '{name}'");
             0
         }
         Err(e) => fail(&e),
@@ -491,7 +530,7 @@ async fn bind(args: &[String]) -> i32 {
     let path = format!("/v1/devices/{target}/bind");
     if let Ok((status, answer)) = local_request(port_arg(args), "PUT", &path, port).await {
         if status == 200 {
-            println!(
+            say!(
                 "{port}: {target} ({})",
                 answer.get("basis").and_then(|b| b.as_str()).unwrap_or("")
             );
@@ -522,7 +561,7 @@ async fn bind(args: &[String]) -> i32 {
     };
     match store.bind(fp, &others, &[], current.as_deref(), target) {
         Ok(o) => {
-            println!("{port}: {target} ({})", o.basis);
+            say!("{port}: {target} ({})", o.basis);
             0
         }
         Err(e) => fail(&e),
@@ -542,10 +581,10 @@ fn sessions(args: &[String]) -> i32 {
     };
     let rows = store.sessions();
     if rows.is_empty() {
-        println!("NO SESSION STORED IN {}", dir.display());
+        say!("NO SESSION STORED IN {}", dir.display());
     }
     for r in rows {
-        println!(
+        say!(
             "{}  {}  {:<9}  {:<10}  {:<9}  {}",
             r.session_label,
             &r.recording_id[..8],
@@ -556,6 +595,26 @@ fn sessions(args: &[String]) -> i32 {
         );
     }
     0
+}
+
+#[cfg(test)]
+mod terminal {
+    use super::shown;
+
+    #[test]
+    fn device_text_cannot_drive_the_terminal() {
+        assert_eq!(
+            shown("HD-3A1F2C rev A fw 0.1.0"),
+            "HD-3A1F2C rev A fw 0.1.0"
+        );
+        assert_eq!(shown("caf\u{e9} \u{2014} ok"), "caf\u{e9} \u{2014} ok");
+        assert_eq!(
+            shown("x\u{1b}]52;c;AAAA\u{7}y"),
+            "x\\u{1b}]52;c;AAAA\\u{7}y"
+        );
+        assert_eq!(shown("a\nb\rc"), "a\\u{a}b\\u{d}c");
+        assert_eq!(shown("evil\u{202e}gpj.exe"), "evil\\u{202e}gpj.exe");
+    }
 }
 
 #[cfg(test)]

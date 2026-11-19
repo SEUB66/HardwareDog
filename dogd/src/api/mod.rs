@@ -177,7 +177,21 @@ fn refuse(code: StatusCode, why: impl Into<String>) -> Response {
     (code, [(header::CONNECTION, "close")], why.into()).into_response()
 }
 
-async fn guard(State(s): State<AppState>, req: Request, next: Next) -> Response {
+/// Every answer, refusals included: never sniffed as another type (a page
+/// that embeds a dogd URL cannot have JSON taken for a script or a style),
+/// never kept in a cache (sessions and the network inventory stay off disk).
+async fn guard(state: State<AppState>, req: Request, next: Next) -> Response {
+    let mut res = check(state, req, next).await;
+    let h = res.headers_mut();
+    h.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    res
+}
+
+async fn check(State(s): State<AppState>, req: Request, next: Next) -> Response {
     // On the network (--listen-lan), another machine shows the token printed at start:
     // without it, anyone on the LAN could read sessions and drive the device.
     if s.cfg.lan && !from_this_machine(&req) {
@@ -818,6 +832,35 @@ mod http_tests {
         )
         .await;
         assert_eq!(s, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn every_answer_is_nosniff_and_never_cached() {
+        let has = |h: &HeaderMapLite, k: &str, v: &str| h.iter().any(|(a, b)| a == k && b == v);
+        for (host, origin, want) in [
+            ("127.0.0.1:4782", "http://localhost:5173", StatusCode::OK),
+            (
+                "evil.example:4782",
+                "http://localhost:5173",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                "127.0.0.1:4782",
+                "https://evil.example",
+                StatusCode::FORBIDDEN,
+            ),
+        ] {
+            let (s, h) = call(
+                app(&[]),
+                "GET",
+                "/v1/health",
+                &[("host", host), ("origin", origin)],
+            )
+            .await;
+            assert_eq!(s, want, "{host} {origin}");
+            assert!(has(&h, "x-content-type-options", "nosniff"), "{h:?}");
+            assert!(has(&h, "cache-control", "no-store"), "{h:?}");
+        }
     }
 
     #[tokio::test]
