@@ -231,6 +231,13 @@ HELP
         "build it in one command: docs/INSTALL.md, BUILD IT YOURSELF" || return 1
       ok RELEASE "dogd-v$version · latest"
     fi
+    # A version is digits and dots (a suffix of letters, digits, dots,
+    # dashes): never a path, a URL or a shell word.
+    case "$version" in
+      "" | *[!0-9A-Za-z.+-]* | [!0-9]* | *..*)
+        bad RELEASE "$(printf '%s' "$version" | tr -cd '0-9A-Za-z.+-' | cut -c1-40): not a version" \
+          "a version looks like 0.1.0" || return 1 ;;
+    esac
     local tag="dogd-v$version" asset
     if [ "$user_mode" = 1 ]; then
       asset="dogd-$version-linux-$arch.tar.gz"
