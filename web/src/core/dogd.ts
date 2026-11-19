@@ -123,7 +123,7 @@ export function dogdClosed(code: number, reason: string): string {
 
 /** Hand a finished .hdlog to dogd's local store. The file is the evidence; dogd indexes it. */
 export async function dogdStore(recording: string, hdlog: string, base = DOGD_URL): Promise<void> {
-  const res = await fetch(`${base}/v1/sessions/${recording}/hdlog`, {
+  const res = await fetch(`${base}/v1/sessions/${encodeURIComponent(recording)}/hdlog`, {
     method: 'PUT',
     headers: { 'content-type': 'application/x-ndjson' },
     body: hdlog,

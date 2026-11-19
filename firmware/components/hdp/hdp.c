@@ -572,7 +572,8 @@ static bool parse_value(cursor_t *c, kv_t *kv) {
     if (ch == '-' || (ch >= '0' && ch <= '9')) {
         char num[32];
         size_t k = 0;
-        while (c->i < c->n && k < sizeof num - 1 && strchr("+-0123456789.eE", c->s[c->i])) num[k++] = c->s[c->i++];
+        /* strchr also finds the terminator: a NUL byte is never part of a number. */
+        while (c->i < c->n && k < sizeof num - 1 && c->s[c->i] != '\0' && strchr("+-0123456789.eE", c->s[c->i])) num[k++] = c->s[c->i++];
         num[k] = '\0';
         char *end;
         kv->num = strtod(num, &end);
